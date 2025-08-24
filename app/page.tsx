@@ -1,16 +1,26 @@
-// app/page.tsx
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { Github, Twitter, Linkedin, Users, BookOpen, Trophy } from "lucide-react";
+import {
+  Github,
+  Twitter,
+  Linkedin,
+  Users,
+  BookOpen,
+  Trophy,
+  Menu,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 
-
 export default function Home() {
+  const [mobileOpen, setMobileOpen] = useState(false);
+
   return (
     <main className="bg-gradient-to-b from-yellow-50 to-orange-100 min-h-screen font-sans flex flex-col">
       {/* Header */}
-      <header className="flex justify-between items-center px-6 py-4 bg-white/70 backdrop-blur-md shadow-md sticky top-0 z-50">
+      <header className="sticky top-0 flex justify-between items-center px-6 py-4 bg-white/70 backdrop-blur-md shadow-md z-50">
         <div className="flex items-center space-x-3">
           <img
             src="/logo/hackthebit-logo-primary.svg"
@@ -18,23 +28,64 @@ export default function Home() {
             className="h-10 md:h-14 w-auto"
           />
         </div>
-       <nav className="hidden md:flex space-x-6 font-medium text-gray-700">
-  {["Courses", "Mentors", "Community", "About","Blog"].map((item) => (
-    <Link
-      key={item}
-      href={`/${item.toLowerCase()}`}
-      className="relative group"
-    >
-      <span className="hover:text-purple-700 transition">{item}</span>
-      <span className="absolute left-0 -bottom-1 w-0 h-[2px] bg-purple-600 transition-all group-hover:w-full"></span>
-    </Link>
-  ))}
-</nav>
 
-        <button className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-4 py-2 rounded-lg hover:scale-105 hover:shadow-lg transition">
-          Join Free
-        </button>
+        {/* Desktop Nav */}
+        <nav className="hidden md:flex space-x-6 font-medium text-gray-700">
+          {["Courses", "Mentors", "Community", "About", "Blog"].map((item) => (
+            <Link
+              key={item}
+              href={`/${item.toLowerCase()}`}
+              className="relative group"
+            >
+              <span className="hover:text-purple-700 transition">{item}</span>
+              <span className="absolute left-0 -bottom-1 w-0 h-[2px] bg-purple-600 transition-all group-hover:w-full"></span>
+            </Link>
+          ))}
+        </nav>
+
+        {/* Desktop CTA */}
+        <div className="hidden md:block">
+          <button className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-4 py-2 rounded-lg hover:scale-105 hover:shadow-lg transition">
+            Join Free
+          </button>
+        </div>
+
+        {/* Mobile Hamburger */}
+        <div className="md:hidden">
+          <button
+            onClick={() => setMobileOpen(!mobileOpen)}
+            className="p-2 rounded-md text-purple-700 hover:bg-purple-100 transition"
+          >
+            {mobileOpen ? <X size={28} /> : <Menu size={28} />}
+          </button>
+        </div>
       </header>
+
+      {/* Mobile Menu */}
+      {mobileOpen && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          className="md:hidden bg-white shadow-md px-6 py-4 space-y-4"
+        >
+          {["Courses", "Mentors", "Community", "About", "Blog"].map((item) => (
+            <Link
+              key={item}
+              href={`/${item.toLowerCase()}`}
+              className="block font-medium text-gray-700 hover:text-purple-700"
+              onClick={() => setMobileOpen(false)}
+            >
+              {item}
+            </Link>
+          ))}
+          <button className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-4 py-2 rounded-lg hover:scale-105 hover:shadow-lg transition">
+            Join Free
+          </button>
+        </motion.div>
+      )}
+
+      
 
       {/* Hero Section */}
       <section className="relative py-24 px-4 text-center bg-gradient-to-r from-purple-700 via-indigo-700 to-purple-800 text-white overflow-hidden">
@@ -136,9 +187,12 @@ export default function Home() {
       {/* Features Section */}
       <section className="py-20 bg-gradient-to-b from-gray-50 to-indigo-50 relative overflow-hidden">
         <div className="max-w-6xl mx-auto px-6 relative z-10">
-          <h2 className="text-3xl md:text-4xl font-extrabold text-center text-gray-900 mb-16">
-            Why <span className="text-indigo-600">HackTheBit</span>?
-          </h2>
+       <h2 className="text-3xl md:text-4xl font-extrabold text-center text-gray-900 mb-16">
+  Why{" "}
+  <span className="text-black">Hack</span>
+  <span className="text-indigo-600">The</span>
+  <span className="text-black">Bit</span>?
+</h2>
 
           <div className="grid md:grid-cols-3 gap-8">
             {[
