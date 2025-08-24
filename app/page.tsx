@@ -1,3 +1,4 @@
+// app/page.tsx
 "use client";
 
 import { useState } from "react";
@@ -13,21 +14,30 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image"; // ✅ add this import
 
 export default function Home() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <main className="bg-gradient-to-b from-yellow-50 to-orange-100 min-h-screen font-sans flex flex-col">
+    <main
+      id="top"
+      className="bg-gradient-to-b from-yellow-50 to-orange-100 min-h-screen font-sans flex flex-col"
+    >
       {/* Header */}
-      <header className="sticky top-0 flex justify-between items-center px-6 py-4 bg-white/70 backdrop-blur-md shadow-md z-50">
+      <header className="sticky top-0 z-50 flex justify-between items-center px-6 py-4 bg-white/70 backdrop-blur-md shadow-md">
         <div className="flex items-center space-x-3">
-          <img
+          {/* ⬇️ replace <img> with <Image /> */}
+          <Image
             src="/logo/hackthebit-logo-primary.svg"
             alt="HackTheBit"
+            width={160}
+            height={56}
             className="h-10 md:h-14 w-auto"
+            priority
           />
         </div>
+ 
 
         {/* Desktop Nav */}
         <nav className="hidden md:flex space-x-6 font-medium text-gray-700">
@@ -87,26 +97,37 @@ export default function Home() {
 
       
 
-      {/* Hero Section */}
       <section className="relative py-24 px-4 text-center bg-gradient-to-r from-purple-700 via-indigo-700 to-purple-800 text-white overflow-hidden">
-        {/* Animated background gradient */}
         <div className="absolute inset-0 bg-gradient-to-br from-indigo-700/30 via-purple-700/20 to-pink-600/20 animate-pulse" />
 
-        {/* Floating doodles */}
-        <motion.img
-          src="/doodles/star.png"
-          alt="star doodle"
+        {/* ⬇️ wrap Image in motion.div so we can animate */}
+        <motion.div
           animate={{ y: [0, -10, 0] }}
           transition={{ duration: 4, repeat: Infinity }}
           className="absolute top-10 left-6 w-20 md:w-28 opacity-80"
-        />
-        <motion.img
-          src="/doodles/arrow.png"
-          alt="arrow doodle"
+        >
+          <Image
+            src="/doodles/star.png"
+            alt="star doodle"
+            width={112}
+            height={112}
+            className="w-full h-auto"
+          />
+        </motion.div>
+
+        <motion.div
           animate={{ y: [0, 15, 0] }}
           transition={{ duration: 5, repeat: Infinity }}
           className="absolute bottom-20 right-10 w-24 md:w-32 opacity-80"
-        />
+        >
+          <Image
+            src="/doodles/arrow.png"
+            alt="arrow doodle"
+            width={128}
+            height={128}
+            className="w-full h-auto"
+          />
+        </motion.div>
 
         <motion.h1
           className="text-4xl md:text-6xl font-extrabold mb-4 leading-tight bg-gradient-to-r from-yellow-300 via-pink-300 to-orange-300 bg-clip-text text-transparent"
