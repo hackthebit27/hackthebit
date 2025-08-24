@@ -19,7 +19,7 @@ export default function Home() {
           />
         </div>
        <nav className="hidden md:flex space-x-6 font-medium text-gray-700">
-  {["Courses", "Mentors", "Community", "About"].map((item) => (
+  {["Courses", "Mentors", "Community", "About","Blog"].map((item) => (
     <Link
       key={item}
       href={`/${item.toLowerCase()}`}
