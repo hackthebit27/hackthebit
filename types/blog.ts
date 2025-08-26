@@ -8,3 +8,4 @@ export interface BlogMeta {
 export interface Blog extends BlogMeta {
   content: string; // markdown
 }
+

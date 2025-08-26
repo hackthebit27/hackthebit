@@ -53,12 +53,12 @@ export default function Home() {
           ))}
         </nav>
 
-        {/* Desktop CTA */}
-        <div className="hidden md:block">
-          <button className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-4 py-2 rounded-lg hover:scale-105 hover:shadow-lg transition">
-            Join Free
-          </button>
-        </div>
+       {/* Desktop CTA */}
+<div className="hidden md:block">
+  <Link href="/join" className="inline-block bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-4 py-2 rounded-lg hover:scale-105 hover:shadow-lg transition">
+    Join Free
+  </Link>
+</div>
 
         {/* Mobile Hamburger */}
         <div className="md:hidden">
@@ -89,9 +89,13 @@ export default function Home() {
               {item}
             </Link>
           ))}
-          <button className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-4 py-2 rounded-lg hover:scale-105 hover:shadow-lg transition">
-            Join Free
-          </button>
+          <Link
+  href="/join"
+  className="w-full text-center bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-6 py-3 rounded-lg shadow-md hover:scale-105 transition"
+  onClick={() => setMobileOpen(false)}
+>
+  Join Free
+</Link>
         </motion.div>
       )}
 

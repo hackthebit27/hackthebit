@@ -1,43 +1,35 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
+import React, { ReactNode, isValidElement } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type {
-  ImgHTMLAttributes,
-  PropsWithChildren,
-  ReactElement,
-  ReactNode,
-} from "react";
-import { isValidElement } from "react";
+import type { ImgHTMLAttributes } from "react";
 import CodeBlock from "./CodeBlock";
 
-// Safely extract text from a ReactNode (for heading slug links)
 const textFrom = (node: ReactNode): string => {
-  if (node == null) return "";
   if (typeof node === "string" || typeof node === "number") return String(node);
   if (Array.isArray(node)) return node.map(textFrom).join("");
-
-  if (isValidElement(node)) {
-    const el = node as ReactElement<{ children?: ReactNode }>;
-    return textFrom(el.props?.children);
+  if (isValidElement<{ children?: ReactNode }>(node) && node.props?.children) {
+    return textFrom(node.props.children);
   }
   return "";
 };
 
 const slugify = (s: string) =>
-  s
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, "")
-    .trim()
-    .replace(/\s+/g, "-");
+  s.toLowerCase().replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "-");
 
-const H = ({
+function Heading({
   as: Tag,
-  className,
   children,
-}: PropsWithChildren<{ as: "h1" | "h2" | "h3"; className: string }>) => {
-  const id = slugify(textFrom(children));
+  className,
+}: {
+  as: "h1" | "h2" | "h3";
+  children: ReactNode;
+  className: string;
+}) {
+  const txt = textFrom(children);
+  const id = slugify(txt);
   return (
     <Tag id={id} className={className}>
       <a href={`#${id}`} className="no-underline hover:underline">
@@ -45,7 +37,7 @@ const H = ({
       </a>
     </Tag>
   );
-};
+}
 
 export default function MarkdownRenderer({ content }: { content: string }) {
   return (
@@ -53,23 +45,21 @@ export default function MarkdownRenderer({ content }: { content: string }) {
       remarkPlugins={[remarkGfm]}
       components={{
         h1: ({ children }) => (
-          <H as="h1" className="text-3xl md:text-4xl font-extrabold text-gray-900 mt-2 mb-4">
+          <Heading as="h1" className="text-3xl md:text-4xl font-extrabold text-gray-900 mt-2 mb-4">
             {children}
-          </H>
+          </Heading>
         ),
         h2: ({ children }) => (
-          <H as="h2" className="text-2xl md:text-3xl font-bold text-gray-900 mt-10 mb-3">
+          <Heading as="h2" className="text-2xl md:text-3xl font-bold text-gray-900 mt-10 mb-3">
             {children}
-          </H>
+          </Heading>
         ),
         h3: ({ children }) => (
-          <H as="h3" className="text-xl md:text-2xl font-semibold text-gray-900 mt-8 mb-2">
+          <Heading as="h3" className="text-xl md:text-2xl font-semibold text-gray-900 mt-8 mb-2">
             {children}
-          </H>
+          </Heading>
         ),
-        p: (props) => (
-          <p className="text-base md:text-lg leading-8 text-gray-900 mb-5" {...props} />
-        ),
+        p: (props) => <p className="text-base md:text-lg leading-8 text-gray-900 mb-5" {...props} />,
         a: (props) => (
           <a
             className="text-indigo-700 underline underline-offset-2 hover:text-indigo-800"
@@ -87,33 +77,22 @@ export default function MarkdownRenderer({ content }: { content: string }) {
             {...props}
           />
         ),
-        hr: () => <hr className="my-10 border-t border-gray-200" />,
-
-        // Code blocks & inline code
         code({ className, children, ...props }) {
-          const isBlock = /\n/.test(String(children ?? ""));
+          const isBlock = /\n/.test(String(children || ""));
           if (isBlock) {
-            const m = /language-(\w+)/.exec(className ?? "");
-            const language = m?.[1] ?? "";
-            const code = String(children ?? "");
-            return <CodeBlock code={code} language={language} />;
+            const m = /language-(\w+)/.exec(className || "");
+            const language = m?.[1] || "";
+            return <CodeBlock code={String(children)} language={language} />;
           }
           return (
             <code
               className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-900 font-mono text-sm"
               {...props}
-            />
+            >
+              {children}
+            </code>
           );
         },
-
-        table: (props) => (
-          <div className="overflow-x-auto my-6">
-            <table className="min-w-full border border-gray-200 text-left text-gray-900" {...props} />
-          </div>
-        ),
-        thead: (props) => <thead className="bg-gray-50 text-gray-900 font-semibold" {...props} />,
-        th: (props) => <th className="border-b border-gray-200 px-3 py-2" {...props} />,
-        td: (props) => <td className="border-b border-gray-100 px-3 py-2" {...props} />,
         img: (props) => {
           const p = props as ImgHTMLAttributes<HTMLImageElement>;
           return (
