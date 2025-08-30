@@ -1,8 +1,9 @@
 // app/sitemap.xml/route.ts
-import { blogs } from "@/data/blogs";
+import { getAllPosts } from "@/lib/posts"; // ✅ use your new posts loader
 
 export async function GET() {
   const host = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.hackthebit.com";
+  
   const staticUrls = [
     "",
     "/courses",
@@ -12,18 +13,28 @@ export async function GET() {
     "/blog",
   ];
 
+  // generate static pages
   const pages = staticUrls
     .map(
-      (p) => `<url><loc>${host}${p}</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>`
+      (p) =>
+        `<url>
+          <loc>${host}${p}</loc>
+          <changefreq>weekly</changefreq>
+          <priority>0.7</priority>
+        </url>`
     )
     .join("");
 
-  const posts = blogs
+  // ✅ get posts from data/posts
+  const posts = (await getAllPosts())
     .map(
       (b) =>
-        `<url><loc>${host}/blog/${b.slug}</loc><lastmod>${new Date(
-          b.date
-        ).toISOString()}</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>`
+        `<url>
+          <loc>${host}/blog/${b.slug}</loc>
+          <lastmod>${new Date(b.date).toISOString()}</lastmod>
+          <changefreq>monthly</changefreq>
+          <priority>0.8</priority>
+        </url>`
     )
     .join("");
 

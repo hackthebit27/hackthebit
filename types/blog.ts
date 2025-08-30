@@ -1,11 +1,14 @@
+
+
+
 export interface BlogMeta {
   slug: string;
   title: string;
-  description: string;
-  date: string; // ISO or pretty string
+  date: string; // ISO-like string, e.g. "2025-08-25"
+  description?: string;
+  tags?: string[];
 }
 
-export interface Blog extends BlogMeta {
-  content: string; // markdown
+export interface BlogPost extends BlogMeta {
+  content: string; // full markdown body
 }
-

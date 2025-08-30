@@ -1,48 +1,15 @@
-import { Blog } from "@/types/blog";
+---
+title: "Things I Should Never Ignore in C++"
+date: "2025-08-25"
+description: "A practical checklist: RAII, const-correctness, moves, smart pointers, exceptions, and UB traps."
+tags: ["c++", "best-practices"]
+---
 
-export const blogs: Blog[] = [
-  {
-    slug: "first-post",
-    title: "Getting Started with HackTheBit",
-    description: "Learn how HackTheBit helps developers grow.",
-    date: "2025-08-20",
-    content: `
-# Getting Started 🚀
-
-HackTheBit is your go-to platform for learning, collaboration, and growth.
-    
-- Easy to use
-- Scalable
-- Community-driven
-    `,
-  },
-  {
-    slug: "second-post",
-    title: "Next.js Tips & Tricks",
-    description: "Improve your productivity with these tips.",
-    date: "2025-08-21",
-    content: `
-# Next.js Tips ⚡
-
-Here are some tips for building with Next.js:
-    
-1. Use \`app/\` router
-2. Optimize images with \`next/image\`
-3. Deploy easily on Vercel
-    `,
-  },
-  {
-  slug: "never-ignore-in-cpp",
-  title: "Things I Should Never Ignore in C++",
-  description:
-    "A practical checklist for C++: RAII, const-correctness, move semantics, smart pointers, exceptions, and UB traps.",
-  date: "2025-08-25",
-  content: `
 ## 1) Prefer RAII (Resource Acquisition Is Initialization)
 
 Always bind resources to objects so they clean up automatically.
 
-\`\`\`cpp
+```cpp
 #include <fstream>
 #include <string>
 
@@ -52,24 +19,24 @@ std::string readWholeFile(const std::string& path) {
     std::string data((std::istreambuf_iterator<char>(in)), {});
     return data;                     // file closes automatically (destructor)
 }
-\`\`\`
+```
 
-## 2) Use \`const\` early and often (const-correctness)
+## 2) Use `const` early and often (const-correctness)
 
 Make intent obvious and prevent accidental mutation.
 
-\`\`\`cpp
+```cpp
 void printVec(const std::vector<int>& v) {
     for (const auto& x : v) std::cout << x << " ";
-    std::cout << "\\n";
+    std::cout << "\n";
 }
-\`\`\`
+```
 
-## 3) Prefer smart pointers over \`new/delete\`
+## 3) Prefer smart pointers over `new/delete`
 
-Use \`std::unique_ptr\` and \`std::shared_ptr\` instead of raw owning pointers.
+Use `std::unique_ptr` and `std::shared_ptr` instead of raw owning pointers.
 
-\`\`\`cpp
+```cpp
 #include <memory>
 
 struct Node { int value; };
@@ -77,55 +44,55 @@ struct Node { int value; };
 std::unique_ptr<Node> makeNode(int v) {
     return std::make_unique<Node>(Node{v});
 }
-\`\`\`
+```
 
 ## 4) Understand move semantics (avoid unnecessary copies)
 
 Implement or default the “rule of 5” where needed; prefer moving large objects.
 
-\`\`\`cpp
+```cpp
 #include <vector>
 
 std::vector<int> makeBig() {
     std::vector<int> v(1'000'000, 42);
     return v;                       // NRVO + move
 }
-\`\`\`
+```
 
 ## 5) Beware of dangling references
 
 Never return references to local variables; never store references to temporaries.
 
-\`\`\`cpp
+```cpp
 const std::string& bad() {
     std::string s = "oops";
     return s;   // ❌ dangling reference
 }
-\`\`\`
+```
 
 ## 6) Initialize everything
 
-Use brace init; prefer \`= default\` and member initializers.
+Use brace init; prefer `= default` and member initializers.
 
-\`\`\`cpp
+```cpp
 struct Point {
     int x{0};
     int y{0};
     Point() = default;
 };
-\`\`\`
+```
 
 ## 7) Exceptions: throw by value, catch by reference
 
 And make your types exception-safe (RAII helps).
 
-\`\`\`cpp
+```cpp
 try {
     risky();
 } catch (const std::exception& e) { // ✅
-    std::cerr << e.what() << "\\n";
+    std::cerr << e.what() << "\n";
 }
-\`\`\`
+```
 
 ## 8) Undefined Behavior traps to avoid
 
@@ -136,37 +103,37 @@ try {
 
 Use sanitizers:
 
-\`\`\`bash
+```bash
 # AddressSanitizer + UndefinedBehaviorSanitizer
 clang++ -std=c++20 -fsanitize=address,undefined -g main.cpp -o main
-\`\`\`
+```
 
 ## 9) Use standard algorithms & ranges
 
 Prefer expressing *what* you want, not *how* to loop.
 
-\`\`\`cpp
+```cpp
 #include <algorithm>
 #include <vector>
 
 int countPos(const std::vector<int>& v) {
     return std::count_if(v.begin(), v.end(), [](int x){ return x > 0; });
 }
-\`\`\`
+```
 
 ## 10) Avoid macros for logic
 
-Prefer \`constexpr\`, inline functions, and templates.
+Prefer `constexpr`, inline functions, and templates.
 
-\`\`\`cpp
+```cpp
 constexpr int square(int x) { return x * x; }
-\`\`\`
+```
 
 ---
 
 ### Mini Checklist ✅
 - RAII for all resources  
-- \`const\` wherever possible  
+- `const` wherever possible  
 - Smart pointers > raw owning pointers  
 - Move, don’t copy big things  
 - No dangling references  
@@ -177,6 +144,3 @@ constexpr int square(int x) { return x * x; }
 - Avoid logic macros
 
 Happy hacking! 🚀
-`,
-}
-];
