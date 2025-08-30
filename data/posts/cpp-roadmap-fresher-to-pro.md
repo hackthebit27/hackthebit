@@ -3,6 +3,7 @@ title: "C++ Roadmap for Freshers — From Basics to Professional"
 date: "2025-08-28"
 description: "A step-by-step roadmap for beginners to master C++ and become professional developers ready for top companies."
 tags: ["c++", "career-guide", "roadmap", "freshers"]
+category: "C++"
 ---
 
 # C++ Roadmap for Freshers — From Basics to Professional 🚀

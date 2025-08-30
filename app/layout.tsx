@@ -1,11 +1,14 @@
+// app/layout.tsx
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import SiteHeader from "@/components/SiteHeader";  // ⬅️ import your header
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.hackthebit.com";
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL || "https://www.hackthebit.com";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -39,7 +42,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    site: "@hackthebit", // update if you claim the handle
+    site: "@hackthebit",
     creator: "@hackthebit",
     title: "HackTheBit — Learn. Code. Grow.",
     description:
@@ -51,10 +54,17 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-white text-black`}>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-white text-black`}
+      >
+        <SiteHeader /> {/* ✅ Now header shows on every page */}
         {children}
       </body>
     </html>

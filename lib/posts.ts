@@ -14,16 +14,17 @@ export async function getAllPosts(): Promise<BlogMeta[]> {
     const full = path.join(POSTS_DIR, file);
     const raw = await fs.readFile(full, "utf8");
     const { data } = matter(raw);
-    if (!data?.title || !data?.date) continue; // require basics
+    if (!data?.title || !data?.date) continue;
+
     posts.push({
       slug,
       title: String(data.title),
       date: String(data.date),
       description: data.description ? String(data.description) : undefined,
       tags: Array.isArray(data.tags) ? data.tags.map(String) : undefined,
+      category: data.category ? String(data.category) : "general", // ✅ add category
     });
   }
-  // newest first
   posts.sort((a, b) => +new Date(b.date) - +new Date(a.date));
   return posts;
 }
@@ -40,6 +41,7 @@ export async function getPostBySlug(slug: string): Promise<BlogPost | null> {
       date: String(data.date),
       description: data.description ? String(data.description) : undefined,
       tags: Array.isArray(data.tags) ? data.tags.map(String) : undefined,
+      category: data.category ? String(data.category) : "general", // ✅ add category
       content,
     };
   } catch {

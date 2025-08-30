@@ -3,6 +3,7 @@ title: "Things I Should Never Ignore in C++"
 date: "2025-08-25"
 description: "A practical checklist: RAII, const-correctness, moves, smart pointers, exceptions, and UB traps."
 tags: ["c++", "best-practices"]
+category: "C++"
 ---
 
 ## 1) Prefer RAII (Resource Acquisition Is Initialization)
