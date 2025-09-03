@@ -170,10 +170,13 @@ export default function MarkdownRenderer({ content }: { content: string }) {
         // --- Images
         img: ({ src, alt }) => {
           if (!src) return null;
+
+          
           const srcStr = typeof src === "string" ? src : "";
-          const safeSrc = srcStr.startsWith("http")
-            ? srcStr
-            : `/blog-images/${srcStr}`;
+         const cleanSrc = srcStr.replace(/^\.?\//, ""); // removes ./ or leading /
+        const safeSrc = srcStr.startsWith("http")
+          ? srcStr
+          : `/blog-images/${cleanSrc}`;
 
           return (
             <figure className="my-6">
