@@ -5,6 +5,7 @@ export interface BlogMeta {
   description?: string;
   tags?: string[];
   category: string;
+  youtubeId?: string; // ⬅️ add
 }
 
 export interface BlogPost extends BlogMeta {

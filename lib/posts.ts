@@ -23,6 +23,12 @@ export async function getAllPosts(): Promise<BlogMeta[]> {
       description: data.description ? String(data.description) : undefined,
       tags: Array.isArray(data.tags) ? data.tags.map(String) : undefined,
       category: data.category ? String(data.category) : "general", // ✅ add category
+      youtubeId:
+  typeof data.youtubeId === "string"
+    ? data.youtubeId
+    : typeof data.youtube === "string"
+    ? data.youtube
+    : undefined,
     });
   }
   posts.sort((a, b) => +new Date(b.date) - +new Date(a.date));
@@ -42,6 +48,12 @@ export async function getPostBySlug(slug: string): Promise<BlogPost | null> {
       description: data.description ? String(data.description) : undefined,
       tags: Array.isArray(data.tags) ? data.tags.map(String) : undefined,
       category: data.category ? String(data.category) : "general", // ✅ add category
+      youtubeId:
+  typeof data.youtubeId === "string"
+    ? data.youtubeId
+    : typeof data.youtube === "string"
+    ? data.youtube
+    : undefined,
       content,
     };
   } catch {

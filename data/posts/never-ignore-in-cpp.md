@@ -4,6 +4,7 @@ date: "2025-08-25"
 description: "A practical checklist: RAII, const-correctness, moves, smart pointers, exceptions, and UB traps."
 tags: ["c++", "best-practices"]
 category: "C++"
+#youtubeId: "dQw4w9WgXcQ"
 ---
 
 ## 1) Prefer RAII (Resource Acquisition Is Initialization)

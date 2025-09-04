@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import SiteHeader from "@/components/SiteHeader";  // ⬅️ import your header
+import Footer from "@/components/Footer"; // ⬅️ add this
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
@@ -66,6 +67,7 @@ export default function RootLayout({
       >
         <SiteHeader /> {/* ✅ Now header shows on every page */}
         {children}
+        <Footer /> {/* ⬅️ add this */}
       </body>
     </html>
   );
