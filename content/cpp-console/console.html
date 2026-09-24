@@ -1,5 +1,7 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found]){display:none!important}</style></head><body>
 <title>Mastery Console</title>
+<script>/* UX: apply the saved Dark/Light/System choice before first paint (no flash). */
+(function(){try{var t=localStorage.getItem('cpp_mastery_theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-ui-theme',t);}catch(e){}})();</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -406,20 +408,180 @@ pre.code .fn{color:#e0b96e;}
   .topbar{padding:10px 14px;}
 }
 </style>
+<style>
+/* ============================================================
+   UX LAYER — explicit Dark / Light / System theme, C++ code tokens,
+   lesson formatting, keyboard focus, mobile navigation, states.
+   "System" = no data-ui-theme attribute: the original host/OS rules apply.
+   ============================================================ */
+:root{
+  --code-bg:#f5f7fb; --code-fg:#1c2230; --code-border:#dde2ea; --code-head:#eaeef5;
+  --code-cm:#667085; --code-kw:#2f45c5; --code-ty:#0a7470; --code-str:#8a5300;
+  --code-fn:#8e3aa8; --code-num:#b0461b; --code-pp:#a02a62; --code-ns:#2c68a0;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --code-bg:#151922; --code-fg:#dfe6f3; --code-border:#262c3a; --code-head:#1b202b;
+    --code-cm:#7c8aa5; --code-kw:#7c9eff; --code-ty:#5cc9c9; --code-str:#c9d97a;
+    --code-fn:#e0b96e; --code-num:#f0a36b; --code-pp:#e58ac0; --code-ns:#8fb8e8;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --code-bg:#151922; --code-fg:#dfe6f3; --code-border:#262c3a; --code-head:#1b202b;
+  --code-cm:#7c8aa5; --code-kw:#7c9eff; --code-ty:#5cc9c9; --code-str:#c9d97a;
+  --code-fn:#e0b96e; --code-num:#f0a36b; --code-pp:#e58ac0; --code-ns:#8fb8e8;
+}
+/* explicit in-app choice: html:root[...] outranks both the media query and the host's data-theme */
+html:root[data-ui-theme="light"]{
+  color-scheme:light;
+  --bg:#f4f6f9; --surface:#ffffff; --surface-2:#eef1f6; --border:#dde2ea; --border-strong:#c7cedb;
+  --text:#161a22; --text-muted:#5b6472; --text-faint:#8790a0;
+  --accent:#3452d9; --accent-strong:#28399e; --accent-soft:#e8ecfc; --accent-soft-border:#c4cdf7;
+  --good:#1f8a54; --good-soft:#e4f5ec; --warn:#b1660c; --warn-soft:#fbedda; --bad:#c9412f; --bad-soft:#fbe6e2;
+  --p-critical:#c9412f; --p-important:#c07a1f; --p-useful:#9a8a1f; --p-advanced:#1f8a54; --p-expert:#6552c9;
+  --shadow-1:0 1px 2px rgba(20,24,34,0.05); --shadow-2:0 4px 16px rgba(20,24,34,0.08);
+  --code-bg:#f5f7fb; --code-fg:#1c2230; --code-border:#dde2ea; --code-head:#eaeef5;
+  --code-cm:#667085; --code-kw:#2f45c5; --code-ty:#0a7470; --code-str:#8a5300;
+  --code-fn:#8e3aa8; --code-num:#b0461b; --code-pp:#a02a62; --code-ns:#2c68a0;
+}
+html:root[data-ui-theme="dark"]{
+  color-scheme:dark;
+  --bg:#12141a; --surface:#1a1d25; --surface-2:#20242e; --border:#2b3040; --border-strong:#3a4055;
+  --text:#e7eaf1; --text-muted:#9aa3b5; --text-faint:#6b7690;
+  --accent:#7c93ff; --accent-strong:#a9b8ff; --accent-soft:#1f2747; --accent-soft-border:#38437a;
+  --good:#4fbf85; --good-soft:#173627; --warn:#e3a13f; --warn-soft:#3a2c14; --bad:#e3695a; --bad-soft:#3a2019;
+  --p-critical:#e3695a; --p-important:#e3a13f; --p-useful:#d0c24a; --p-advanced:#4fbf85; --p-expert:#a493f0;
+  --shadow-1:0 1px 2px rgba(0,0,0,0.3); --shadow-2:0 4px 20px rgba(0,0,0,0.4);
+  --code-bg:#151922; --code-fg:#dfe6f3; --code-border:#262c3a; --code-head:#1b202b;
+  --code-cm:#7c8aa5; --code-kw:#7c9eff; --code-ty:#5cc9c9; --code-str:#c9d97a;
+  --code-fn:#e0b96e; --code-num:#f0a36b; --code-pp:#e58ac0; --code-ns:#8fb8e8;
+}
+
+/* ---------- typography & lesson formatting ---------- */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;}
+.view-header h1{font-size:22px;letter-spacing:-0.01em;}
+.prose{font-size:14.2px;line-height:1.68;}
+.prose p{max-width:80ch;}
+.prose ul,.prose ol{margin:0 0 10px;padding-left:22px;max-width:84ch;}
+.prose li{margin-bottom:6px;}
+.prose ol.steps li{padding-left:4px;}
+.prose ol.steps li::marker{color:var(--accent);font-family:var(--font-mono);font-weight:600;font-size:12.5px;}
+.prose .callout p:last-child{margin-bottom:0;}
+.prose .qa-q{margin-bottom:6px;}
+.detail-block{scroll-margin-top:76px;}
+.detail-block h3{font-size:14.5px;}
+h1[tabindex="-1"]:focus,h3[tabindex="-1"]:focus{outline:none;}
+:not(pre) > code, code.inline{
+  font-family:var(--font-mono);font-size:.88em;background:var(--surface-2);color:var(--text);
+  border:1px solid var(--border);border-radius:4px;padding:.05em .35em;overflow-wrap:anywhere;
+}
+.lesson-toc{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:2px 0 12px;margin-bottom:2px;border-bottom:1px solid var(--border);}
+.lesson-toc .toc-label{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--text-faint);margin-right:4px;}
+.toc-link{font:500 12px var(--font-body);color:var(--text-muted);background:var(--surface-2);border:1px solid var(--border);border-radius:20px;padding:3px 10px;cursor:pointer;}
+.toc-link:hover{color:var(--accent-strong);border-color:var(--accent-soft-border);background:var(--accent-soft);}
+.lesson > .lesson-toc + .detail-block{border-top:none;}
+
+/* ---------- code blocks ---------- */
+.codebox{margin:10px 0;border:1px solid var(--code-border);border-radius:var(--radius-m);overflow:hidden;background:var(--code-bg);max-width:100%;}
+.codebox-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 8px 5px 12px;background:var(--code-head);border-bottom:1px solid var(--code-border);}
+.codebox-lang{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--code-cm);}
+.codebox-copy{font:600 11.5px var(--font-body);color:var(--code-fg);background:transparent;border:1px solid var(--code-border);border-radius:5px;padding:2px 9px;cursor:pointer;}
+.codebox-copy:hover{background:var(--code-bg);}
+pre.code{background:var(--code-bg);color:var(--code-fg);border-color:var(--code-border);tab-size:4;}
+.codebox pre.code{margin:0;border:0;border-radius:0;}
+pre.code .cm{color:var(--code-cm);font-style:italic;}
+pre.code .kw{color:var(--code-kw);}
+pre.code .ty{color:var(--code-ty);}
+pre.code .str{color:var(--code-str);}
+pre.code .fn{color:var(--code-fn);}
+pre.code .num{color:var(--code-num);}
+pre.code .pp{color:var(--code-pp);}
+pre.code .ns{color:var(--code-ns);}
+
+/* ---------- traps, earlier editions, related ---------- */
+.prose ul.traps{list-style:none;padding-left:0;}
+.traps > li{margin-bottom:8px;}
+.trap-pair{display:flex;flex-direction:column;gap:5px;padding:9px 11px;border:1px solid var(--border);border-radius:var(--radius-s);background:var(--surface-2);}
+.trap-label{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--bad);margin-right:4px;}
+.trap-correction .trap-label{color:var(--good);}
+details.earlier-edition{margin-top:14px;border:1px dashed var(--border-strong);border-radius:var(--radius-m);padding:0 14px;background:var(--bg);}
+details.earlier-edition > summary{cursor:pointer;padding:12px 0;font-weight:600;font-size:13px;color:var(--text);}
+details.earlier-edition[open] > summary{border-bottom:1px solid var(--border);margin-bottom:4px;}
+details.earlier-edition .ee-note{display:block;font-weight:400;font-size:12px;color:var(--text-muted);margin-top:2px;}
+.related-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0 10px;}
+.related-label{font-size:10.5px;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:.06em;margin-right:2px;}
+
+/* ---------- theme controls ---------- */
+.theme-pick select{width:auto;padding:5px 9px;font-size:12.5px;border-radius:20px;border-color:var(--border);background-color:var(--surface);color:var(--text);cursor:pointer;}
+.theme-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;}
+.theme-opt{display:flex;gap:10px;align-items:center;text-align:left;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-m);background:var(--surface);color:var(--text);cursor:pointer;font:inherit;}
+.theme-opt:hover{border-color:var(--accent-soft-border);}
+.theme-opt.on{border-color:var(--accent);background:var(--accent-soft);}
+.theme-opt-sub{display:block;font-size:11.5px;color:var(--text-muted);}
+.theme-swatch{width:28px;height:28px;border-radius:8px;border:1px solid var(--border-strong);flex:0 0 auto;}
+.sw-light{background:linear-gradient(135deg,#ffffff 50%,#e8ecfc 50%);}
+.sw-dark{background:linear-gradient(135deg,#1a1d25 50%,#38437a 50%);}
+.sw-system{background:linear-gradient(135deg,#ffffff 50%,#1a1d25 50%);}
+.settings-note{font-size:12px;color:var(--text-muted);margin:10px 0 0;}
+
+/* ---------- states ---------- */
+.loading-state{display:flex;align-items:center;justify-content:center;gap:10px;padding:64px 20px;color:var(--text-muted);font-size:13.5px;}
+.spinner{width:16px;height:16px;border-radius:50%;border:2px solid var(--border-strong);border-top-color:var(--accent);animation:uxspin .8s linear infinite;}
+@keyframes uxspin{to{transform:rotate(360deg);}}
+.error-state{text-align:center;padding:36px 20px;}
+.error-state .ic{font-size:28px;color:var(--bad);}
+.error-state h2{font-size:17px;margin:6px 0 8px;}
+.error-state p{color:var(--text-muted);margin:0 0 10px;}
+.err-detail{display:inline-block;text-align:left;max-width:100%;overflow-x:auto;font-size:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-s);padding:8px 10px;margin:0 0 14px;white-space:pre-wrap;}
+.empty-state{line-height:1.6;}
+.resume-card{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px;border-left:4px solid var(--accent);}
+.resume-card .rc-k{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-faint);font-weight:700;}
+.resume-card .rc-t{font-family:var(--font-display);font-weight:600;font-size:15.5px;margin-top:2px;}
+.resume-card .rc-s{font-size:12.5px;color:var(--text-muted);}
+
+/* ---------- focus ---------- */
+[role="button"]:focus-visible,[role="checkbox"]:focus-visible,.toc-link:focus-visible,.codebox-copy:focus-visible,.theme-opt:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+.nav-item:focus-visible{background:var(--surface-2);color:var(--text);}
+
+/* ---------- mobile navigation & layout ---------- */
+.sidebar-backdrop{position:fixed;inset:0;background:rgba(10,12,18,.45);z-index:45;}
+@media (min-width:901px){.sidebar-backdrop{display:none!important;}}
+@media (max-width:900px){
+  #menuToggle{display:inline-flex!important;flex:0 0 auto;}
+  .sidebar{visibility:hidden;height:100vh;height:100dvh;transition:left .2s,visibility .2s;}
+  .sidebar.open{visibility:visible;}
+  .content .grid[style*="grid-template-columns"]{grid-template-columns:1fr!important;}
+}
+@media (max-width:640px){
+  .topbar{flex-wrap:wrap;gap:8px;}
+  .topbar .search-box{order:3;flex:1 1 100%;max-width:none;}
+  .topbar .streak-word,#syncLabel{display:none;}
+  .view-header h1{font-size:19px;}
+  .content{padding:14px 16px 48px;}
+  .bar-row .bar-name{width:96px;}
+  .prose{font-size:14px;}
+}
+@media (prefers-reduced-motion:reduce){
+  .spinner{animation:none;}
+  .bar-fill,.sidebar{transition:none;}
+}
+</style>
 <div id="app">
-  <aside class="sidebar" id="sidebar">
+  <aside class="sidebar" id="sidebar" aria-label="Main navigation">
     <div class="sidebar-brand">
       <div class="mark">mastery<span>::</span>console</div>
       <div class="sub">C++ · senior interview track</div>
     </div>
     <nav class="sidebar-nav" id="sidebarNav"></nav>
     <div class="sidebar-foot">
-      <div class="nav-item" data-nav="settings"><span class="ic">⚙</span>Settings</div>
+      <div class="nav-item" data-nav="settings"><span class="ic" aria-hidden="true">⚙</span>Settings</div>
     </div>
   </aside>
   <div class="main">
     <div class="topbar">
-      <button class="icon-btn" id="menuToggle" style="display:none" aria-label="Menu">☰</button>
+      <button class="icon-btn" id="menuToggle" style="display:none" aria-label="Open navigation menu" aria-controls="sidebar" aria-expanded="false">☰</button>
       <div class="search-box" id="searchBox" tabindex="0">
         <span>⌕</span>
         <input type="text" id="searchInput" placeholder="Search topics, questions, notes…" autocomplete="off">
@@ -427,12 +589,14 @@ pre.code .fn{color:#e0b96e;}
       </div>
       <div class="topbar-right">
         <div class="streak-chip" id="syncChip"><span class="sync-dot" id="syncDot"></span><span id="syncLabel">synced</span></div>
-        <div class="streak-chip">🔥 <span id="streakVal" class="tabular">0</span> day streak</div>
+        <div class="streak-chip">🔥 <span id="streakVal" class="tabular">0</span> <span class="streak-word">day streak</span></div>
+        <label class="theme-pick"><span class="sr-only">Color theme</span><select id="themeSelect" data-change="set-theme-select" aria-label="Color theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
       </div>
     </div>
-    <div class="content" id="content"></div>
+    <div class="content" id="content"><div class="loading-state" role="status"><span class="spinner" aria-hidden="true"></span>Loading your progress&hellip;</div></div>
   </div>
 </div>
+<div class="sidebar-backdrop" id="sidebarBackdrop" hidden></div>
 <div id="modalRoot"></div>
 <div class="toast-wrap" id="toastRoot"></div>
 <script>
@@ -866,7 +1030,7 @@ const LEVEL_LABEL = {simple:'Simple',practical:'Practical',deep:'Deep Dive',inte
    Every entry: def, why, analogy, code, steps[], memory, realWorld,
    mistake, interviewQ{q,a}, advancedQ{q,a}, traps[]
    ============================================================ */
-const DEEP_CONTENT = {};
+const DEEP_CONTENT_EARLIER = {}; const DEEP_CONTENT = new Proxy({}, {set:function(t,k,v){ if(Object.prototype.hasOwnProperty.call(t,k)) (DEEP_CONTENT_EARLIER[k]=DEEP_CONTENT_EARLIER[k]||[]).push(t[k]); t[k]=v; return true; }});
 
 DEEP_CONTENT['pointers'] = {
   def:"A pointer is a variable whose value is a memory address — it stores *where* an object lives, not the object itself.",
@@ -11483,8 +11647,124 @@ function renderMD(src){
   if(inList) html+='</ul>';
   return html;
 }
-function renderCode(code){
-  return '<pre class="code">'+escapeHtml(code)+'</pre>';
+// ---------- UX: C++ code blocks (highlighting + copy), inline code, lesson sections ----------
+const CPP_KEYWORDS = new Set(('alignas alignof and asm auto bitand bitor break case catch class co_await co_return co_yield compl concept const consteval constexpr constinit const_cast continue decltype default delete do dynamic_cast else enum explicit export extern false final for friend goto if import inline module mutable namespace new noexcept not nullptr operator or override private protected public register reinterpret_cast requires return sizeof static static_assert static_cast struct switch template this thread_local throw true try typedef typeid typename union using virtual volatile while xor').split(' '));
+const CPP_TYPES = new Set(('bool char char8_t char16_t char32_t double float int long short signed unsigned void wchar_t size_t ssize_t ptrdiff_t nullptr_t int8_t int16_t int32_t int64_t uint8_t uint16_t uint32_t uint64_t uintptr_t intptr_t').split(' '));
+// Tokenizes the RAW source and escapes every token, so the rendered text is exactly the original code.
+function highlightCpp(src){
+  const re = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')|(^[ \t]*#[^\n]*)|(\b0[xX][0-9a-fA-F']+\b|\b\d[\d']*(?:\.\d+)?(?:[eE][+-]?\d+)?[uUlLfF]*\b)|([A-Za-z_]\w*)(?=\s*\()|([A-Za-z_]\w*)/gm;
+  let out = '', last = 0, m;
+  while((m = re.exec(src))){
+    out += escapeHtml(src.slice(last, m.index));
+    let cls = '';
+    if(m[1]) cls = 'cm';
+    else if(m[2]) cls = 'str';
+    else if(m[3]) cls = 'pp';
+    else if(m[4]) cls = 'num';
+    else {
+      const w = m[5] || m[6];
+      if(CPP_KEYWORDS.has(w)) cls = 'kw';
+      else if(CPP_TYPES.has(w)) cls = 'ty';
+      else if(w==='std') cls = 'ns';
+      else if(m[5]) cls = 'fn';
+    }
+    out += cls ? '<span class="'+cls+'">'+escapeHtml(m[0])+'</span>' : escapeHtml(m[0]);
+    last = re.lastIndex;
+  }
+  return out + escapeHtml(src.slice(last));
+}
+// kind === 'memory' renders an unhighlighted diagram block (memory layouts are ASCII art, not C++).
+function renderCode(code, kind){
+  const src = (code===null||code===undefined) ? '' : String(code);
+  const isMem = kind==='memory';
+  return '<div class="codebox"><div class="codebox-head"><span class="codebox-lang">'+(isMem?'Memory layout':'C++')+'</span>'+
+    '<button type="button" class="codebox-copy" data-copy-code aria-label="Copy '+(isMem?'diagram':'code')+' to clipboard">Copy</button></div>'+
+    '<pre class="code'+(isMem?' plain':'')+'">'+(isMem ? escapeHtml(src) : highlightCpp(src))+'</pre></div>';
+}
+// escapeHtml + `inline code` spans (escaping happens first, so this cannot inject markup).
+function inl(s){
+  return escapeHtml(s).replace(/`([^`\n]+)`/g, '<code class="inline">$1</code>');
+}
+// A prose field as paragraphs; ``` fenced chunks inside it become code blocks.
+function para(s, fenceKind){
+  if(s===null || s===undefined || s==='') return '';
+  s = String(s);
+  if(s.indexOf('```')===-1) return '<p>'+inl(s)+'</p>';
+  return s.split('```').map((chunk,i)=>{
+    if(i%2===1) return renderCode(chunk.replace(/^(?:cpp|c\+\+|text|txt)?\r?\n/i, ''), fenceKind);
+    return chunk.trim() ? '<p>'+inl(chunk.trim())+'</p>' : '';
+  }).join('');
+}
+function listHTML(a){
+  return '<ul>'+(a||[]).map(x=>'<li>'+(typeof x==='string' ? inl(x) : inl(JSON.stringify(x)))+'</li>').join('')+'</ul>';
+}
+// Traps are authored either as plain strings or as {trap, correction} objects; render every field.
+function trapHTML(t){
+  if(t===null || t===undefined) return '';
+  if(typeof t!=='object') return inl(t);
+  const labels = {trap:'Trap', correction:'Correction'};
+  return '<div class="trap-pair">'+Object.keys(t).map(k=>'<div class="trap-part trap-'+escapeHtml(k)+'"><span class="trap-label">'+escapeHtml(labels[k]||k)+'</span> '+inl(t[k])+'</div>').join('')+'</div>';
+}
+function sectionHTML(n, title, body, sid){
+  return '<section class="detail-block" id="'+sid+'" aria-labelledby="'+sid+'-h"><h3 id="'+sid+'-h"><span class="num">'+n+'</span>'+title+'</h3><div class="prose">'+body+'</div></section>';
+}
+function lessonTocHTML(items){
+  if(!items || items.length<3) return '';
+  return '<nav class="lesson-toc" aria-label="On this page"><span class="toc-label">On this page</span>'+
+    items.map(it=>'<button type="button" class="toc-link" data-scroll="'+it[3]+'">'+it[1]+'</button>').join('')+'</nav>';
+}
+const DEEP_KNOWN_KEYS = ['def','why','analogy','code','steps','memory','realWorld','mistake','interviewQ','advancedQ','traps'];
+// The 10-part deep-dive (+ traps) as [num, title, bodyHTML, sectionId]; empty parts are skipped and
+// any unexpected extra field is still rendered, so nothing authored is ever silently dropped.
+function deepItems(dc, prefix){
+  dc = dc || {};
+  const qa = x => (x && (x.q || x.a)) ? '<p class="qa-q"><strong>Q: '+inl(x.q)+'</strong></p>'+para(x.a) : '';
+  const rows = [
+    ['One-line definition', para(dc.def)],
+    ['Why do we need it?', para(dc.why)],
+    ['Simplest analogy', dc.analogy ? '<div class="callout info"><span class="ic" aria-hidden="true">&#9679;</span><div>'+para(dc.analogy)+'</div></div>' : ''],
+    ['C++ example', dc.code ? renderCode(dc.code) : ''],
+    ['Step-by-step execution', (dc.steps && dc.steps.length) ? '<ol class="steps">'+dc.steps.map(s=>'<li>'+inl(s)+'</li>').join('')+'</ol>' : ''],
+    ['What happens in memory', para(dc.memory, 'memory')],
+    ['Real-world use case', para(dc.realWorld)],
+    ['Common mistake', dc.mistake ? '<div class="callout bad"><span class="ic">&#9888;</span><div>'+para(dc.mistake)+'</div></div>' : ''],
+    ['Interview question', qa(dc.interviewQ)],
+    ['Advanced follow-up', qa(dc.advancedQ)],
+  ];
+  Object.keys(dc).filter(k=>DEEP_KNOWN_KEYS.indexOf(k)===-1).forEach(k=>{
+    const v = dc[k];
+    rows.push([escapeHtml(k), typeof v==='string' ? para(v) : Array.isArray(v) ? listHTML(v) : listHTML(Object.keys(v||{}).map(kk=>kk+': '+(typeof v[kk]==='string'?v[kk]:JSON.stringify(v[kk]))))]);
+  });
+  const items = rows.filter(r=>r[1]).map((r,i)=>[String(i+1), r[0], r[1], prefix+'-'+(i+1)]);
+  if(dc.traps && dc.traps.length) items.push(['&#9888;', 'Interview Traps', '<ul class="traps">'+dc.traps.map(tr=>'<li>'+trapHTML(tr)+'</li>').join('')+'</ul>', prefix+'-traps']);
+  return items;
+}
+// Design-pattern reference (PATTERNS_DATA), shown on the matching pat-* topic page.
+function patternCardHTML(pt){
+  const rows = [
+    ['Problem', para(pt.problem)],
+    ['Solution', para(pt.solution)],
+    ['Example', pt.code ? renderCode(pt.code) : ''],
+    ['Real-world use', para(pt.realWorld)],
+    ['Pros', (pt.pros && pt.pros.length) ? listHTML(pt.pros) : ''],
+    ['Cons', (pt.cons && pt.cons.length) ? listHTML(pt.cons) : ''],
+    ['Interview question', pt.interviewQ ? '<div class="callout info"><span class="ic" aria-hidden="true">?</span><div>'+para(pt.interviewQ)+'</div></div>' : ''],
+  ].filter(r=>r[1]);
+  return '<div class="card card-pad pattern-card" style="margin-bottom:14px"><div class="section-title">Design pattern reference: '+escapeHtml(pt.name)+'</div>'+
+    rows.map((r,i)=>sectionHTML(String(i+1), r[0], r[1], 'pat-'+(i+1))).join('')+'</div>';
+}
+function relatedChipsHTML(ids){
+  ids = (ids||[]).filter(r=>TOPICS[r]);
+  if(!ids.length) return '';
+  return '<div class="related-row"><span class="related-label">Related concepts</span>'+
+    ids.map(r=>'<span class="chip chip-neutral" style="cursor:pointer" data-action="open-topic" data-topic="'+r+'">'+escapeHtml(TOPICS[r].name)+'</span>').join('')+'</div>';
+}
+function errorStateHTML(err){
+  return '<div class="card card-pad error-state" role="alert"><div class="ic" aria-hidden="true">&#9888;</div>'+
+    '<h2>This page could not be displayed</h2>'+
+    '<p>Your saved progress is untouched. Try another page, or go back to the dashboard.</p>'+
+    '<pre class="err-detail">'+escapeHtml(err && err.message ? err.message : String(err))+'</pre>'+
+    '<div><button class="btn btn-primary btn-sm" data-nav="dashboard">Back to dashboard</button></div></div>';
 }
 function toast(msg){
   const root = document.getElementById('toastRoot');
@@ -12099,16 +12379,26 @@ function navigate(view, params){
   // relying on each individual link inside a modal to remember to close it first.
   const modalRoot = document.getElementById('modalRoot');
   if(modalRoot) modalRoot.innerHTML = '';
+  if(typeof setMenuOpen==='function') setMenuOpen(false);
   render();
+  focusViewHeading();
 }
 
 function render(){
   renderSidebarNav();
   const el = document.getElementById('content');
   const fn = VIEWS[ROUTE.view] || VIEWS.dashboard;
-  el.innerHTML = fn(ROUTE.params);
+  try{
+    el.innerHTML = fn(ROUTE.params);
+  }catch(err){
+    console.error(err);
+    el.innerHTML = errorStateHTML(err);
+  }
+  if(ROUTE.view==='dashboard') injectResumeCard(el);
   document.getElementById('streakVal').textContent = STATE.streak.current;
   wireDynamicInputs();
+  syncThemeControls();
+  enhanceUI(document.body);
 }
 
 function renderSidebarNav(){
@@ -12122,7 +12412,7 @@ function renderSidebarNav(){
       let badge = '';
       if(item.id==='revision-due'){ const n = dueRevisions().length; if(n) badge = '<span class="badge">'+n+'</span>'; }
       if(item.id==='today'){ const items = generateTodayPlan(); const remaining = items.filter(i=>!i.done).length; if(remaining) badge='<span class="badge">'+remaining+'</span>'; }
-      html += '<div class="nav-item'+active+'" data-nav="'+item.id+'"><span class="ic">'+item.icon+'</span>'+item.label+badge+'</div>';
+      html += '<div class="nav-item'+active+'" data-nav="'+item.id+'"'+(active?' aria-current="page"':'')+'><span class="ic" aria-hidden="true">'+item.icon+'</span>'+item.label+badge+'</div>';
     });
   });
   nav.innerHTML = html;
@@ -12347,6 +12637,8 @@ function handleAction(action, el, e){
     case 'mock-answer': mockAnswer(d.result); render(); break;
     case 'end-mock': MOCK_SESSION = null; render(); break;
     case 'save-settings': saveSettingsForm(); break;
+    case 'set-theme': setUiTheme(d.themeValue); break;
+    case 'set-theme-select': setUiTheme(el.value); break;
     case 'export-data': exportData(); break;
     case 'import-data': document.getElementById('importFile').click(); break;
     case 'reset-data': if(confirm('Reset ALL progress? This cannot be undone.')){ STATE = defaultState(); requestSave(); render(); } break;
@@ -12831,6 +13123,9 @@ VIEWS.topicDetail = function(params){
   const recommendedBefore = TOPIC_ORDER.filter(oid=>(TOPICS[oid].prereqs||[]).includes(id));
   const relatedQs = allQuestions().filter(q=>(q.related||[]).includes(id));
   const learningPlan = TOPIC_LEARNING_PILOT[id];
+  const earlierEditions = (typeof DEEP_CONTENT_EARLIER!=='undefined' && DEEP_CONTENT_EARLIER[id]) || [];
+  const patternEntry = (typeof PATTERNS_DATA!=='undefined') ? PATTERNS_DATA.find(pt=>pt.topicId===id) : null;
+  rememberLastTopic(id);
 
   let html = '<div class="back-to-topics" data-nav="topics" data-params=\''+JSON.stringify(TOPICS_LIST_CONTEXT)+'\'>&larr; Back to All Topics</div>'+
     breadcrumbHTML(id)+
@@ -12875,52 +13170,48 @@ VIEWS.topicDetail = function(params){
   '</div>';
 
   if(lldEntry && lldEntry.full){
-    const arr = (a)=>'<ul>'+(a||[]).map(s=>'<li>'+escapeHtml(s)+'</li>').join('')+'</ul>';
-    const lldItems = [
-      ['1','Functional requirements', arr(lldEntry.requirements)],
-      ['2','Non-functional requirements', arr(lldEntry.nonFunctionalRequirements)],
-      ['3','Core entities / classes', arr(lldEntry.classes)],
-      ['4','Interfaces', arr(lldEntry.interfaces)],
-      ['5','Class relationships', '<p>'+escapeHtml(lldEntry.relationships||'')+'</p>'],
-      ['6','Ownership', '<p>'+escapeHtml(lldEntry.ownership||'')+'</p>'],
-      ['7','Object lifetime', '<p>'+escapeHtml(lldEntry.objectLifetime||'')+'</p>'],
-      ['8','Concurrency & thread-safety', '<p>'+escapeHtml(lldEntry.threadSafety||'')+'</p>'],
-      ['9','Data structures', '<p>'+escapeHtml(lldEntry.dataStructures||'')+'</p>'],
-      ['10','Complexity', '<p>'+escapeHtml(lldEntry.complexity||'')+'</p>'],
-      ['11','Error handling', '<p>'+escapeHtml(lldEntry.errorHandling||'')+'</p>'],
-      ['12','Extensibility', '<p>'+escapeHtml(lldEntry.extensibility||'')+'</p>'],
-      ['13','Trade-offs', '<p>'+escapeHtml(lldEntry.tradeoffs||'')+'</p>'],
-      ['14','Alternative designs considered', '<p>'+escapeHtml(lldEntry.alternativeDesigns||'')+'</p>'],
-      ['15','C++ implementation considerations', '<p>'+escapeHtml(lldEntry.cppConsiderations||'')+'</p>'],
-    ];
-    if(lldEntry.patterns && lldEntry.patterns.length) lldItems.push(['16','Design patterns used', arr(lldEntry.patterns)]);
-    html += '<div class="card card-pad" style="margin-bottom:14px">'+
-      '<div class="callout good" style="margin-bottom:10px"><span class="ic">&#9673;</span><div>Full Low-Level Design breakdown.</div></div>'+
-      lldItems.map(([n,title,body])=>'<div class="detail-block"><h3><span class="num">'+n+'</span>'+title+'</h3><div class="prose">'+body+'</div></div>').join('')+
-      (lldEntry.interviewerFollowups && lldEntry.interviewerFollowups.length ? '<div class="detail-block"><h3><span class="num">&#9888;</span>Interviewer follow-ups</h3><div class="prose"><ul>'+lldEntry.interviewerFollowups.map(f=>'<li>'+escapeHtml(f)+'</li>').join('')+'</ul></div></div>' : '')+
+    // Sections whose source field is absent/empty are skipped (never rendered as empty headings);
+    // numbering stays sequential over the sections that actually have content.
+    const lldSpec = [
+      ['Functional requirements','requirements','list'],
+      ['Non-functional requirements','nonFunctionalRequirements','list'],
+      ['Core entities / classes','classes','list'],
+      ['Interfaces','interfaces','list'],
+      ['Class relationships','relationships','text'],
+      ['Ownership','ownership','text'],
+      ['Object lifetime','objectLifetime','text'],
+      ['Concurrency & thread-safety','threadSafety','text'],
+      ['Data structures','dataStructures','text'],
+      ['Complexity','complexity','text'],
+      ['Error handling','errorHandling','text'],
+      ['Extensibility','extensibility','text'],
+      ['Trade-offs','tradeoffs','text'],
+      ['Alternative designs considered','alternativeDesigns','text'],
+      ['C++ implementation considerations','cppConsiderations','text'],
+      ['Design patterns used','patterns','list'],
+    ].filter(([title,key,kind])=> kind==='list' ? (Array.isArray(lldEntry[key]) && lldEntry[key].length) : !!lldEntry[key]);
+    const lldItems = lldSpec.map(([title,key,kind],i)=>[String(i+1), title, kind==='list' ? listHTML(lldEntry[key]) : para(lldEntry[key]), 'lld-'+key]);
+    if(lldEntry.interviewerFollowups && lldEntry.interviewerFollowups.length) lldItems.push(['&#9888;','Interviewer follow-ups', listHTML(lldEntry.interviewerFollowups), 'lld-followups']);
+    html += '<div class="card card-pad lesson" style="margin-bottom:14px">'+
+      '<div class="callout good" style="margin-bottom:10px"><span class="ic">&#9673;</span><div>Full Low-Level Design breakdown'+(lldEntry.name?': <strong>'+escapeHtml(lldEntry.name)+'</strong>':'')+'.</div></div>'+
+      lessonTocHTML(lldItems)+
+      lldItems.map(([n,title,body,sid])=>sectionHTML(n,title,body,sid)).join('')+
     '</div>';
   } else if(lldEntry && lldEntry.brief){
     html += '<div class="card card-pad" style="margin-bottom:14px"><div class="empty-state">'+escapeHtml(lldEntry.brief)+' A full breakdown (requirements, class design, concurrency, trade-offs, C++ considerations) is not yet authored for this LLD — it\'s tracked on the roadmap and counts toward your progress.</div></div>';
   } else if(dc){
-    const items = [
-      ['1','One-line definition', '<p>'+escapeHtml(dc.def)+'</p>'],
-      ['2','Why do we need it?', '<p>'+escapeHtml(dc.why)+'</p>'],
-      ['3','Simplest analogy', '<p>'+escapeHtml(dc.analogy)+'</p>'],
-      ['4','C++ example', renderCode(dc.code||'')],
-      ['5','Step-by-step execution', '<ul>'+(dc.steps||[]).map(s=>'<li>'+escapeHtml(s)+'</li>').join('')+'</ul>'],
-      ['6','What happens in memory', '<p>'+dc.memory.split('```').map((chunk,i)=> i%2===1 ? '</p>'+renderCode(chunk)+'<p>' : escapeHtml(chunk)).join('')+'</p>'],
-      ['7','Real-world use case', '<p>'+escapeHtml(dc.realWorld)+'</p>'],
-      ['8','Common mistake', '<div class="callout bad"><span class="ic">&#9888;</span><div>'+escapeHtml(dc.mistake)+'</div></div>'],
-      ['9','Interview question', '<p><strong>Q: '+escapeHtml(dc.interviewQ.q)+'</strong></p><p>'+escapeHtml(dc.interviewQ.a)+'</p>'],
-      ['10','Advanced follow-up', '<p><strong>Q: '+escapeHtml(dc.advancedQ.q)+'</strong></p><p>'+escapeHtml(dc.advancedQ.a)+'</p>'],
-    ];
-    html += '<div class="card card-pad" style="margin-bottom:14px">'+
-      items.map(([n,title,body])=>'<div class="detail-block"><h3><span class="num">'+n+'</span>'+title+'</h3><div class="prose">'+body+'</div></div>').join('')+
-      (dc.traps ? '<div class="detail-block"><h3><span class="num">&#9888;</span>Interview Traps</h3><div class="prose"><ul>'+dc.traps.map(tr=>'<li>'+escapeHtml(tr)+'</li>').join('')+'</ul></div></div>' : '')+
+    const items = deepItems(dc, 'sec');
+    html += '<div class="card card-pad lesson" style="margin-bottom:14px">'+
+      lessonTocHTML(items)+
+      items.map(([n,title,body,sid])=>sectionHTML(n,title,body,sid)).join('')+
+      earlierEditions.map((ed,i)=>'<details class="earlier-edition"><summary>Earlier edition of this deep-dive'+(earlierEditions.length>1?' ('+(i+1)+' of '+earlierEditions.length+')':'')+'<span class="ee-note">An alternate write-up of the same topic, kept so no material is lost.</span></summary>'+
+        deepItems(ed, 'ee'+i).map(([n,title,body,sid])=>sectionHTML(n,title,body,sid)).join('')+'</details>').join('')+
     '</div>';
   } else {
     html += '<div class="card card-pad" style="margin-bottom:14px"><div class="empty-state">Full 10-part deep-dive content isn\'t authored for this topic yet — it\'s tracked on the roadmap and counts toward your progress. Use the level checkboxes above once you\'ve studied it from your own resources, and add notes below.</div></div>';
   }
+
+  if(patternEntry) html += patternCardHTML(patternEntry);
 
   if(learningPlan) html += renderPredictionChallenge(id, learningPlan);
 
@@ -13052,7 +13343,7 @@ function renderQuestionCard(q, isHighlighted){
     '<button class="btn btn-sm" style="margin-top:10px" data-action="reveal-answer">Reveal answer</button>'+
     '<div class="reveal-box" hidden style="margin-top:12px">'+
       '<div class="detail-block"><h3>Simplest Explanation</h3><div class="prose"><p>'+escapeHtml(q.simple)+'</p></div></div>'+
-      '<div class="detail-block"><h3>Deep Explanation</h3><div class="prose"><p>'+escapeHtml(q.deep)+'</p></div></div>'+
+      '<div class="detail-block"><h3>Deep Explanation</h3><div class="prose">'+para(q.deep)+'</div></div>'+
       (q.code ? '<div class="detail-block"><h3>Code</h3>'+renderCode(q.code)+'</div>' : '')+
       '<div class="detail-block"><h3>Common Wrong Answer</h3><div class="callout warn"><span class="ic">&#9888;</span><div>'+escapeHtml(q.wrong)+'</div></div></div>'+
       '<div class="detail-block"><h3>Interview Trap</h3><div class="callout bad"><span class="ic">&#9760;</span><div>'+escapeHtml(q.trap)+'</div></div></div>'+
@@ -13079,6 +13370,7 @@ VIEWS.output = function(){
       '<div id="reveal-'+o.id+'" hidden style="margin-top:10px">'+
         '<div class="callout good"><span class="ic">&#9654;</span><div><strong>Answer:</strong> '+escapeHtml(o.answer)+'</div></div>'+
         '<p class="prose" style="margin-top:8px">'+escapeHtml(o.explain)+'</p>'+
+        relatedChipsHTML(o.related)+
         '<div style="display:flex;gap:8px;margin-top:8px">'+
           '<button class="btn btn-sm btn-primary" data-action="mark-output" data-id="'+o.id+'" data-correct="1">I got it right</button>'+
           '<button class="btn btn-sm" data-action="mark-output" data-id="'+o.id+'" data-correct="0">I got it wrong</button>'+
@@ -13103,6 +13395,7 @@ VIEWS.debug = function(){
           const labels = {why:'Why it happens',reproduce:'How to reproduce',debug:'How to debug',fix:'How to fix',prevent:'How to prevent'};
           return '<div class="detail-block"><h3><span class="num">'+(i+1)+'</span>'+labels[k]+'</h3><div class="prose"><p>'+escapeHtml(b[k])+'</p></div></div>';
         }).join('')+
+        relatedChipsHTML(b.related)+
         '<button class="btn btn-sm btn-primary" data-action="mark-debug-solved" data-id="'+b.id+'">I diagnosed this correctly</button>'+
       '</div>'+
     '</div>';
@@ -13557,6 +13850,7 @@ VIEWS.bookmarks = function(){
 // ---------- settings ----------
 VIEWS.settings = function(){
   return '<div class="view-header"><div><h1>Settings</h1></div></div>'+
+  appearanceCardHTML()+
   '<div class="card card-pad" style="margin-bottom:14px">'+
     '<div class="section-title">Schedule</div>'+
     '<div class="field"><label class="field-label">Target completion date</label><input type="date" id="settingsTargetDate" value="'+STATE.targetDate+'"></div>'+
@@ -14925,12 +15219,201 @@ VIEWS.schedule = function(){
   scheduleSetupFormHTML();
 };
 /* ============================================================
+   UX LAYER: theme, keyboard access, mobile navigation, copy buttons,
+   inline code, resume card. Presentation only -- reads curriculum data,
+   never modifies it.
+   ============================================================ */
+const UI_THEMES = ['system','light','dark'];
+function normTheme(t){ return UI_THEMES.indexOf(t)>=0 ? t : 'system'; }
+function currentUiTheme(){ return normTheme(STATE && STATE.settings && STATE.settings.theme); }
+function applyUiTheme(t){
+  t = normTheme(t);
+  const root = document.documentElement;
+  if(t==='system') root.removeAttribute('data-ui-theme'); else root.setAttribute('data-ui-theme', t);
+  try{ localStorage.setItem('cpp_mastery_theme', t); }catch(e){ /* storage unavailable: theme still applies for this visit */ }
+  syncThemeControls();
+}
+function setUiTheme(t){
+  t = normTheme(t);
+  if(!STATE.settings || typeof STATE.settings!=='object') STATE.settings = {};
+  STATE.settings.theme = t;
+  applyUiTheme(t);
+  requestSave();
+  if(ROUTE.view==='settings') render();
+  toast('Theme: '+t.charAt(0).toUpperCase()+t.slice(1));
+}
+function syncThemeControls(){
+  const sel = document.getElementById('themeSelect');
+  const t = currentUiTheme();
+  if(sel && sel.value!==t) sel.value = t;
+}
+function appearanceCardHTML(){
+  const t = currentUiTheme();
+  const opts = [['system','System','Follow your device or host setting'],['light','Light','Bright surfaces, dark text'],['dark','Dark','Dim surfaces for low light']];
+  return '<div class="card card-pad" style="margin-bottom:14px"><div class="section-title">Appearance</div>'+
+    '<div class="theme-options" role="radiogroup" aria-label="Color theme">'+
+    opts.map(o=>'<button type="button" class="theme-opt'+(t===o[0]?' on':'')+'" role="radio" aria-checked="'+(t===o[0])+'" data-action="set-theme" data-theme-value="'+o[0]+'">'+
+      '<span class="theme-swatch sw-'+o[0]+'" aria-hidden="true"></span><span><strong>'+o[1]+'</strong><span class="theme-opt-sub">'+o[2]+'</span></span></button>').join('')+
+    '</div><p class="settings-note">Saved with your progress and on this device, so it is applied before the page paints next time.</p></div>';
+}
+
+// ---------- mobile navigation ----------
+function setMenuOpen(open){
+  const sb = document.getElementById('sidebar'), bd = document.getElementById('sidebarBackdrop'), bt = document.getElementById('menuToggle');
+  if(!sb) return;
+  const wasOpen = sb.classList.contains('open');
+  sb.classList.toggle('open', !!open);
+  if(bd) bd.hidden = !open;
+  if(bt) bt.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if(open && !wasOpen){ const first = sb.querySelector('.nav-item'); if(first) first.focus(); }
+}
+(function(){
+  const bt = document.getElementById('menuToggle'), bd = document.getElementById('sidebarBackdrop');
+  if(bt) bt.addEventListener('click', function(){
+    const sb = document.getElementById('sidebar');
+    setMenuOpen(!(sb && sb.classList.contains('open')));
+  });
+  if(bd) bd.addEventListener('click', function(){ setMenuOpen(false); if(bt) bt.focus(); });
+})();
+
+// ---------- keyboard access for div-based controls ----------
+const UX_NATIVE = {A:1,BUTTON:1,INPUT:1,SELECT:1,TEXTAREA:1,SUMMARY:1,OPTION:1,LABEL:1};
+const UX_SIG_ATTRS = ['data-nav','data-params','data-action','data-topic','data-level','data-id','data-status','data-kind','data-rating','data-result','data-mode'];
+function uxSignature(el){
+  return UX_SIG_ATTRS.filter(a=>el.hasAttribute(a)).map(a=>'['+a+'="'+(window.CSS&&CSS.escape?CSS.escape(el.getAttribute(a)):el.getAttribute(a))+'"]').join('');
+}
+function enhanceUI(root){
+  if(!root || !root.querySelectorAll) return;
+  root.querySelectorAll('[data-nav],[data-action]').forEach(el=>{
+    if(UX_NATIVE[el.tagName] || el.classList.contains('modal-overlay')) return;
+    if(!el.hasAttribute('tabindex')) el.setAttribute('tabindex','0');
+    if(el.classList.contains('checkbox')){
+      el.setAttribute('role','checkbox');
+      el.setAttribute('aria-checked', el.classList.contains('checked') ? 'true' : 'false');
+      if(el.parentElement) el.setAttribute('aria-label', el.parentElement.textContent.replace(el.textContent,'').trim());
+    } else if(!el.hasAttribute('role')){
+      el.setAttribute('role','button');
+    }
+  });
+  inlineCodePass(root);
+}
+document.addEventListener('keydown', function(e){
+  if(e.key==='Escape'){
+    const sb = document.getElementById('sidebar');
+    if(sb && sb.classList.contains('open')){ setMenuOpen(false); const bt=document.getElementById('menuToggle'); if(bt) bt.focus(); }
+    return;
+  }
+  if(e.key!=='Enter' && e.key!==' ' && e.key!=='Spacebar') return;
+  const el = e.target;
+  if(!el || el.nodeType!==1 || UX_NATIVE[el.tagName]) return;
+  const role = el.getAttribute('role');
+  if((role==='button' || role==='checkbox') && (el.hasAttribute('data-nav') || el.hasAttribute('data-action'))){
+    e.preventDefault();
+    const sig = uxSignature(el);
+    el.click();
+    // a re-render replaces the element; keep keyboard focus on its replacement
+    const ae = document.activeElement;
+    if(sig && (!ae || ae===document.body)){ const again = document.querySelector(sig); if(again) again.focus(); }
+  }
+});
+function focusViewHeading(){
+  const h = document.querySelector('#content h1');
+  if(!h) return;
+  h.setAttribute('tabindex','-1');
+  try{ h.focus({preventScroll:true}); }catch(e){ h.focus(); }
+}
+
+// ---------- copy buttons + in-page section links ----------
+document.addEventListener('click', function(e){
+  const t = e.target;
+  if(!t || !t.closest) return;
+  const btn = t.closest('[data-copy-code]');
+  if(btn){
+    const box = btn.closest('.codebox'), pre = box && box.querySelector('pre');
+    if(!pre) return;
+    const text = pre.textContent;
+    const reset = ()=>{ btn.textContent = 'Copy'; };
+    const done = ()=>{ btn.textContent = 'Copied'; setTimeout(reset, 1400); };
+    const fallback = ()=>{
+      const r = document.createRange(); r.selectNodeContents(pre);
+      const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      btn.textContent = 'Selected: press Ctrl+C'; setTimeout(reset, 2400);
+    };
+    try{
+      if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback);
+      else fallback();
+    }catch(err){ fallback(); }
+    return;
+  }
+  const sc = t.closest('[data-scroll]');
+  if(sc){
+    const target = document.getElementById(sc.getAttribute('data-scroll'));
+    if(target){
+      target.scrollIntoView({behavior:'smooth', block:'start'});
+      const h = target.querySelector('h3');
+      if(h){ h.setAttribute('tabindex','-1'); try{ h.focus({preventScroll:true}); }catch(err){} }
+    }
+  }
+});
+
+// ---------- `inline code` in any rendered text ----------
+const INLINE_SKIP = {PRE:1,CODE:1,TEXTAREA:1,SCRIPT:1,STYLE:1,KBD:1,INPUT:1,SELECT:1,OPTION:1};
+function inlineCodePass(root){
+  if(!root || typeof document.createTreeWalker!=='function') return;
+  const stop = root.parentNode;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {acceptNode:function(n){
+    const v = n.nodeValue;
+    if(v.indexOf('`')===-1 || v.indexOf('```')!==-1 || !/`[^`\n]+`/.test(v)) return NodeFilter.FILTER_REJECT;
+    for(let p=n.parentNode; p && p!==stop; p=p.parentNode){ if(INLINE_SKIP[p.nodeName]) return NodeFilter.FILTER_REJECT; }
+    return NodeFilter.FILTER_ACCEPT;
+  }});
+  const nodes = [];
+  while(walker.nextNode()) nodes.push(walker.currentNode);
+  nodes.forEach(n=>{
+    const frag = document.createDocumentFragment();
+    n.nodeValue.split(/(`[^`\n]+`)/).forEach(part=>{
+      if(/^`[^`\n]+`$/.test(part)){ const c = document.createElement('code'); c.className = 'inline'; c.textContent = part.slice(1,-1); frag.appendChild(c); }
+      else if(part) frag.appendChild(document.createTextNode(part));
+    });
+    n.parentNode.replaceChild(frag, n);
+  });
+}
+// Content inserted outside render() (modals, search results, reveals) gets the same treatment.
+(function(){
+  if(typeof MutationObserver==='undefined') return;
+  const mo = new MutationObserver(function(muts){
+    const targets = new Set();
+    muts.forEach(m=>{ if(m.addedNodes && m.addedNodes.length) targets.add(m.target); });
+    targets.forEach(t=>{ if(t.nodeType===1 && document.body.contains(t)) enhanceUI(t); });
+  });
+  ['content','modalRoot'].forEach(id=>{ const el = document.getElementById(id); if(el) mo.observe(el, {childList:true, subtree:true}); });
+})();
+
+// ---------- resume where you left off ----------
+function rememberLastTopic(id){
+  try{ localStorage.setItem('cpp_mastery_last_topic', id); }catch(e){}
+}
+function injectResumeCard(el){
+  let id = null;
+  try{ id = localStorage.getItem('cpp_mastery_last_topic'); }catch(e){ return; }
+  if(!id || !TOPICS[id]) return;
+  const t = TOPICS[id];
+  const header = el.querySelector('.view-header');
+  if(!header) return;
+  header.insertAdjacentHTML('afterend',
+    '<div class="card card-pad resume-card"><div><div class="rc-k">Continue where you left off</div>'+
+    '<div class="rc-t">'+escapeHtml(t.name)+'</div><div class="rc-s">'+escapeHtml(t.phaseTitle)+' &middot; '+topicPercent(id)+'% of levels checked</div></div>'+
+    '<button class="btn btn-primary btn-sm" data-action="open-topic" data-topic="'+id+'">Resume topic &rarr;</button></div>');
+}
+
+/* ============================================================
    BOOTSTRAP
    ============================================================ */
 async function boot(){
   try{
     await initPersistence();
   }catch(e){ /* fall through with defaults */ }
+  applyUiTheme(STATE.settings && STATE.settings.theme);
   // Process any day-rollover (freeze yesterday's plan into history, carry forward anything
   // unfinished) on every load, not just when a topic is completed -- so opening the app on a
   // new day reflects reality even if nothing has been marked done yet today.
