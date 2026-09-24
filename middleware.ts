@@ -1,9 +1,9 @@
 // middleware.ts
 import { NextResponse, type NextRequest } from "next/server";
 
-// Password-protects the private SQL + PL/SQL console. Credentials come from
-// SQL_CONSOLE_USER / SQL_CONSOLE_PASSWORD; if either is missing the console
-// stays locked rather than opening up.
+// Password-protects the private SQL + PL/SQL console and the C++ console. Both
+// use the same credentials, SQL_CONSOLE_USER / SQL_CONSOLE_PASSWORD; if either
+// is missing the consoles stay locked rather than opening up.
 
 const REALM = "HackTheBit SQL Console";
 
@@ -32,7 +32,7 @@ function deny(status: 401 | 503, body: string) {
 export function middleware(req: NextRequest) {
   const user = process.env.SQL_CONSOLE_USER;
   const pass = process.env.SQL_CONSOLE_PASSWORD;
-  if (!user || !pass) return deny(503, "SQL console is not configured.");
+  if (!user || !pass) return deny(503, "Console is not configured.");
 
   const header = req.headers.get("authorization") ?? "";
   if (header.startsWith("Basic ")) {
@@ -59,5 +59,10 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/sql-console", "/sql-console/:path*"],
+  matcher: [
+    "/sql-console",
+    "/sql-console/:path*",
+    "/cpp-console",
+    "/cpp-console/:path*",
+  ],
 };
