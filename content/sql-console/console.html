@@ -13181,7 +13181,7 @@ QUESTION_BANK.push({
   id: 'retry-idempotency-under-deadlock',
   tags: ["retry-idempotency-deadlock-handling", "transaction-management-isolation-config"],
   q: "Write the rules for a retry handler in an application that talks to Oracle. Which errors are retryable, what must happen before a retry, and what makes a retry safe rather than a way to double-charge a customer?",
-  a: "Start by separating errors into three classes, because retrying the wrong one is how a transient incident becomes a data corruption.\n\nRetryable: ORA-00060 (deadlock), ORA-08177 (cannot serialize access at SERIALIZABLE), ORA-00054 with NOWAIT or a WAIT timeout, and connection-level failures where the outcome is unknown. These share the property that the operation failed for reasons unrelated to its own correctness and would plausibly succeed if attempted again.\n\nNot retryable: constraint violations (ORA-00001, ORA-02291, ORA-02290), ORA-01722 and other type errors, and anything caused by the data or the statement itself. Retrying these produces the same failure, so a retry loop around them is a busy-wait that burns a connection and delays the real error report.\n\nAmbiguous, and the most dangerous: a timeout or a connection loss AFTER the statement was sent. The client does not know whether the transaction committed. This is the class that makes idempotency mandatory rather than optional.\n\nBefore any retry, the transaction must be rolled back. For ORA-00060 this is not a nicety: Oracle rolls back only the STATEMENT that detected the deadlock, leaving the transaction open and still holding every lock it acquired earlier. A handler that catches ORA-00060 and retries the statement retries while still holding the locks that formed the cycle, and deadlocks again -- indefinitely. The same applies to ORA-08177: the whole transaction must be retried from the start, because its snapshot is what became unusable, and re-running one statement inside it cannot succeed.\n\nThe retry itself needs bounded attempts, exponential backoff and jitter. Unbounded retries turn a transient contention spike into a sustained one; fixed-interval retries from many clients synchronize and re-collide; jitter breaks that synchronization. Three to five attempts with backoff starting around 50ms is a reasonable default, and the handler must surface the final failure rather than swallowing it.\n\nWhat makes a retry SAFE is that the operation is idempotent, and that is a schema property rather than a code property. The reliable mechanism is a client-supplied idempotency key with a UNIQUE constraint: the caller generates a key per logical request, the server inserts it as part of the same transaction that performs the work, and a duplicate request violates the constraint and is answered with the original result instead of performing the work again. Because the key row and the work commit together, there is no window in which one exists without the other. The alternative -- checking for an existing record before inserting -- is a read-modify-write race and fails under exactly the concurrency that made the retry necessary.\n\nTwo further rules. Never place an external call inside the transaction: a local transaction cannot be atomic with a remote side effect, so a payment gateway timeout leaves a decision with no correct answer. Claim the work in a short committed transaction, call the external service outside any transaction, then record the outcome in a second short transaction -- and make the external call itself idempotent with the same key, so its retry returns the original charge rather than creating a second one. And ensure the retry does not outlive the caller's own timeout: retrying for thirty seconds behind a client that gave up after ten holds locks and a connection for nothing.\n\nFinally, deadlock retries should be instrumented, not just handled. A rising deadlock rate is an ordering bug -- two code paths acquiring the same rows in different orders -- and the durable fix is a consistent access order, or an ORDER BY on the primary key inside batch updates. The retry handler keeps the system working while that is found; it is not the fix.",
+  a: "Start by separating errors into three classes, because retrying the wrong one is how a transient incident becomes a data corruption.\n\nRetryable: ORA-00060 (deadlock), ORA-08177 (cannot serialize access at SERIALIZABLE), ORA-00054 with NOWAIT (or ORA-30006 after a FOR UPDATE WAIT timeout), and connection-level failures where the outcome is unknown. These share the property that the operation failed for reasons unrelated to its own correctness and would plausibly succeed if attempted again.\n\nNot retryable: constraint violations (ORA-00001, ORA-02291, ORA-02290), ORA-01722 and other type errors, and anything caused by the data or the statement itself. Retrying these produces the same failure, so a retry loop around them is a busy-wait that burns a connection and delays the real error report.\n\nAmbiguous, and the most dangerous: a timeout or a connection loss AFTER the statement was sent. The client does not know whether the transaction committed. This is the class that makes idempotency mandatory rather than optional.\n\nBefore any retry, the transaction must be rolled back. For ORA-00060 this is not a nicety: Oracle rolls back only the STATEMENT that detected the deadlock, leaving the transaction open and still holding every lock it acquired earlier. A handler that catches ORA-00060 and retries the statement retries while still holding the locks that formed the cycle, and deadlocks again -- indefinitely. The same applies to ORA-08177: the whole transaction must be retried from the start, because its snapshot is what became unusable, and re-running one statement inside it cannot succeed.\n\nThe retry itself needs bounded attempts, exponential backoff and jitter. Unbounded retries turn a transient contention spike into a sustained one; fixed-interval retries from many clients synchronize and re-collide; jitter breaks that synchronization. Three to five attempts with backoff starting around 50ms is a reasonable default, and the handler must surface the final failure rather than swallowing it.\n\nWhat makes a retry SAFE is that the operation is idempotent, and that is a schema property rather than a code property. The reliable mechanism is a client-supplied idempotency key with a UNIQUE constraint: the caller generates a key per logical request, the server inserts it as part of the same transaction that performs the work, and a duplicate request violates the constraint and is answered with the original result instead of performing the work again. Because the key row and the work commit together, there is no window in which one exists without the other. The alternative -- checking for an existing record before inserting -- is a read-modify-write race and fails under exactly the concurrency that made the retry necessary.\n\nTwo further rules. Never place an external call inside the transaction: a local transaction cannot be atomic with a remote side effect, so a payment gateway timeout leaves a decision with no correct answer. Claim the work in a short committed transaction, call the external service outside any transaction, then record the outcome in a second short transaction -- and make the external call itself idempotent with the same key, so its retry returns the original charge rather than creating a second one. And ensure the retry does not outlive the caller's own timeout: retrying for thirty seconds behind a client that gave up after ten holds locks and a connection for nothing.\n\nFinally, deadlock retries should be instrumented, not just handled. A rising deadlock rate is an ordering bug -- two code paths acquiring the same rows in different orders -- and the durable fix is a consistent access order, or an ORDER BY on the primary key inside batch updates. The retry handler keeps the system working while that is found; it is not the fix.",
   category: "Application Integration",
   difficulty: "hard",
   priority: "P1"
@@ -13487,7 +13487,7 @@ CHEAT_SHEETS.push({
         { syntax: "(+) placement", meaning: "The operator can appear only in the WHERE clause and only against a column of a table or view, never against an expression or a subquery." },
         { syntax: "a.id = b.a_id (+) OR a.x = b.y (+)", meaning: "ORA-01719: outer join operator (+) not allowed in operand of OR or IN." },
         { syntax: "b.col (+) IN (SELECT ...)", meaning: "Also ORA-01719. The operator cannot be used with IN or with a subquery." },
-        { syntax: "WHERE a.id = b.id (+) AND a.id = c.id (+)", meaning: "ORA-01417: a table may be outer joined to at most one other table." },
+        { syntax: "WHERE a.id = b.id (+) AND c.id = b.c_id (+)", meaning: "B null-extended against two tables. Legal since 12c; earlier releases raised ORA-01417: a table may be outer joined to at most one other table. (Preserving one table against two others, a.id = b.id (+) AND a.id = c.id (+), was always legal.)" },
         { syntax: "Full outer join", meaning: "Cannot be expressed with (+) at all; writing (+) on both sides of one predicate is not permitted." },
         { syntax: "WHERE a.id = b.a_id (+) AND b.status = 'OPEN'", meaning: "A filter on the null-extended side without (+) converts the outer join back into an inner join, because the null rows fail the second predicate. Write b.status (+) = 'OPEN' or move the predicate into an ANSI ON clause." }
       ] },
@@ -13548,7 +13548,7 @@ CHEAT_SHEETS.push({
   ],
   gotchas: [
     "NOT IN against a subquery that yields even one NULL returns no rows at all, because every comparison becomes UNKNOWN. NOT EXISTS is the null-safe anti-join and behaves correctly without changing the data.",
-    "The Oracle (+) operator cannot outer join one table to two others -- that raises ORA-01417: a table may be outer joined to at most one other table -- and it cannot appear inside OR or IN, which raises ORA-01719.",
+    "The Oracle (+) operator cannot appear inside OR or IN, which raises ORA-01719. (The older rule that a table may be null-extended against only one other table, ORA-01417, was lifted in 12c.)",
     "There is no way to write a FULL OUTER JOIN with (+); the ANSI FULL OUTER JOIN syntax is the only option.",
     "A predicate on the null-extended table placed in the WHERE clause of an ANSI LEFT JOIN turns it back into an inner join; the predicate belongs in the ON clause instead.",
     "For ORDER BY, NULLS LAST is the default with ASC and NULLS FIRST is the default with DESC, so switching the sort direction also moves the nulls to the other end.",
@@ -13702,11 +13702,11 @@ CHEAT_SHEETS.push({
     { heading: "Format model elements",
       lines: [
         { syntax: "YYYY / YYY / YY / Y", meaning: "Four-, three-, two- and one-digit year. YY on input fills the missing digits from the current century." },
-        { syntax: "RRRR / RR", meaning: "Round-year. On input RR maps 00-49 to the next century and 50-99 to the previous one, relative to the current year." },
+        { syntax: "RRRR / RR", meaning: "Round-year. On input RR picks the century from the current year: while the current year is 2000-2049, RR 00-49 means 2000-2049 and 50-99 means 1950-1999." },
         { syntax: "MM / MON / MONTH", meaning: "Two-digit month, abbreviated name, full name. MON and MONTH depend on NLS_DATE_LANGUAGE." },
         { syntax: "DD / DDD / D", meaning: "Day of month, day of year (1-366), day of week (1-7, where day 1 depends on NLS_TERRITORY)." },
         { syntax: "DY / DAY", meaning: "Abbreviated and full weekday name, language dependent." },
-        { syntax: "HH / HH12 / HH24", meaning: "Hour. HH is the same as HH12 and requires AM or PM in the model; HH24 is 0-23 and must not be combined with AM/PM." },
+        { syntax: "HH / HH12 / HH24", meaning: "Hour. HH is the same as HH12 (1-12); without an AM/PM element the hour is taken as AM. HH24 is 0-23 and must not be combined with AM/PM." },
         { syntax: "MI / SS / SSSSS / FF [1-9]", meaning: "Minute, second, seconds past midnight, and fractional seconds. Note that MM is month -- MI is minute." },
         { syntax: "IW / IYYY", meaning: "ISO week of year and ISO year. An ISO week always has seven days, so early January can belong to the previous ISO year." },
         { syntax: "Q / WW / J", meaning: "Quarter, week of year counted from 1 January, and Julian day number." },
@@ -13803,13 +13803,13 @@ CHEAT_SHEETS.push({
         { syntax: "IS ... BEGIN ... RETURN expr; ... END;", meaning: "Every path through the executable section must execute a RETURN statement." },
         { syntax: "Falling off the end", meaning: "Reaching END without a RETURN raises ORA-06503: PL/SQL: function returned without value at run time, not at compile time." },
         { syntax: "RETURN in the exception section", meaning: "Allowed and often necessary, since a handler that does not re-raise must still supply a return value." },
-        { syntax: "Calling from SQL", meaning: "A function called from SQL must not perform DML on any table the statement itself is reading, and must not COMMIT unless it is autonomous." },
+        { syntax: "Calling from SQL", meaning: "A function called from a query cannot perform any DML (ORA-14551) or COMMIT unless it is autonomous; one called from a DML statement cannot read or modify the table that statement is changing (ORA-04091)." },
         { syntax: "OUT parameters on a function", meaning: "Legal in PL/SQL but the function then cannot be called from a SQL statement." }
       ] },
     { heading: "Package specification and body",
       lines: [
         { syntax: "CREATE [OR REPLACE] PACKAGE name [AUTHID ...] IS ... END name;", meaning: "The specification: the public interface. Types, constants, variables, cursors, exceptions and subprogram headings." },
-        { syntax: "CREATE [OR REPLACE] PACKAGE BODY name IS ... END name;", meaning: "The body: the implementations, plus anything private. A body is required only if the specification declares a subprogram or a cursor." },
+        { syntax: "CREATE [OR REPLACE] PACKAGE BODY name IS ... END name;", meaning: "The body: the implementations, plus anything private. A body is required only if the specification declares a subprogram or a cursor declared without its query (CURSOR c RETURN ...)." },
         { syntax: "AUTHID on the body", meaning: "Not allowed. The AUTHID clause belongs on the specification only, and the body inherits it." },
         { syntax: "Package initialisation section", meaning: "An optional BEGIN ... END at the end of the body, run once per session the first time anything in the package is referenced." },
         { syntax: "Package state", meaning: "A variable declared at package level lives for the session. Recompiling the package invalidates that state and the next reference raises ORA-04068." },
@@ -13922,7 +13922,7 @@ CHEAT_SHEETS.push({
         { syntax: "FOR r IN (SELECT ename, sal FROM emp) LOOP", meaning: "An inline query needs no cursor declaration at all and is the most readable form for a one-off loop." },
         { syntax: "Zero rows", meaning: "The loop body simply never runs. No exception is raised, which is why a missing row goes unnoticed unless you count iterations." },
         { syntax: "EXIT inside the loop", meaning: "Permitted; the cursor is still closed automatically. An explicit CLOSE inside the loop is an error." },
-        { syntax: "Row-by-row DML in the loop", meaning: "Works but performs one SQL round trip per row. Convert to BULK COLLECT plus FORALL once the volume matters." },
+        { syntax: "Row-by-row DML in the loop", meaning: "Works but performs one PL/SQL-to-SQL context switch per row. Convert to BULK COLLECT plus FORALL once the volume matters." },
         { syntax: "Cursor variables", meaning: "A cursor variable cannot be used in a cursor FOR loop; it needs an explicit OPEN FOR, FETCH and CLOSE." }
       ] },
     { heading: "Parameterised cursors",
@@ -13940,7 +13940,7 @@ CHEAT_SHEETS.push({
         { syntax: "CURSOR c IS SELECT ... FROM emp WHERE deptno = 10 FOR UPDATE;", meaning: "Every selected row is locked when the cursor is opened, not when it is fetched." },
         { syntax: "FOR UPDATE OF sal", meaning: "Names the columns you intend to change. In a join it also restricts the lock to rows of the tables those columns belong to." },
         { syntax: "FOR UPDATE NOWAIT", meaning: "Fails immediately with ORA-00054 (resource busy) instead of waiting if another session holds a lock." },
-        { syntax: "FOR UPDATE WAIT 5", meaning: "Waits at most 5 seconds and then raises ORA-00054." },
+        { syntax: "FOR UPDATE WAIT 5", meaning: "Waits at most 5 seconds and then raises ORA-30006: resource busy; acquire with WAIT timeout expired -- a different code from NOWAIT's ORA-00054." },
         { syntax: "FOR UPDATE SKIP LOCKED", meaning: "Silently omits rows that are locked by another session -- the basis of a simple work-queue pattern." },
         { syntax: "UPDATE emp SET sal = sal * 1.1 WHERE CURRENT OF c;", meaning: "Applies to the single row last fetched, addressed by its ROWID rather than by a predicate." },
         { syntax: "DELETE FROM emp WHERE CURRENT OF c;", meaning: "Same rule for DELETE." },
@@ -13967,7 +13967,7 @@ CHEAT_SHEETS.push({
         { syntax: "EXECUTE IMMEDIATE 'UPDATE ' || t || ' SET x = :1' USING v", meaning: "Bind placeholders are numbered or named but are matched by position in the USING list." },
         { syntax: "USING mode", meaning: "USING is IN by default; write USING OUT v or USING IN OUT v for a RETURNING clause or an anonymous block's OUT parameter." },
         { syntax: "DBMS_SQL.TO_REFCURSOR / DBMS_SQL.TO_CURSOR_NUMBER", meaning: "Convert between a DBMS_SQL cursor number and a ref cursor, so the two styles can be mixed within one routine." },
-        { syntax: "DBMS_ASSERT.SIMPLE_SQL_NAME / ENQUOTE_NAME", meaning: "Validate an identifier that has to be concatenated into the statement text. Object names cannot be bound, so this is the only defence against SQL injection there." },
+        { syntax: "DBMS_ASSERT.SIMPLE_SQL_NAME / ENQUOTE_NAME", meaning: "Validate an identifier that has to be concatenated into the statement text. Object names cannot be bound, so validation -- or better, a whitelist of permitted names -- is the defence against SQL injection there." },
         { syntax: "Binding versus concatenating", meaning: "Concatenating a literal value produces a new statement text per value, filling the shared pool with unshareable cursors. Bind every value." },
         { syntax: "DBMS_SQL and array binds", meaning: "DBMS_SQL.BIND_ARRAY performs bulk binding when the number of binds is only known at run time, where FORALL requires a statically written statement." }
       ] }
@@ -14118,11 +14118,11 @@ CHEAT_SHEETS.push({
         { syntax: "RAISE e_bad_input;", meaning: "Raises a named exception. Outside a handler the exception name is required." },
         { syntax: "RAISE;", meaning: "Legal only inside an exception handler. It re-raises the exception currently being handled, preserving its error code and its backtrace." },
         { syntax: "RAISE NO_DATA_FOUND;", meaning: "Predefined exceptions can be raised explicitly too, although doing so usually confuses the caller." },
-        { syntax: "RAISE_APPLICATION_ERROR(error_code, message [, keep_errors])", meaning: "Signals an error to the client with your own number and text." },
+        { syntax: "RAISE_APPLICATION_ERROR(error_code, message [, keeperrorstack])", meaning: "Signals an error to the client with your own number and text." },
         { syntax: "error_code range", meaning: "An integer from -20000 to -20999. Anything outside that range is rejected." },
         { syntax: "message", meaning: "A character string of at most 2048 bytes." },
-        { syntax: "keep_errors", meaning: "TRUE puts the new error on top of the existing error stack; FALSE, which is the default, replaces the stack. Pass TRUE when re-signalling inside a handler so the original cause survives." },
-        { syntax: "Where it can be called", meaning: "From a stored subprogram or method, not from an anonymous block at the top level." },
+        { syntax: "keeperrorstack", meaning: "TRUE puts the new error on top of the existing error stack; FALSE, which is the default, replaces the stack. Pass TRUE when re-signalling inside a handler so the original cause survives." },
+        { syntax: "Where it can be called", meaning: "From any PL/SQL -- stored subprograms, triggers and anonymous blocks alike." },
         { syntax: "RAISE versus RAISE_APPLICATION_ERROR", meaning: "RAISE propagates an existing condition; RAISE_APPLICATION_ERROR ends the unit with a new, numbered, message-carrying error that a client can display." }
       ] },
     { heading: "Handler structure",
@@ -14131,9 +14131,9 @@ CHEAT_SHEETS.push({
         { syntax: "WHEN e_one OR e_two THEN ...", meaning: "Several exceptions can share a handler." },
         { syntax: "WHEN OTHERS THEN ...", meaning: "Catches anything not matched above. It must be the last handler in the section." },
         { syntax: "Scope of a handler", meaning: "A handler catches exceptions raised in its own block's executable section only -- not those raised in its own declarative section, and not those raised inside another handler of the same block." },
-        { syntax: "Propagation", meaning: "An unhandled exception propagates to the enclosing block, and so on outward. If it reaches the outermost block it goes to the client and the current transaction is left open." },
+        { syntax: "Propagation", meaning: "An unhandled exception propagates to the enclosing block, and so on outward. If it escapes the outermost block the client's call fails, and Oracle rolls back everything that call did -- the whole PL/SQL call counts as one statement -- while work done before the call stays pending in the still-open transaction." },
         { syntax: "Continuing after an error", meaning: "Wrap the risky statement in its own BEGIN ... EXCEPTION ... END; block so that the handler scope is only those few lines." },
-        { syntax: "Transaction state", meaning: "An exception does not roll back the transaction. Only an explicit ROLLBACK, or the statement-level rollback of the single failed statement, undoes anything." },
+        { syntax: "Transaction state", meaning: "An exception does not roll back the transaction. Inside PL/SQL, only an explicit ROLLBACK or the statement-level rollback of the single failed statement undoes anything; an exception that escapes to the client also undoes everything that call did." },
         { syntax: "Statement-level rollback", meaning: "The failing SQL statement itself is undone completely, but everything earlier in the transaction stays." }
       ] },
     { heading: "Interrogating the error",
@@ -14145,7 +14145,7 @@ CHEAT_SHEETS.push({
         { syntax: "DBMS_UTILITY.FORMAT_ERROR_BACKTRACE", meaning: "The call stack at the point where the exception was raised, including line numbers, and it is not subject to the size limitation of SQLERRM. It returns NULL when no error is being handled." },
         { syntax: "DBMS_UTILITY.FORMAT_CALL_STACK", meaning: "The current call stack -- where you are now, not where the error happened. Up to 2000 bytes." },
         { syntax: "UTL_CALL_STACK", meaning: "A structured alternative with functions such as ERROR_DEPTH, BACKTRACE_LINE and BACKTRACE_UNIT, useful when the text needs parsing." },
-        { syntax: "Backtrace loss", meaning: "The backtrace is reset each time an exception is raised, so calling RAISE_APPLICATION_ERROR inside a handler without keep_errors => TRUE discards the original line." }
+        { syntax: "Backtrace loss", meaning: "The backtrace is reset each time an exception is raised, so calling RAISE_APPLICATION_ERROR inside a handler without keeperrorstack => TRUE discards the original line." }
       ] },
     { heading: "The NO_DATA_FOUND anomaly",
       lines: [
@@ -14164,14 +14164,14 @@ CHEAT_SHEETS.push({
         { syntax: "WHEN OTHERS THEN log(SQLERRM || ' ' || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE); RAISE;", meaning: "The pattern worth memorising -- record where it happened, then let it propagate." },
         { syntax: "Logging that survives a rollback", meaning: "Write the log row from a procedure declared PRAGMA AUTONOMOUS_TRANSACTION so that the caller's ROLLBACK does not erase the evidence." },
         { syntax: "Catching NO_DATA_FOUND too widely", meaning: "A WHEN NO_DATA_FOUND handler around a large block hides a missing collection key as readily as a missing row." },
-        { syntax: "RAISE_APPLICATION_ERROR without keep_errors", meaning: "Replaces the error stack, so the original ORA number and line are gone. Pass TRUE as the third argument to keep them." },
+        { syntax: "RAISE_APPLICATION_ERROR without keeperrorstack", meaning: "Replaces the error stack, so the original ORA number and line are gone. Pass TRUE as the third argument to keep them." },
         { syntax: "PLSQL_WARNINGS", meaning: "Compiling with PLSQL_WARNINGS = 'ENABLE:ALL' raises PLW-06009 for a WHEN OTHERS handler that does not re-raise, which makes the defect visible at compile time." }
       ] }
   ],
   gotchas: [
     "SQLCODE for NO_DATA_FOUND is +100 even though the underlying error is ORA-01403, so a test of SQLCODE = -1403 never fires.",
     "SQLERRM alone reports the message but not the line, and it is subject to a size limitation that DBMS_UTILITY.FORMAT_ERROR_BACKTRACE is explicitly not subject to; the backtrace function is what tells you where the error was raised.",
-    "The backtrace is reset each time an exception is raised, so re-signalling with RAISE_APPLICATION_ERROR inside a handler loses the original location unless keep_errors is passed as TRUE.",
+    "The backtrace is reset each time an exception is raised, so re-signalling with RAISE_APPLICATION_ERROR inside a handler loses the original location unless keeperrorstack is passed as TRUE.",
     "A bare RAISE; re-raises the current exception with its code and backtrace intact, but it is legal only inside an exception handler.",
     "RAISE_APPLICATION_ERROR accepts only error numbers from -20000 to -20999 and a message of at most 2048 bytes.",
     "An exception does not roll back the transaction. Only the single failing statement is undone; everything else in the transaction is still pending when control reaches the handler.",
@@ -14385,10 +14385,10 @@ CHEAT_SHEETS.push({
         { syntax: "USER_SEGMENTS.BLOCKS", meaning: "The live allocation: the current size of the segment in Oracle blocks, maintained by the space management code itself." },
         { syntax: "Why they differ", meaning: "A table loaded since the last gather can have millions of rows and still report NUM_ROWS = 0 and BLOCKS = 0 in USER_TABLES while USER_SEGMENTS shows gigabytes." },
         { syntax: "Which to use for size", meaning: "USER_SEGMENTS.BYTES for how much space a table occupies now; USER_TABLES.BLOCKS only for understanding what the optimizer believes." },
-        { syntax: "USER_TABLES.EMPTY_BLOCKS", meaning: "Also populated only by a DBMS_STATS gather, and it counts never-used blocks below the high water mark." },
+        { syntax: "USER_TABLES.EMPTY_BLOCKS", meaning: "Counts never-used blocks below the high water mark -- but DBMS_STATS does not gather it (nor AVG_SPACE or CHAIN_CNT); only the legacy ANALYZE command fills these, so on a DBMS_STATS-managed table they are usually 0 or stale." },
         { syntax: "USER_TAB_STATISTICS.STALE_STATS", meaning: "YES when enough rows have changed since the last gather for Oracle to regard the statistics as stale." },
         { syntax: "USER_TAB_MODIFICATIONS", meaning: "Approximate INSERTS, UPDATES, DELETES and TRUNCATED since the last gather, flushed periodically or on demand with DBMS_STATS.FLUSH_DATABASE_MONITORING_INFO." },
-        { syntax: "DBMS_STATS.GATHER_TABLE_STATS", meaning: "What refreshes every statistic column in this block. ANALYZE is retained only for validation and is not the way to collect optimizer statistics." }
+        { syntax: "DBMS_STATS.GATHER_TABLE_STATS", meaning: "What refreshes the optimizer statistics in this block (EMPTY_BLOCKS, AVG_SPACE and CHAIN_CNT excepted). ANALYZE is retained for validation, LIST CHAINED ROWS and those few space columns, and is not the way to collect optimizer statistics." }
       ] }
   ],
   gotchas: [
@@ -14425,7 +14425,7 @@ ORACLE_ERRORS.push({
   code: 'ORA-00054',
   meaning: 'resource busy and acquire with NOWAIT specified or timeout expired',
   category: 'Concurrency',
-  cause: 'A statement asked for a lock it could not get immediately: SELECT ... FOR UPDATE NOWAIT, FOR UPDATE WAIT n whose n elapsed, or -- most often in production -- DDL, which takes an exclusive table lock and in 19c honours DDL_LOCK_TIMEOUT rather than waiting forever.',
+  cause: 'A statement asked for a lock it could not get immediately: SELECT ... FOR UPDATE NOWAIT (a FOR UPDATE WAIT n that times out raises ORA-30006 instead), or -- most often in production -- DDL, which takes an exclusive table lock and in 19c honours DDL_LOCK_TIMEOUT rather than waiting forever.',
   example: '-- session 1\nUPDATE orders SET status = 2 WHERE order_id = 7;   -- no commit\n\n-- session 2\nALTER TABLE orders ADD (note VARCHAR2(200));\n-- ORA-00054: resource busy and acquire with NOWAIT specified or timeout expired',
   diagnosis: "SELECT s.sid, s.serial#, s.username, s.event, s.blocking_session,\n       s.blocking_session_status\n  FROM v$session s WHERE s.sid = :your_sid;\n\nSELECT l.sid, l.type, l.lmode, l.request, o.object_name\n  FROM v$lock l JOIN dba_objects o ON o.object_id = l.id1\n WHERE l.type = 'TM';",
   fix: 'Find the holder through V$SESSION.BLOCKING_SESSION and deal with the transaction, not the symptom. For deployments, set DDL_LOCK_TIMEOUT so the DDL queues politely instead of failing instantly, and prefer the online forms (ALTER TABLE ... ADD with a DEFAULT is metadata-only from 11g for NOT NULL columns; CREATE INDEX ... ONLINE; ALTER TABLE ... MOVE ONLINE from 12.2).',
@@ -17528,7 +17528,7 @@ OUTPUT_QUESTIONS.push({
   code: "-- Session 1: locks the row and does NOT commit\nUPDATE seat_fu SET status = 'HELD' WHERE seat_id = 1;\n\n-- Session 2: a separate connection, run while session 1 is still open\nSELECT seat_id FROM seat_fu WHERE seat_id = 1 FOR UPDATE NOWAIT;",
   prompt: "Session 1 has not committed. What does session 2 see?",
   answer: "Session 1 reports:\n1 row updated.\n\nSession 2 fails immediately with:\nORA-00054: resource busy and acquire with NOWAIT specified or timeout expired",
-  why: "The UPDATE in session 1 takes an exclusive row lock on seat 1 and holds it until that session commits or rolls back. Session 2 asks for the same row lock through FOR UPDATE, and the NOWAIT option tells Oracle not to queue behind the holder. Since the lock is unavailable, the statement fails at once with ORA-00054: resource busy and acquire with NOWAIT specified or timeout expired; session 2 is not blocked and no rows are returned. Without NOWAIT the SELECT FOR UPDATE would simply hang until session 1 finished, and with FOR UPDATE WAIT 5 it would wait five seconds and then raise the same ORA-00054. A plain SELECT of the same row never blocks and never errors: Oracle's multiversion read consistency serves it the pre-update value 'FREE' from undo, because readers do not take row locks and are not blocked by writers. Session 2 would also succeed immediately if it locked seat 2 instead, since row locks are per row rather than per table.",
+  why: "The UPDATE in session 1 takes an exclusive row lock on seat 1 and holds it until that session commits or rolls back. Session 2 asks for the same row lock through FOR UPDATE, and the NOWAIT option tells Oracle not to queue behind the holder. Since the lock is unavailable, the statement fails at once with ORA-00054: resource busy and acquire with NOWAIT specified or timeout expired; session 2 is not blocked and no rows are returned. Without NOWAIT the SELECT FOR UPDATE would simply hang until session 1 finished, and with FOR UPDATE WAIT 5 it would wait five seconds and then raise ORA-30006: resource busy; acquire with WAIT timeout expired -- a different code from NOWAIT's ORA-00054. A plain SELECT of the same row never blocks and never errors: Oracle's multiversion read consistency serves it the pre-update value 'FREE' from undo, because readers do not take row locks and are not blocked by writers. Session 2 would also succeed immediately if it locked seat 2 instead, since row locks are per row rather than per table.",
   trap: "Two wrong answers are usual. The first is that session 2 waits until session 1 commits, which is the behaviour of FOR UPDATE without NOWAIT, not with it. The second is that session 2 sees the uncommitted value 'HELD'; Oracle has no dirty reads, so an ordinary query would show 'FREE' until the other session commits. It is worth remembering that ORA-00054 is raised immediately, which makes NOWAIT the right choice when the application would rather retry than hang."
 });
 
