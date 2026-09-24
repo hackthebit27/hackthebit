@@ -272,6 +272,8 @@ code.inline{background:var(--bg-elevated);padding:1px 5px;border-radius:5px;font
 /* code + output */
 .codebox{border:1px solid var(--code-border);border-radius:10px;overflow:hidden;background:var(--code-bg);margin:0;}
 .codebox + .codebox{margin-top:12px;}
+.callout.output-prose{background:var(--out-bg);border-left:3px solid var(--green);}
+.callout .codebox-lang{display:block;}
 .codebox-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px 6px 12px;background:var(--code-head);border-bottom:1px solid var(--code-border);}
 .codebox-lang{font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--text-faint);}
 .copy-btn{background:transparent;border:1px solid var(--code-border);color:var(--text-muted);font-size:11.5px;padding:3px 9px;border-radius:6px;}
@@ -951,14 +953,17 @@ function codeLanguage(raw){
   if(/^\s*RMAN>/m.test(raw)) return 'RMAN';
   if(/^\s*(expdp|impdp|srvctl)\b/m.test(raw)) return 'SHELL';
   if(/\bCREATE\s+(OR\s+REPLACE\s+)?(PROCEDURE|FUNCTION|PACKAGE|TRIGGER|TYPE\s+BODY)\b/i.test(raw) || /^\s*(DECLARE|BEGIN)\b/im.test(raw)) return 'PL/SQL';
+  // No statement anywhere (no terminator, no leading SQL keyword): a data listing or notes.
+  if(!/;\s*($|--)/m.test(raw) && !/^\s*(SELECT|INSERT|UPDATE|DELETE|MERGE|WITH|CREATE|ALTER|DROP|EXEC|EXPLAIN)\b/im.test(raw)) return 'TEXT';
   return 'SQL';
 }
 function codeBox(label, content, opts){
   if(!content) return '';
   opts = opts || {};
   const idx = CODE_REGISTRY.push(String(content)) - 1;
-  const lang = opts.output ? (label || 'Expected output') : ((label ? label + ' · ' : '') + codeLanguage(content));
-  const body = opts.output ? highlightOutput(String(content)) : highlightSQL(String(content));
+  const kind = opts.output ? null : codeLanguage(content);
+  const lang = opts.output ? (label || 'Expected output') : (kind === 'TEXT' ? (label || 'Notes') : ((label ? label + ' · ' : '') + kind));
+  const body = (opts.output || kind === 'TEXT') ? highlightOutput(String(content)) : highlightSQL(String(content));
   return '<div class="codebox'+(opts.output?' output':'')+'"><div class="codebox-head"><span class="codebox-lang">'+escapeHtml(lang)+'</span>'+
     '<button type="button" class="copy-btn" data-action="copy-code" data-idx="'+idx+'" aria-label="Copy '+escapeHtml(label||'code')+'">Copy</button></div>'+
     '<pre>'+body+'</pre></div>';
@@ -980,7 +985,29 @@ function splitLongParagraph(p){
 }
 function isCodeParagraph(p){
   const lines = p.split('\n').filter(l=>l.trim());
-  return lines.length > 0 && lines.every(l=>/^\s{2,}\S/.test(l));
+  if(lines.length === 0) return false;
+  if(lines.every(l=>/^\s{2,}\S/.test(l))) return true;
+  // An unindented statement: starts with an upper-case SQL keyword (prose that
+  // happens to begin with "Update ..." is not upper-case, so it is not caught).
+  return /^(SELECT|INSERT|UPDATE|DELETE|MERGE|WITH|CREATE|ALTER|DROP|TRUNCATE|BEGIN|DECLARE|EXEC|GRANT|REVOKE|COMMIT|ROLLBACK|SAVEPOINT|EXPLAIN|--)\b/.test(lines[0].trim()) &&
+         !/[a-z]{3,} [a-z]{3,} [a-z]{3,} [a-z]{3,}/.test(lines[0].replace(/'[^']*'/g,'').replace(/--.*$/,''));
+}
+/* Most "code" fields are code, but some hold a reasoned explanation or a list
+   of facts. Those read badly in a no-wrap monospace box, so they are shown as
+   prose instead. Comment lines (--) never count as prose. */
+function looksLikeProse(text){
+  const lines = String(text).split('\n').filter(l=>l.trim() && !/^\s*--/.test(l));
+  if(lines.length === 0) return false;
+  const prosey = lines.filter(l=>l.length > 90 && /[a-z]{2,} [a-z]{2,} [a-z]{2,} [a-z]{2,}/.test(l)).length;
+  return prosey >= 1 && prosey / lines.length >= 0.3;
+}
+function smartCodeBox(label, content, opts){
+  if(!content) return '';
+  if(looksLikeProse(content)){
+    const cls = opts && opts.output ? 'callout output-prose' : 'callout';
+    return '<div class="'+cls+'"><div class="codebox-lang" style="margin-bottom:6px">'+escapeHtml(label)+'</div>'+renderProse(content)+'</div>';
+  }
+  return codeBox(label, content, opts);
 }
 function dedent(p){
   const lines = p.split('\n');
@@ -1061,8 +1088,8 @@ function renderLesson(dc){
   add('mental-model', 'Mental model', dc.mentalModel ? '<div class="callout model">'+renderProse(dc.mentalModel)+'</div>' : '');
   add('analogy', 'Analogy', dc.analogy ? '<div class="callout analogy">'+renderProse(dc.analogy)+'</div>' : '');
   add('syntax', 'Syntax', codeBox('Syntax', dc.syntax));
-  const example = [codeBox('Example', dc.example), codeBox('Schema', dc.schema), codeBox('Sample data', dc.sampleData),
-    codeBox('PL/SQL block', dc.block), codeBox('Expected output', dc.expectedOutput, {output:true})].filter(Boolean).join('');
+  const example = [smartCodeBox('Example', dc.example), smartCodeBox('Schema', dc.schema), smartCodeBox('Sample data', dc.sampleData),
+    smartCodeBox('PL/SQL block', dc.block), smartCodeBox('Expected output', dc.expectedOutput, {output:true})].filter(Boolean).join('<div style="height:12px"></div>');
   add('example', 'Worked example', example);
   add('expected-behavior', 'Expected behavior', renderProse(dc.expectedBehavior));
   add('exception-cases', 'Exception cases', renderProse(dc.exceptionCases));
@@ -1120,8 +1147,8 @@ function renderPracticeProblem(kind, p){
   const add = (key, label, html) => { if(html) parts.push(lessonSection(key, label, html)); };
   add('problem', 'Problem', renderProse(p.problemStatement));
   add('concepts', 'Concepts', p.concepts && p.concepts.length ? '<div style="display:flex;flex-wrap:wrap;gap:6px">'+p.concepts.map(c=>'<span class="chip chip-neutral">'+escapeHtml(c)+'</span>').join('')+'</div>' : '');
-  add('setup', 'Setup', [codeBox('Schema', p.schema), codeBox('Sample data', p.sampleData)].filter(Boolean).join(''));
-  add('expected', 'Expected result', p.expectedOutput ? codeBox('Expected output', p.expectedOutput, {output:true}) : renderProse(p.expectedBehavior));
+  add('setup', 'Setup', [smartCodeBox('Schema', p.schema), smartCodeBox('Sample data', p.sampleData)].filter(Boolean).join('<div style="height:12px"></div>'));
+  add('expected', 'Expected result', p.expectedOutput ? smartCodeBox('Expected output', p.expectedOutput, {output:true}) : renderProse(p.expectedBehavior));
   add('hints', 'Hints', p.hints && p.hints.length ? '<div class="hint-stack">'+p.hints.map((h,i)=>
       '<details class="hint"><summary>Hint '+(i+1)+(i===0?' (gentlest)':i===p.hints.length-1?' (closest to the answer)':'')+'</summary><div class="prose"><p>'+escapeHtml(h)+'</p></div></details>').join('')+'</div>' : '');
   const solution =
