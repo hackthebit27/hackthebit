@@ -4,7 +4,7 @@ import Link from "next/link";
 import { getAllPosts } from "@/lib/posts";
 
 interface Props {
-  params: { cat: string };
+  params: Promise<{ cat: string }>;
 }
 
 const ICONS: Record<string, string> = {
@@ -17,7 +17,8 @@ const ICONS: Record<string, string> = {
 
 export default async function CategoryPage({ params }: Props) {
   const posts = await getAllPosts();
-  const category = decodeURIComponent(params.cat);
+  const { cat } = await params;
+  const category = decodeURIComponent(cat);
   const filtered = posts.filter(
     (p) => p.category.toLowerCase() === category.toLowerCase()
   );
