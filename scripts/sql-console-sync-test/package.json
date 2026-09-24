@@ -1,0 +1,13 @@
+{
+  "name": "sql-console-sync-test",
+  "private": true,
+  "description": "End-to-end test of the SQL console's progress sync and themes. Not part of the site build.",
+  "scripts": {
+    "shim": "node upstash-shim.js",
+    "test": "node e2e.js"
+  },
+  "dependencies": {
+    "ioredis": "^5.4.1",
+    "playwright": "^1.47.0"
+  }
+}

@@ -3,18 +3,43 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>
+/* Apply the saved theme before first paint so the page never flashes the wrong one. */
+(function(){try{var p=localStorage.getItem("sql_plsql_mastery_console_theme")||"system";var t=p==="light"||p==="dark"?p:(window.matchMedia&&matchMedia("(prefers-color-scheme: light)").matches?"light":"dark");document.documentElement.setAttribute("data-theme",t);document.documentElement.setAttribute("data-theme-pref",p);}catch(e){document.documentElement.setAttribute("data-theme","dark");}})();
+</script>
 <title>SQL + PL/SQL Mastery Console</title>
 <style>
 :root{
+  /* ---- dark theme (default) ---- */
   --bg:#0b1420; --bg-panel:#101d2e; --bg-card:#132234; --bg-elevated:#182a40;
-  --border:#22374f; --border-soft:#1a2c42;
-  --text:#e7eef7; --text-muted:#9fb3cc; --text-faint:#6b8099;
-  --accent:#2dd4bf; --accent-dim:#0f766e; --accent-soft:#0f3f3b;
-  --blue:#5aa9ff; --amber:#f5b642; --red:#f2555a; --green:#3ddc84; --purple:#b18cf0;
-  --p0:#f2555a; --p1:#f5b642; --p2:#5aa9ff; --p3:#7d8fa8;
+  --border:#2a4160; --border-soft:#1d304a;
+  --text:#e7eef7; --text-muted:#a9bbd2; --text-faint:#8497b0;
+  --accent:#2dd4bf; --accent-dim:#0f766e; --accent-soft:#0f3f3b; --accent-hover:#115e59; --on-accent:#ffffff;
+  --blue:#6cb2ff; --amber:#f5b642; --red:#ff6b70; --green:#4ade80; --purple:#b18cf0;
+  --p0:#ff6b70; --p1:#f5b642; --p2:#6cb2ff; --p3:#94a5bc;
+  --code-bg:#0a1520; --code-border:#1f3149; --code-text:#d6e6f7; --code-head:#0f1c2b;
+  --out-bg:#08111b; --out-text:#cfe0f0;
+  --tok-kw:#7cc4ff; --tok-str:#f0c674; --tok-com:#7f93a8; --tok-num:#f59e8b; --tok-type:#c4a7ff;
+  --callout-bg:#12263a; --warn-bg:rgba(255,107,112,.08); --caution-bg:rgba(245,182,66,.08); --info-bg:rgba(108,178,255,.07);
+  --shadow:0 10px 26px rgba(0,0,0,.45); --focus:#7dd3fc; --backdrop:rgba(3,8,14,.65);
   --radius:10px; --radius-lg:14px;
   --font: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  --mono: "SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+  --mono: ui-monospace,"SFMono-Regular","JetBrains Mono",Consolas,"Liberation Mono",Menlo,monospace;
+  color-scheme: dark;
+}
+:root[data-theme="light"]{
+  --bg:#f4f6f9; --bg-panel:#fbfcfd; --bg-card:#ffffff; --bg-elevated:#eef1f5;
+  --border:#cfd7e2; --border-soft:#e1e6ed;
+  --text:#18212d; --text-muted:#45525f; --text-faint:#5f6b78;
+  --accent:#0f766e; --accent-dim:#0f766e; --accent-soft:#e2f3f0; --accent-hover:#115e59; --on-accent:#ffffff;
+  --blue:#1d5fbf; --amber:#9a5a00; --red:#b8262d; --green:#15703a; --purple:#6b3fb8;
+  --p0:#b8262d; --p1:#9a5a00; --p2:#1d5fbf; --p3:#5f6b78;
+  --code-bg:#f7f8fb; --code-border:#dde3eb; --code-text:#1c2633; --code-head:#eef1f6;
+  --out-bg:#fbfbf6; --out-text:#26303b;
+  --tok-kw:#0b5cad; --tok-str:#8a5300; --tok-com:#6b7785; --tok-num:#b3261e; --tok-type:#6b3fb8;
+  --callout-bg:#eef6f5; --warn-bg:#fdf1f1; --caution-bg:#fdf6ea; --info-bg:#eef4fc;
+  --shadow:0 8px 22px rgba(24,33,45,.12); --focus:#1d5fbf; --backdrop:rgba(20,28,38,.45);
+  color-scheme: light;
 }
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.55;}
@@ -45,7 +70,7 @@ button{font-family:inherit;cursor:pointer;}
 #searchInput:focus{outline:none;border-color:var(--accent);}
 #searchBox .sic{position:absolute;left:10px;top:8px;color:var(--text-faint);font-size:13px;}
 #searchResults{position:absolute;top:38px;left:0;right:0;background:var(--bg-elevated);border:1px solid var(--border);
-  border-radius:10px;max-height:420px;overflow-y:auto;box-shadow:0 12px 28px rgba(0,0,0,.4);z-index:50;}
+  border-radius:10px;max-height:420px;overflow-y:auto;box-shadow:var(--shadow);z-index:50;}
 .search-hit{padding:9px 12px;border-bottom:1px solid var(--border-soft);cursor:pointer;}
 .search-hit:last-child{border-bottom:none;}
 .search-hit:hover{background:var(--bg-card);}
@@ -90,8 +115,8 @@ button{font-family:inherit;cursor:pointer;}
 .chip-good{background:rgba(61,220,132,.15);color:var(--green);}
 .btn{padding:7px 13px;border-radius:8px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text);font-size:12.5px;}
 .btn:hover{border-color:var(--accent);}
-.btn-primary{background:var(--accent-dim);border-color:var(--accent-dim);color:#fff;}
-.btn-primary:hover{background:var(--accent);border-color:var(--accent);}
+.btn-primary{background:var(--accent-dim);border-color:var(--accent-dim);color:var(--on-accent);}
+.btn-primary:hover{background:var(--accent-hover);border-color:var(--accent-hover);}
 .btn-sm{padding:5px 10px;font-size:11.5px;}
 .field{display:flex;flex-direction:column;gap:5px;}
 .field-label{font-size:11.5px;color:var(--text-muted);font-weight:600;}
@@ -110,9 +135,8 @@ table.table td{padding:7px 10px;border-bottom:1px solid var(--border-soft);}
 .row-title{font-size:13px;font-weight:500;}
 .row-meta{font-size:11px;color:var(--text-faint);margin-top:2px;display:flex;gap:6px;flex-wrap:wrap;}
 .checklist{max-height:340px;overflow-y:auto;}
-pre.code{background:#0a1420;border:1px solid var(--border-soft);border-radius:8px;padding:12px 14px;overflow-x:auto;font-family:var(--mono);font-size:12.3px;line-height:1.6;color:#c9e6ff;}
 code.inline{background:var(--bg-elevated);padding:1px 5px;border-radius:5px;font-family:var(--mono);font-size:12px;}
-.modal-backdrop{position:fixed;inset:0;background:rgba(3,8,14,.65);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px;}
+.modal-backdrop{position:fixed;inset:0;background:var(--backdrop);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px;}
 .modal{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;max-width:640px;width:100%;max-height:86vh;overflow-y:auto;padding:20px 22px;}
 .modal-close{float:right;cursor:pointer;color:var(--text-faint);font-size:18px;}
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--border-soft);margin-bottom:14px;flex-wrap:wrap;}
@@ -141,7 +165,7 @@ code.inline{background:var(--bg-elevated);padding:1px 5px;border-radius:5px;font
 .breadcrumb .sep{color:var(--text-faint);padding:0 1px;}
 
 .topic-navbar{display:flex;align-items:stretch;gap:10px;background:var(--bg-panel);border:1px solid var(--border-soft);border-radius:10px;padding:8px;margin-bottom:14px;}
-.topic-navbar.sticky-top{position:sticky;top:53px;z-index:15;box-shadow:0 6px 16px rgba(0,0,0,.3);}
+.topic-navbar.sticky-top{position:sticky;top:53px;z-index:15;box-shadow:var(--shadow);}
 .topic-navbar .tnav-btn{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text);cursor:pointer;}
 .topic-navbar .tnav-btn:hover{border-color:var(--accent);}
 .topic-navbar .tnav-btn.next{text-align:right;}
@@ -191,6 +215,124 @@ code.inline{background:var(--bg-elevated);padding:1px 5px;border-radius:5px;font
 .interview-checkpoint .ic-title{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--accent);font-weight:700;margin-bottom:8px;}
 .interview-checkpoint .ic-more{margin-top:10px;font-size:12.5px;}
 .interview-checkpoint .ic-more span.link{color:var(--accent);cursor:pointer;}
+
+/* ---------- accessibility + motion ---------- */
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:4px;}
+[role="button"]{cursor:pointer;}
+@media (prefers-reduced-motion: reduce){*{transition:none !important;animation:none !important;scroll-behavior:auto !important;}}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0;}
+
+/* ---------- topbar controls ---------- */
+#topbarRight{display:flex;align-items:center;gap:10px;margin-left:auto;}
+#menuBtn{display:none;background:none;border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 10px;font-size:15px;}
+.sync-pill{display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border-radius:999px;border:1px solid var(--border-soft);background:var(--bg-card);color:var(--text-muted);font-size:12px;white-space:nowrap;}
+.sync-pill .sync-dot{width:8px;height:8px;border-radius:50%;background:var(--text-faint);flex:0 0 8px;}
+.sync-pill.sync-synced .sync-dot{background:var(--green);}
+.sync-pill.sync-syncing .sync-dot{background:var(--blue);}
+.sync-pill.sync-pending .sync-dot,.sync-pill.sync-offline .sync-dot{background:var(--amber);}
+.sync-pill.sync-error .sync-dot,.sync-pill.sync-auth .sync-dot{background:var(--red);}
+.theme-select{padding:5px 8px;font-size:12px;border-radius:8px;}
+@media(max-width:900px){
+  #menuBtn{display:inline-block;}
+  body.nav-open #sidebar{display:flex;position:fixed;left:0;top:0;bottom:0;z-index:120;box-shadow:var(--shadow);}
+  body.nav-open::after{content:"";position:fixed;inset:0;background:var(--backdrop);z-index:110;}
+}
+@media(max-width:600px){ .sync-pill .sync-text{display:none;} #topbar{padding:8px 12px;gap:8px;} }
+
+/* ---------- lesson (topic detail) ---------- */
+.lesson{background:var(--bg-card);border:1px solid var(--border-soft);border-radius:var(--radius-lg);padding:26px 30px 30px;}
+@media(max-width:600px){.lesson{padding:18px 16px 22px;}}
+.lesson-toc{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 22px;padding-bottom:16px;border-bottom:1px solid var(--border-soft);}
+.lesson-toc .toc-label{font-size:12px;color:var(--text-faint);margin-right:4px;align-self:center;}
+.lesson-toc button{background:var(--bg-elevated);border:1px solid transparent;color:var(--text-muted);font-size:12px;padding:4px 10px;border-radius:999px;}
+.lesson-toc button:hover{color:var(--text);border-color:var(--border);}
+.ls{margin:0 0 30px;scroll-margin-top:130px;}
+.ls:last-child{margin-bottom:0;}
+.ls-h{font-size:13px;font-weight:700;letter-spacing:.02em;color:var(--text-muted);margin:0 0 10px;display:flex;align-items:center;gap:8px;}
+.ls-h .ls-tag{font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:5px;background:var(--bg-elevated);color:var(--text-faint);letter-spacing:.03em;}
+.prose{font-size:15px;line-height:1.72;color:var(--text);max-width:78ch;}
+.prose p{margin:0 0 12px;white-space:pre-line;}
+.prose p:last-child{margin-bottom:0;}
+.ls-definition .prose{font-size:16.5px;line-height:1.65;}
+.ls-definition .prose p:first-child{font-weight:500;}
+.callout{border-radius:10px;padding:14px 18px;background:var(--callout-bg);border:1px solid var(--border-soft);}
+.callout.model{border-left:3px solid var(--accent);}
+.callout.analogy{background:var(--info-bg);border-left:3px solid var(--blue);}
+.callout.warn{background:var(--warn-bg);border-left:3px solid var(--red);}
+.callout.caution{background:var(--caution-bg);border-left:3px solid var(--amber);}
+.callout.prod{background:var(--bg-elevated);border-left:3px solid var(--purple);}
+.callout .prose{max-width:none;}
+.trap-list{margin:0;padding-left:20px;}
+.trap-list li{margin:0 0 10px;font-size:15px;line-height:1.68;}
+.trap-list li:last-child{margin-bottom:0;}
+.steps-list{margin:0;padding-left:22px;font-size:15px;line-height:1.68;max-width:78ch;}
+.steps-list li{margin-bottom:8px;padding-left:4px;}
+.res-list{margin:0;padding-left:18px;font-size:13.5px;color:var(--text-muted);}
+
+/* code + output */
+.codebox{border:1px solid var(--code-border);border-radius:10px;overflow:hidden;background:var(--code-bg);margin:0;}
+.codebox + .codebox{margin-top:12px;}
+.codebox-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px 6px 12px;background:var(--code-head);border-bottom:1px solid var(--code-border);}
+.codebox-lang{font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--text-faint);}
+.copy-btn{background:transparent;border:1px solid var(--code-border);color:var(--text-muted);font-size:11.5px;padding:3px 9px;border-radius:6px;}
+.copy-btn:hover{color:var(--text);border-color:var(--border);}
+.copy-btn.done{color:var(--green);border-color:var(--green);}
+pre.code,.codebox pre{margin:0;background:var(--code-bg);color:var(--code-text);font-family:var(--mono);font-size:13px;line-height:1.62;padding:14px 16px;overflow-x:auto;white-space:pre;tab-size:2;border:0;border-radius:0;}
+pre.code{border:1px solid var(--code-border);border-radius:8px;}
+.codebox.output{background:var(--out-bg);}
+.codebox.output pre{background:var(--out-bg);color:var(--out-text);}
+.codebox.output .codebox-lang{color:var(--green);}
+.tok-k{color:var(--tok-kw);font-weight:600;}
+.tok-s{color:var(--tok-str);}
+.tok-c{color:var(--tok-com);font-style:italic;}
+.tok-n{color:var(--tok-num);}
+.tok-t{color:var(--tok-type);}
+
+/* execution reasoning */
+.er-predict{border:1px dashed var(--accent);background:var(--accent-soft);border-radius:10px;padding:14px 18px;margin-bottom:16px;}
+.er-predict .er-label{font-size:11.5px;font-weight:700;letter-spacing:.05em;color:var(--accent);margin-bottom:6px;}
+.er-predict .prose{max-width:none;}
+.er-predict pre{margin-top:10px;}
+.er-steps{list-style:none;margin:0;padding:0;counter-reset:none;}
+.er-step{position:relative;padding:0 0 18px 42px;}
+.er-step::before{content:"";position:absolute;left:14px;top:30px;bottom:0;width:2px;background:var(--border-soft);}
+.er-step:last-child::before{display:none;}
+.er-num{position:absolute;left:0;top:0;width:30px;height:30px;border-radius:50%;background:var(--bg-elevated);border:1px solid var(--border);color:var(--text);font-size:12.5px;font-weight:700;display:flex;align-items:center;justify-content:center;}
+.er-title{font-size:15px;font-weight:600;line-height:1.5;padding-top:4px;margin-bottom:8px;color:var(--text);}
+.er-row{display:grid;grid-template-columns:78px 1fr;gap:10px;font-size:14.5px;line-height:1.65;margin-bottom:6px;}
+.er-row .er-k{font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--text-faint);padding-top:3px;text-transform:uppercase;}
+.er-row.result .er-k{color:var(--blue);}
+.er-row.state .er-k{color:var(--purple);}
+.er-step pre{margin:6px 0 8px;}
+@media(max-width:600px){.er-row{grid-template-columns:1fr;gap:2px;}.er-step{padding-left:38px;}}
+.er-takeaway{margin-top:6px;border-left:3px solid var(--accent);background:var(--callout-bg);border-radius:0 10px 10px 0;padding:12px 16px;}
+.er-takeaway .er-label{font-size:11.5px;font-weight:700;letter-spacing:.05em;color:var(--accent);margin-bottom:4px;}
+
+/* interview */
+.qa{border:1px solid var(--border-soft);border-radius:12px;overflow:hidden;}
+.qa + .qa{margin-top:14px;}
+.qa-q{padding:14px 18px;background:var(--bg-elevated);font-size:15.5px;font-weight:600;line-height:1.55;color:var(--text);}
+.qa-q .qa-kind{display:block;font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--accent);margin-bottom:4px;}
+.qa-a{padding:14px 18px;}
+.qa-a .prose{font-size:14.5px;max-width:80ch;}
+.qa details summary{cursor:pointer;padding:10px 18px;font-size:13px;color:var(--accent);font-weight:600;list-style:none;}
+.qa details summary::-webkit-details-marker{display:none;}
+.qa details[open] summary{border-bottom:1px solid var(--border-soft);}
+
+/* resume + settings */
+.resume-card{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;border:1px solid var(--accent-dim);background:var(--accent-soft);border-radius:12px;padding:14px 18px;margin-bottom:16px;}
+.resume-card .rc-k{font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.03em;}
+.resume-card .rc-title{font-size:16px;font-weight:600;color:var(--text);margin-top:2px;}
+.resume-card .rc-meta{font-size:12.5px;color:var(--text-muted);margin-top:2px;}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:9px;overflow:hidden;}
+.seg button{background:var(--bg-elevated);border:0;border-right:1px solid var(--border);color:var(--text-muted);padding:7px 14px;font-size:13px;}
+.seg button:last-child{border-right:0;}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);font-weight:600;}
+.kv{display:grid;grid-template-columns:150px 1fr;gap:6px 14px;font-size:13px;margin:10px 0;}
+.kv .k{color:var(--text-faint);}
+.note-hint{font-size:12px;color:var(--text-faint);margin-top:6px;}
+textarea#noteArea{font-family:var(--font);font-size:14px;line-height:1.6;min-height:110px;resize:vertical;}
+input::placeholder,textarea::placeholder{color:var(--text-faint);opacity:1;}
 </style>
 <meta name="robots" content="noindex, nofollow">
 </head>
@@ -199,12 +341,19 @@ code.inline{background:var(--bg-elevated);padding:1px 5px;border-radius:5px;font
   <nav id="sidebar"></nav>
   <div id="main">
     <div id="topbar">
-      <div id="searchBox">
-        <span class="sic">&#128269;</span>
-        <input id="searchInput" type="text" placeholder="Search topics, questions, errors, functions...">
+      <button id="menuBtn" type="button" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false">&#9776;</button>
+      <div id="searchBox" role="search">
+        <span class="sic" aria-hidden="true">&#128269;</span>
+        <input id="searchInput" type="search" aria-label="Search the console" placeholder="Search topics, questions, errors, functions...">
         <div id="searchResults" hidden></div>
       </div>
-      <div id="streakBadge"></div>
+      <div id="topbarRight">
+        <div id="streakBadge"></div>
+        <button id="syncStatus" type="button" class="sync-pill sync-local" data-action="open-sync" aria-live="polite"><span class="sync-dot" aria-hidden="true"></span><span class="sync-text">Saved on this device</span></button>
+        <select id="themeSelect" class="theme-select" aria-label="Colour theme">
+          <option value="system">System theme</option><option value="light">Light</option><option value="dark">Dark</option>
+        </select>
+      </div>
     </div>
     <main id="mainContent"></main>
   </div>
@@ -285,6 +434,8 @@ function defaultState(){
     // ---- spaced repetition ----
     revisionSchedule: {},        // topicId -> {due, stage, history:[{date,rating}]}
 
+    lastPosition: null,          // {view, params, title, at} -- for "Continue where you left off"
+
     settings: {},
   };
 }
@@ -303,7 +454,7 @@ function migrateState(loaded){
   });
   out.scheduleSettings = Object.assign({}, base.scheduleSettings, loaded.scheduleSettings||{});
   out.streak = Object.assign({}, base.streak, loaded.streak||{});
-  out.bookmarks = Array.isArray(loaded.bookmarks) ? loaded.bookmarks.slice() : [];
+  out.bookmarks = Array.isArray(loaded.bookmarks) ? loaded.bookmarks.filter((id,i,arr)=>typeof id==='string' && arr.indexOf(id)===i) : [];
   out.interviewSessions = Array.isArray(loaded.interviewSessions) ? loaded.interviewSessions.slice() : [];
   out.settings = Object.assign({}, base.settings, loaded.settings||{});
 
@@ -330,14 +481,22 @@ async function initPersistence(){
   }catch(e){ /* localStorage unavailable */ }
   try{ STATE = migrateState(loaded); }
   catch(e){ STATE = defaultState(); LAST_LOAD_WARNING = 'migration-failed'; }
+  // Learners who used the console before themes existed have only ever seen the dark
+  // design; keep that for them. New learners start on "system".
+  if(loaded && (!STATE.settings || !STATE.settings.theme)){ STATE.settings = STATE.settings || {}; STATE.settings.theme = 'dark'; }
   if(LAST_LOAD_WARNING) setTimeout(()=>toast('Some saved data could not be read; unaffected progress was kept.'), 500);
 }
 
-function flushPendingSave(){
+function flushStateOnly(){
   try{ if(typeof STATE !== 'undefined' && STATE) localStorage.setItem(SQL_STORAGE_KEY, JSON.stringify(STATE)); }
   catch(e){ /* storage full/unavailable */ }
 }
-async function persistNow(){ flushPendingSave(); }
+function flushPendingSave(){ flushStateOnly(); }
+async function persistNow(){
+  flushPendingSave();
+  // Local copy first, always; then hand any changed records to the sync queue.
+  if(typeof syncPossible === 'function' && syncPossible() && pendingChangeCount() > 0) scheduleSync();
+}
 const persistDebounced = debounce(persistNow, 1200);
 function requestSave(){ persistDebounced(); }
 
@@ -354,8 +513,651 @@ function importStateJSON(json){
   requestSave();
 }
 function resetAllProgress(){
+  const theme = STATE && STATE.settings && STATE.settings.theme;
   STATE = defaultState();
+  if(theme) STATE.settings.theme = theme;     // appearance is a preference, not progress
   requestSave();
+}
+
+/* ============================================================
+   PROGRESS SYNC
+   localStorage stays the working copy: every change lands there first and the
+   UI never waits on the network. When the console is served by the website, it
+   also syncs record-level changes to /sql-console/api/state, which stores them
+   against the console login. Every deployment URL uses that same store, so
+   progress follows the learner from one URL or device to another.
+
+   STATE is split into records -- one per topic, per problem, per note,
+   per bookmark, plus one per top-level setting -- so two devices that change
+   different things never overwrite each other. Each record remembers the server
+   revision it was last seen at ("base"); the server refuses a write whose base
+   is stale and returns the newer value, and resolveConflict() merges the two.
+   Notes are never dropped: when two different edits of the same note meet,
+   both texts are kept.
+   ============================================================ */
+const SYNC_META_KEY = 'sql_plsql_mastery_console_sync_v1';
+const SYNC_ENDPOINT = 'api/state';          // relative to /sql-console/app
+const SYNC_MAP_KEYS = ['topicProgress','topicCompletionDates','sqlProblemProgress','plsqlProblemProgress',
+  'questionAttempts','outputQuestionAttempts','debuggingAttempts','designProgress','projectProgress','notes',
+  'topicPlanRecords','dailyScheduleHistory','revisionSchedule','settings'];
+const SYNC_LOCAL_ONLY_KEYS = ['schemaVersion'];
+const SYNC_CHUNK = 150;
+
+function defaultSyncMeta(){ return {epoch:'', since:0, base:{}, shadow:{}, enabled:true, lastSyncedAt:null}; }
+let SYNC_META = defaultSyncMeta();
+// status: 'idle' | 'local' | 'syncing' | 'synced' | 'pending' | 'offline' | 'error' | 'auth'
+let SYNC = {status:'idle', timer:null, running:false, again:false, failures:0, available:null, lastError:''};
+
+function loadSyncMeta(){
+  try{
+    const raw = localStorage.getItem(SYNC_META_KEY);
+    if(raw){
+      const m = JSON.parse(raw);
+      if(m && typeof m === 'object'){
+        SYNC_META = Object.assign(defaultSyncMeta(), m);
+        if(!SYNC_META.base || typeof SYNC_META.base!=='object') SYNC_META.base = {};
+        if(!SYNC_META.shadow || typeof SYNC_META.shadow!=='object') SYNC_META.shadow = {};
+      }
+    }
+  }catch(e){ SYNC_META = defaultSyncMeta(); }
+}
+function saveSyncMeta(){
+  try{ localStorage.setItem(SYNC_META_KEY, JSON.stringify(SYNC_META)); }catch(e){}
+}
+
+function syncKey(map, id){ return map + '/' + encodeURIComponent(id); }
+function parseSyncKey(k){
+  const i = k.indexOf('/');
+  if(i < 0) return {map:null, top:k};
+  let id;
+  try{ id = decodeURIComponent(k.slice(i+1)); }catch(e){ id = k.slice(i+1); }
+  return {map:k.slice(0,i), id};
+}
+function isDefaultTopicProgress(v){
+  if(!v || typeof v !== 'object') return false;
+  if(v.status && v.status !== 'not-started') return false;
+  if(v.notes) return false;
+  return MASTERY_DIMS.every(d=>!v[d]);
+}
+
+/* STATE -> {recordKey: jsonString}. Untouched default topic records (created just
+   by viewing a topic) are left out so they never overwrite real progress. */
+function flattenState(st){
+  const out = {};
+  SYNC_MAP_KEYS.forEach(map=>{
+    const m = st[map];
+    if(!m || typeof m !== 'object') return;
+    Object.keys(m).forEach(id=>{
+      const v = m[id];
+      if(v === undefined) return;
+      if(map === 'topicProgress' && isDefaultTopicProgress(v)) return;
+      if(map === 'notes' && (v === '' || v == null)) return;
+      out[syncKey(map, id)] = JSON.stringify(v);
+    });
+  });
+  (Array.isArray(st.bookmarks) ? st.bookmarks : []).forEach(id=>{ out[syncKey('bookmarks', id)] = 'true'; });
+  Object.keys(st).forEach(k=>{
+    if(SYNC_MAP_KEYS.includes(k) || k === 'bookmarks' || SYNC_LOCAL_ONLY_KEYS.includes(k)) return;
+    if(st[k] === undefined) return;
+    out[k] = JSON.stringify(st[k]);
+  });
+  return out;
+}
+
+function applyRecordToState(k, json){
+  const p = parseSyncKey(k);
+  const value = json == null ? null : JSON.parse(json);
+  if(p.map === 'bookmarks'){
+    const i = STATE.bookmarks.indexOf(p.id);
+    if(value && i < 0) STATE.bookmarks.push(p.id);
+    if(!value && i >= 0) STATE.bookmarks.splice(i, 1);
+    return;
+  }
+  if(p.map && SYNC_MAP_KEYS.includes(p.map)){
+    if(!STATE[p.map] || typeof STATE[p.map] !== 'object') STATE[p.map] = {};
+    if(value === null) delete STATE[p.map][p.id];
+    else STATE[p.map][p.id] = value;
+    return;
+  }
+  if(p.map) return;                         // unknown map from a newer console: ignore safely
+  if(SYNC_LOCAL_ONLY_KEYS.includes(k)) return;
+  if(value === null){ const d = defaultState(); if(k in d) STATE[k] = d[k]; else delete STATE[k]; }
+  else STATE[k] = value;
+}
+
+function mergeNoteText(local, remote){
+  local = local || ''; remote = remote || '';
+  if(!local.trim()) return remote;
+  if(!remote.trim()) return local;
+  if(local === remote || remote.includes(local)) return remote;
+  if(local.includes(remote)) return local;
+  return remote + '\n\n--- Also saved on another device or tab (kept so nothing is lost) ---\n' + local;
+}
+function mergeTopicProgress(a, b){
+  a = a || {}; b = b || {};
+  const out = Object.assign(defaultTopicProgress(), b, a);
+  MASTERY_DIMS.forEach(d=>{ out[d] = !!(a[d] || b[d]); });
+  out.notes = mergeNoteText(a.notes, b.notes);
+  if(MASTERY_DIMS.every(d=>out[d])) out.status = 'done';
+  else if(MASTERY_DIMS.some(d=>out[d])) out.status = 'in-progress';
+  else out.status = 'not-started';
+  return out;
+}
+
+/* Deterministic merge of a local change with a newer server value.
+   firstContact = this device had never synced this record before (first sign-in,
+   or the cloud copy was reset). Returns the JSON to keep, or null for "deleted". */
+function resolveConflict(k, localJson, remoteJson, firstContact){
+  if(localJson == null && remoteJson == null) return null;
+  const p = parseSyncKey(k);
+  const L = localJson == null ? null : JSON.parse(localJson);
+  const R = remoteJson == null ? null : JSON.parse(remoteJson);
+  if(p.map === 'notes'){
+    const merged = mergeNoteText(L, R);
+    return merged ? JSON.stringify(merged) : null;
+  }
+  if(p.map === 'topicProgress'){
+    if(L == null) return remoteJson;
+    if(R == null) return localJson;
+    return JSON.stringify(mergeTopicProgress(L, R));
+  }
+  if(p.map === 'topicCompletionDates'){
+    if(L == null) return remoteJson;
+    if(R == null) return localJson;
+    return JSON.stringify(String(L) < String(R) ? L : R);   // the first completion is the fact
+  }
+  if(p.map === 'bookmarks'){
+    if(firstContact) return (L || R) ? 'true' : null;          // union on first sign-in
+    return localJson;
+  }
+  if(p.map === 'revisionSchedule'){
+    const hl = L && Array.isArray(L.history) ? L.history.length : -1;
+    const hr = R && Array.isArray(R.history) ? R.history.length : -1;
+    return hl > hr ? localJson : remoteJson;                  // more reviews recorded wins
+  }
+  // Everything else is last-writer-wins by intent: on first contact the account's
+  // existing value wins (so a new device cannot overwrite it with defaults); after
+  // that, this device's newer edit wins.
+  if(firstContact) return remoteJson != null ? remoteJson : localJson;
+  return localJson;
+}
+
+function syncEndpointUrl(){
+  try{ return new URL(SYNC_ENDPOINT, document.baseURI || location.href).toString(); }
+  catch(e){ return null; }
+}
+function syncPossible(){
+  if(!SYNC_META.enabled) return false;
+  if(typeof fetch !== 'function' || typeof location === 'undefined') return false;
+  if(!/^https?:$/.test(location.protocol)) return false;   // opened as a file: local only
+  if(SYNC.available === false) return false;
+  return true;
+}
+
+function setSyncStatus(s, detail){
+  SYNC.status = s;
+  if(detail !== undefined) SYNC.lastError = detail;
+  renderSyncStatus();
+}
+const SYNC_STATUS_TEXT = {
+  idle:'Saved on this device', local:'Saved on this device', syncing:'Syncing…', synced:'Synced',
+  pending:'Changes waiting to sync', offline:'Offline – saved on this device', error:'Sync paused – retrying',
+  auth:'Sign-in expired – reload'
+};
+function syncStatusText(){
+  if(!SYNC_META.enabled) return 'Sync off – this device only';
+  if(SYNC.available === false) return 'Saved on this device';
+  return SYNC_STATUS_TEXT[SYNC.status] || 'Saved on this device';
+}
+function renderSyncStatus(){
+  const el = typeof document !== 'undefined' && document.getElementById('syncStatus');
+  if(!el) return;
+  const cls = !SYNC_META.enabled || SYNC.available === false ? 'local' : SYNC.status;
+  el.className = 'sync-pill sync-' + cls;
+  el.querySelector('.sync-text').textContent = syncStatusText();
+  el.title = syncStatusText() + (SYNC_META.lastSyncedAt ? ' · last synced ' + new Date(SYNC_META.lastSyncedAt).toLocaleString() : '');
+}
+
+function scheduleSync(delay){
+  if(!syncPossible()) { renderSyncStatus(); return; }
+  clearTimeout(SYNC.timer);
+  SYNC.timer = setTimeout(runSyncRound, delay == null ? 1500 : delay);
+}
+
+function pendingChangeCount(){
+  const cur = flattenState(STATE);
+  let n = 0;
+  Object.keys(cur).forEach(k=>{ if(cur[k] !== SYNC_META.shadow[k]) n++; });
+  Object.keys(SYNC_META.shadow).forEach(k=>{ if(!(k in cur)) n++; });
+  return n;
+}
+
+async function postSync(body){
+  const url = syncEndpointUrl();
+  const res = await fetch(url, {
+    method:'POST', credentials:'same-origin', cache:'no-store',
+    headers:{'Content-Type':'application/json', 'X-SQLC-Sync':'1'},
+    body: JSON.stringify(body)
+  });
+  let data = null;
+  try{ data = await res.json(); }catch(e){}
+  return {res, data};
+}
+
+async function runSyncRound(){
+  if(!syncPossible()) return;
+  if(SYNC.running){ SYNC.again = true; return; }
+  SYNC.running = true;
+  let remoteApplied = false;
+  try{
+    if(typeof navigator !== 'undefined' && navigator.onLine === false){
+      setSyncStatus(pendingChangeCount() ? 'pending' : 'offline');
+      return;
+    }
+    setSyncStatus('syncing');
+    // Up to a few passes: resolved conflicts are pushed again straight away.
+    for(let pass = 0; pass < 4; pass++){
+      const cur = flattenState(STATE);
+      const changes = [];
+      Object.keys(cur).forEach(k=>{
+        if(cur[k] !== SYNC_META.shadow[k]) changes.push({k, b:SYNC_META.base[k]||0, v:cur[k]});
+      });
+      Object.keys(SYNC_META.shadow).forEach(k=>{
+        if(!(k in cur) && SYNC_META.shadow[k] != null) changes.push({k, b:SYNC_META.base[k]||0, v:null});
+      });
+      const batches = [];
+      for(let i=0; i<changes.length; i+=SYNC_CHUNK) batches.push(changes.slice(i, i+SYNC_CHUNK));
+      if(batches.length === 0) batches.push([]);
+      let conflicted = 0;
+      for(const batch of batches){
+        const epochBefore = SYNC_META.epoch;
+        const {res, data} = await postSync({epoch:SYNC_META.epoch, since:SYNC_META.since, changes:batch});
+        if(res.status === 503 && data && data.configured === false){
+          SYNC.available = false; setSyncStatus('local'); return;
+        }
+        if(res.status === 401){ setSyncStatus('auth'); return; }
+        if(!res.ok || !data || !data.configured){ throw new Error('HTTP '+res.status); }
+        SYNC.available = true;
+        const epochChanged = data.epoch !== epochBefore;
+        if(epochChanged){
+          // New or reset cloud copy: nothing this device holds has been seen there.
+          SYNC_META.base = {};
+          SYNC_META.shadow = {};
+        }
+        const sent = {};
+        batch.forEach(c=>{ sent[c.k] = c; });
+        const conflictKeys = {};
+        (data.conflicts||[]).forEach(r=>{ conflictKeys[r.k] = r; });
+        // 1) records the server holds that are newer than what we had
+        const local = flattenState(STATE);
+        (data.records||[]).forEach(r=>{
+          if(conflictKeys[r.k]) return;
+          if(sent[r.k] && sent[r.k].v === r.v){             // our own accepted write
+            SYNC_META.shadow[r.k] = r.v; SYNC_META.base[r.k] = r.r; return;
+          }
+          const localDirty = (local[r.k] !== undefined ? local[r.k] : null) !== (SYNC_META.shadow[r.k] !== undefined ? SYNC_META.shadow[r.k] : null);
+          if(localDirty && !sent[r.k]){
+            // edited here but not in this batch: merge now, push next pass
+            const resolved = resolveConflict(r.k, local[r.k] != null ? local[r.k] : null, r.v, !(r.k in SYNC_META.base));
+            applyRecordToState(r.k, resolved);
+          } else {
+            applyRecordToState(r.k, r.v);
+          }
+          SYNC_META.shadow[r.k] = r.v; SYNC_META.base[r.k] = r.r;
+          remoteApplied = true;
+        });
+        // 2) our writes the server refused because it had a newer version
+        Object.keys(conflictKeys).forEach(k=>{
+          const r = conflictKeys[k];
+          const mine = sent[k] ? sent[k].v : (local[k] != null ? local[k] : null);
+          const firstContact = epochChanged || !(k in SYNC_META.base);
+          const resolved = resolveConflict(k, mine, r.v, firstContact);
+          applyRecordToState(k, resolved);
+          SYNC_META.shadow[k] = r.v; SYNC_META.base[k] = r.r;
+          if(resolved !== r.v) conflicted++;
+          remoteApplied = true;
+        });
+        SYNC_META.epoch = data.epoch;
+        SYNC_META.since = epochChanged ? data.rev : Math.max(SYNC_META.since, data.rev);
+        if(epochChanged){ SYNC_META.since = data.rev; }
+        saveSyncMeta();
+        if(epochChanged && batches.length > 1){ conflicted++; break; }   // restart cleanly against the new copy
+      }
+      flushStateOnly();
+      if(conflicted === 0 && pendingChangeCount() === 0) break;
+    }
+    SYNC.failures = 0;
+    SYNC_META.lastSyncedAt = Date.now();
+    saveSyncMeta();
+    setSyncStatus(pendingChangeCount() ? 'pending' : 'synced', '');
+  }catch(err){
+    SYNC.failures++;
+    const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    setSyncStatus(offline ? (pendingChangeCount() ? 'pending' : 'offline') : 'error', String(err && err.message || err));
+    const backoff = [5000, 15000, 60000, 300000][Math.min(SYNC.failures-1, 3)];
+    clearTimeout(SYNC.timer);
+    SYNC.timer = setTimeout(runSyncRound, backoff);
+  }finally{
+    SYNC.running = false;
+    if(remoteApplied) onRemoteStateApplied();
+    if(SYNC.again){ SYNC.again = false; scheduleSync(300); }
+  }
+}
+
+/* Re-render after remote changes -- but never underneath someone typing, and never
+   so as to throw away an unsaved note draft. */
+let SYNC_RENDER_DEFERRED = false;
+function onRemoteStateApplied(){
+  if(typeof document === 'undefined') return;
+  const a = document.activeElement;
+  const typing = a && (a.tagName === 'TEXTAREA' || (a.tagName === 'INPUT' && a.type !== 'button' && a.type !== 'checkbox'));
+  const note = document.getElementById('noteArea');
+  const draftDiffers = note && ROUTE.params && ROUTE.params.id && note.value !== (STATE.notes[ROUTE.params.id]||'');
+  if(typing || draftDiffers){ SYNC_RENDER_DEFERRED = true; return; }
+  SYNC_RENDER_DEFERRED = false;
+  applyTheme();
+  const y = window.scrollY;
+  render();
+  window.scrollTo(0, y);
+}
+
+async function deleteCloudCopy(){
+  const url = syncEndpointUrl();
+  const res = await fetch(url, {method:'DELETE', credentials:'same-origin', headers:{'X-SQLC-Sync':'1'}});
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  SYNC_META.epoch = ''; SYNC_META.since = 0; SYNC_META.base = {}; SYNC_META.shadow = {};
+  saveSyncMeta();
+}
+
+function initSync(){
+  loadSyncMeta();
+  if(typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
+  window.addEventListener('online', ()=>scheduleSync(200));
+  window.addEventListener('offline', ()=>setSyncStatus(pendingChangeCount() ? 'pending' : 'offline'));
+  window.addEventListener('focus', ()=>scheduleSync(300));
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState === 'visible') scheduleSync(300); });
+  document.addEventListener('focusout', ()=>{ if(SYNC_RENDER_DEFERRED) setTimeout(onRemoteStateApplied, 50); });
+  // Another tab on this origin synced: pull what it pushed.
+  window.addEventListener('storage', e=>{
+    if(e.key !== SYNC_META_KEY || !e.newValue) return;
+    try{ const m = JSON.parse(e.newValue); if(m && m.epoch === SYNC_META.epoch && m.since > SYNC_META.since) scheduleSync(500); }
+    catch(err){}
+  });
+  setInterval(()=>{ if(document.visibilityState === 'visible') scheduleSync(0); }, 60000);
+  scheduleSync(50);
+}
+
+/* ============================================================
+   LESSON PRESENTATION
+   Pure presentation helpers: they change how existing content is laid out,
+   never the content itself. Prose is split into paragraphs, code gets a
+   labelled, copyable box with light SQL highlighting, expected output looks
+   like query output, and execution reasoning becomes a numbered timeline.
+   ============================================================ */
+let CODE_REGISTRY = [];   // raw text behind each copy button, reset on every render
+
+const SQL_KEYWORDS = new Set(('select from where and or not in is null as on join inner left right full outer cross natural '+
+  'group by order having insert into values update set delete merge using when matched then else end case create replace '+
+  'table view index unique primary key foreign references constraint check default alter drop add modify column rename '+
+  'begin declare exception raise return returning function procedure package body trigger before after instead for each row '+
+  'loop while exit continue if elsif cursor open fetch close bulk collect forall commit rollback savepoint distinct union all '+
+  'intersect minus exists between like with over partition rows range first next only offset grant revoke to type of record '+
+  'constant deferrable initially deferred immediate enable disable validate novalidate global temporary preserve '+
+  'pragma autonomous_transaction execute immediate lock mode nowait skip locked asc desc nulls last connect prior start '+
+  'level pivot unpivot lateral apply out nocopy deterministic pipelined pipe authid current_user definer sequence nextval '+
+  'currval identity generated always interval tablespace online explain plan analyze truncate flashback purge any some '+
+  'within keep dense_rank rank row_number lag lead sum count avg min max coalesce nvl nvl2 decode cast extract').split(/\s+/));
+const SQL_TYPES = new Set(('number varchar2 varchar char nchar nvarchar2 date timestamp clob blob raw integer int boolean '+
+  'pls_integer binary_integer simple_integer rowid urowid xmltype json interval long float binary_float binary_double').split(' '));
+
+function highlightSQL(raw){
+  const re = /(--[^\n]*)|(\/\*[\s\S]*?\*\/)|('(?:[^']|'')*')|(\b\d+(?:\.\d+)?\b)|([A-Za-z_][A-Za-z0-9_$#]*)|([^A-Za-z0-9_'\-\/]+|[\s\S])/g;
+  let out = '', m;
+  while((m = re.exec(raw))){
+    if(m[1] || m[2]) out += '<span class="tok-c">'+escapeHtml(m[0])+'</span>';
+    else if(m[3]) out += '<span class="tok-s">'+escapeHtml(m[0])+'</span>';
+    else if(m[4]) out += '<span class="tok-n">'+m[0]+'</span>';
+    else if(m[5]){
+      const w = m[5].toLowerCase();
+      if(SQL_KEYWORDS.has(w)) out += '<span class="tok-k">'+escapeHtml(m[0])+'</span>';
+      else if(SQL_TYPES.has(w)) out += '<span class="tok-t">'+escapeHtml(m[0])+'</span>';
+      else out += escapeHtml(m[0]);
+    }
+    else out += escapeHtml(m[0]);
+  }
+  return out;
+}
+function highlightOutput(raw){
+  // Result grids stay plain; only the explanatory -- comments are dimmed.
+  return raw.split('\n').map(line=>{
+    const i = line.indexOf('--');
+    if(/^\s*--/.test(line)) return '<span class="tok-c">'+escapeHtml(line)+'</span>';
+    if(i > 0 && /\s--\s/.test(line.slice(i-1, i+3))) return escapeHtml(line.slice(0,i))+'<span class="tok-c">'+escapeHtml(line.slice(i))+'</span>';
+    return escapeHtml(line);
+  }).join('\n');
+}
+function codeLanguage(raw){
+  if(/^\s*RMAN>/m.test(raw)) return 'RMAN';
+  if(/^\s*(expdp|impdp|srvctl)\b/m.test(raw)) return 'SHELL';
+  if(/\bCREATE\s+(OR\s+REPLACE\s+)?(PROCEDURE|FUNCTION|PACKAGE|TRIGGER|TYPE\s+BODY)\b/i.test(raw) || /^\s*(DECLARE|BEGIN)\b/im.test(raw)) return 'PL/SQL';
+  return 'SQL';
+}
+function codeBox(label, content, opts){
+  if(!content) return '';
+  opts = opts || {};
+  const idx = CODE_REGISTRY.push(String(content)) - 1;
+  const lang = opts.output ? (label || 'Expected output') : ((label ? label + ' · ' : '') + codeLanguage(content));
+  const body = opts.output ? highlightOutput(String(content)) : highlightSQL(String(content));
+  return '<div class="codebox'+(opts.output?' output':'')+'"><div class="codebox-head"><span class="codebox-lang">'+escapeHtml(lang)+'</span>'+
+    '<button type="button" class="copy-btn" data-action="copy-code" data-idx="'+idx+'" aria-label="Copy '+escapeHtml(label||'code')+'">Copy</button></div>'+
+    '<pre>'+body+'</pre></div>';
+}
+
+/* Paragraphs from plain text. Blank lines separate paragraphs; an all-indented
+   paragraph is code; a very long single paragraph is broken at sentence ends so
+   it can be read, without changing a word of it. */
+function splitLongParagraph(p){
+  if(p.length < 900 || p.includes('\n')) return [p];
+  const sentences = p.split(/(?<=[.!?])\s+(?=[A-Z("'])/);
+  const out = []; let cur = '';
+  sentences.forEach(s=>{
+    cur = cur ? cur + ' ' + s : s;
+    if(cur.length >= 420){ out.push(cur); cur = ''; }
+  });
+  if(cur){ if(out.length && cur.length < 160) out[out.length-1] += ' ' + cur; else out.push(cur); }
+  return out;
+}
+function isCodeParagraph(p){
+  const lines = p.split('\n').filter(l=>l.trim());
+  return lines.length > 0 && lines.every(l=>/^\s{2,}\S/.test(l));
+}
+function dedent(p){
+  const lines = p.split('\n');
+  const ind = Math.min.apply(null, lines.filter(l=>l.trim()).map(l=>l.match(/^\s*/)[0].length));
+  return lines.map(l=>l.slice(ind)).join('\n');
+}
+function renderProse(text){
+  if(!text) return '';
+  const paras = String(text).replace(/\r/g,'').split(/\n\s*\n/).map(p=>p.replace(/\s+$/,'')).filter(p=>p.trim());
+  return '<div class="prose">'+paras.map(p=>{
+    if(isCodeParagraph(p)) return codeBox('', dedent(p));
+    return splitLongParagraph(p.trim()).map(x=>'<p>'+escapeHtml(x)+'</p>').join('');
+  }).join('')+'</div>';
+}
+
+function renderExecutionReasoning(text){
+  const lines = String(text).replace(/\r/g,'').split('\n');
+  const first = lines.findIndex(l=>/^Step \d+[.:]/.test(l));
+  if(first < 0) return renderProse(text);
+  const intro = lines.slice(0, first).join('\n').trim();
+  const steps = []; let cur = null; let takeaway = [];
+  let inTakeaway = false;
+  for(let i=first; i<lines.length; i++){
+    const l = lines[i];
+    if(inTakeaway){ takeaway.push(l); continue; }
+    const h = l.match(/^Step (\d+)[.:]\s*(.*)$/);
+    if(h){ cur = {n:h[1], title:h[2], rows:[]}; steps.push(cur); continue; }
+    if(!l.trim()){
+      const next = lines.slice(i+1).find(x=>x.trim());
+      if(next !== undefined && !/^\s/.test(next) && !/^Step \d+[.:]/.test(next)){ inTakeaway = true; }
+      else cur.rows.push({kind:'gap'});
+      continue;
+    }
+    const r = l.match(/^\s{1,4}(Result|State|Why|Database state|Transaction state):\s*(.*)$/);
+    if(r) cur.rows.push({kind:r[1], text:r[2]});
+    else if(/^\s{5,}\S/.test(l) || /^\s{2,}\S/.test(l) && cur.rows.length && cur.rows[cur.rows.length-1].kind==='code') {
+      const last = cur.rows[cur.rows.length-1];
+      if(last && last.kind === 'code') last.text += '\n' + l; else cur.rows.push({kind:'code', text:l});
+    }
+    else if(cur.rows.length && cur.rows[cur.rows.length-1].text !== undefined && cur.rows[cur.rows.length-1].kind !== 'code') cur.rows[cur.rows.length-1].text += ' ' + l.trim();
+    else cur.rows.push({kind:'Note', text:l.trim()});
+  }
+  let html = '';
+  if(intro){
+    const introParas = intro.split(/\n\s*\n/);
+    html += '<div class="er-predict"><div class="er-label">PREDICT FIRST</div>'+introParas.map(p=>
+      isCodeParagraph(p) ? codeBox('', dedent(p)) : '<div class="prose"><p>'+escapeHtml(p.trim())+'</p></div>').join('')+'</div>';
+  }
+  html += '<ol class="er-steps">'+steps.map(s=>'<li class="er-step"><span class="er-num" aria-hidden="true">'+escapeHtml(s.n)+'</span>'+
+    '<div class="er-title"><span class="sr-only">Step '+escapeHtml(s.n)+': </span>'+escapeHtml(s.title)+'</div>'+
+    s.rows.filter(r=>r.kind!=='gap').map(r=>{
+      if(r.kind === 'code') return codeBox('', dedent(r.text));
+      const cls = r.kind === 'Result' ? ' result' : r.kind === 'State' ? ' state' : '';
+      return '<div class="er-row'+cls+'"><div class="er-k">'+escapeHtml(r.kind)+'</div><div>'+escapeHtml(r.text)+'</div></div>';
+    }).join('')+'</li>').join('')+'</ol>';
+  const tk = takeaway.join('\n').trim();
+  if(tk) html += '<div class="er-takeaway"><div class="er-label">TAKEAWAY</div>'+renderProse(tk)+'</div>';
+  return html;
+}
+
+function lessonSection(key, label, inner, tag){
+  if(!inner) return '';
+  return '<section class="ls ls-'+key+'" id="ls-'+key+'" aria-labelledby="lsh-'+key+'"><h2 class="ls-h" id="lsh-'+key+'">'+escapeHtml(label)+
+    (tag?'<span class="ls-tag">'+escapeHtml(tag)+'</span>':'')+'</h2>'+inner+'</section>';
+}
+function qaBlock(kind, qa, collapsed){
+  if(!qa || !qa.q) return '';
+  const answer = '<div class="qa-a">'+renderProse(qa.a)+'</div>';
+  return '<div class="qa"><div class="qa-q"><span class="qa-kind">'+escapeHtml(kind)+'</span>'+escapeHtml(qa.q)+'</div>'+
+    (collapsed ? '<details><summary>Show model answer</summary>'+answer+'</details>' : answer)+'</div>';
+}
+
+function renderLesson(dc){
+  const parts = [];
+  const add = (key, label, inner, tag) => { if(inner) parts.push({key, label, html:lessonSection(key, label, inner, tag)}); };
+  add('definition', 'Definition', renderProse(dc.definition));
+  add('why', 'Why it matters', renderProse(dc.why));
+  add('mental-model', 'Mental model', dc.mentalModel ? '<div class="callout model">'+renderProse(dc.mentalModel)+'</div>' : '');
+  add('analogy', 'Analogy', dc.analogy ? '<div class="callout analogy">'+renderProse(dc.analogy)+'</div>' : '');
+  add('syntax', 'Syntax', codeBox('Syntax', dc.syntax));
+  const example = [codeBox('Example', dc.example), codeBox('Schema', dc.schema), codeBox('Sample data', dc.sampleData),
+    codeBox('PL/SQL block', dc.block), codeBox('Expected output', dc.expectedOutput, {output:true})].filter(Boolean).join('');
+  add('example', 'Worked example', example);
+  add('expected-behavior', 'Expected behavior', renderProse(dc.expectedBehavior));
+  add('exception-cases', 'Exception cases', renderProse(dc.exceptionCases));
+  add('reasoning', 'Execution reasoning', dc.executionReasoning ? renderExecutionReasoning(dc.executionReasoning) : '');
+  add('steps', 'Step by step', dc.stepByStep && dc.stepByStep.length ? '<ol class="steps-list">'+dc.stepByStep.map(s=>'<li>'+escapeHtml(s)+'</li>').join('')+'</ol>' : '');
+  add('performance', 'Performance', renderProse(dc.performance));
+  add('production', 'In production', dc.production ? '<div class="callout prod">'+renderProse(dc.production)+'</div>' : '');
+  add('mistake', 'Common mistake', dc.commonMistake ? '<div class="callout warn">'+renderProse(dc.commonMistake)+'</div>' : '');
+  add('traps', 'Traps', dc.traps && dc.traps.length ? '<div class="callout caution"><ul class="trap-list">'+dc.traps.map(t=>'<li>'+escapeHtml(t)+'</li>').join('')+'</ul></div>' : '');
+  const interview = [qaBlock('Interview question', dc.interviewQ, false), qaBlock('Advanced question', dc.advancedQ, true)].filter(Boolean).join('');
+  add('interview', 'Interview', interview);
+  add('resources', 'Resources', dc.resources && dc.resources.length ? '<ul class="res-list">'+dc.resources.map(r=>'<li>'+escapeHtml(r)+'</li>').join('')+'</ul>' : '');
+  const toc = parts.length > 3 ? '<nav class="lesson-toc" aria-label="On this page"><span class="toc-label">On this page</span>'+
+    parts.map(p=>'<button type="button" data-action="jump" data-target="ls-'+p.key+'">'+escapeHtml(p.label)+'</button>').join('')+'</nav>' : '';
+  return '<article class="lesson">'+toc+parts.map(p=>p.html).join('')+'</article>';
+}
+
+function copyText(text){
+  if(navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text);
+  return new Promise((resolve, reject)=>{
+    try{
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.setAttribute('readonly',''); ta.style.position='fixed'; ta.style.opacity='0';
+      document.body.appendChild(ta); ta.select();
+      const ok = document.execCommand('copy'); ta.remove();
+      ok ? resolve() : reject(new Error('copy failed'));
+    }catch(e){ reject(e); }
+  });
+}
+
+/* ---------- theme ---------- */
+const THEME_LOCAL_KEY = 'sql_plsql_mastery_console_theme';
+function themePreference(){
+  const p = STATE && STATE.settings && STATE.settings.theme;
+  return p === 'light' || p === 'dark' || p === 'system' ? p : 'system';
+}
+function resolvedTheme(pref){
+  if(pref === 'light' || pref === 'dark') return pref;
+  try{ return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; }
+  catch(e){ return 'dark'; }
+}
+function applyTheme(){
+  const pref = themePreference();
+  document.documentElement.dataset.theme = resolvedTheme(pref);
+  document.documentElement.dataset.themePref = pref;
+  try{ localStorage.setItem(THEME_LOCAL_KEY, pref); }catch(e){}
+  const sel = document.getElementById('themeSelect');
+  if(sel && sel.value !== pref) sel.value = pref;
+}
+function setThemePreference(pref){
+  if(!['light','dark','system'].includes(pref)) return;
+  STATE.settings = STATE.settings || {};
+  STATE.settings.theme = pref;
+  applyTheme();
+  requestSave();
+}
+
+/* ---------- resume position ---------- */
+const RESUME_SKIP_VIEWS = ['dashboard','settings'];
+function positionTitle(view, params){
+  params = params || {};
+  if(view === 'topicDetail' && TOPICS[params.id]) return TOPICS[params.id].name;
+  if(view === 'sqlProblemDetail' && typeof SQL_PROBLEMS!=='undefined' && SQL_PROBLEMS[params.id]) return SQL_PROBLEMS[params.id].title;
+  if(view === 'plsqlProblemDetail' && typeof PLSQL_PROBLEMS!=='undefined' && PLSQL_PROBLEMS[params.id]) return PLSQL_PROBLEMS[params.id].title;
+  for(const g of NAV) for(const it of g.items) if(it.id === view) return it.label;
+  return view;
+}
+function recordPosition(view, params){
+  if(RESUME_SKIP_VIEWS.includes(view) || !VIEWS[view]) return;
+  const clean = {};
+  Object.keys(params||{}).forEach(k=>{ const v = params[k]; if(v == null || ['string','number','boolean'].includes(typeof v)) clean[k] = v; });
+  STATE.lastPosition = {view, params:clean, title:positionTitle(view, clean), at:new Date().toISOString()};
+}
+function relativeTime(iso){
+  const t = Date.parse(iso); if(!t) return '';
+  const s = Math.round((Date.now()-t)/1000);
+  if(s < 90) return 'just now';
+  if(s < 3600) return Math.round(s/60)+' min ago';
+  if(s < 86400) return Math.round(s/3600)+' h ago';
+  const d = Math.round(s/86400); return d === 1 ? 'yesterday' : d+' days ago';
+}
+function resumeCardHTML(){
+  const p = STATE.lastPosition;
+  if(!p || !p.view || !VIEWS[p.view] || RESUME_SKIP_VIEWS.includes(p.view)) return '';
+  if(p.view === 'topicDetail' && !(p.params && TOPICS[p.params.id])) return '';
+  let kind = 'Continue where you left off';
+  let meta = relativeTime(p.at);
+  if(p.view === 'topicDetail'){
+    const t = TOPICS[p.params.id];
+    meta = PHASE_MAP[t.phase].name + (meta ? ' · ' + meta : '');
+  }
+  return '<div class="resume-card"><div><div class="rc-k">'+kind+'</div><div class="rc-title">'+escapeHtml(positionTitle(p.view, p.params))+'</div>'+
+    (meta?'<div class="rc-meta">'+escapeHtml(meta)+'</div>':'')+'</div>'+
+    '<button class="btn btn-primary" data-action="resume">Continue learning &rarr;</button></div>';
+}
+
+/* ---------- keyboard access for clickable non-buttons ---------- */
+function enhanceAccessibility(root){
+  root.querySelectorAll('[data-action],[data-nav]').forEach(el=>{
+    const tag = el.tagName;
+    if(tag === 'BUTTON' || tag === 'A' || tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || tag === 'DETAILS') return;
+    if(el.classList.contains('modal-backdrop')) return;
+    if(!el.hasAttribute('role')) el.setAttribute('role','button');
+    if(!el.hasAttribute('tabindex')) el.setAttribute('tabindex','0');
+    if(el.classList.contains('mastery-dim-btn')) el.setAttribute('aria-pressed', el.classList.contains('on') ? 'true' : 'false');
+  });
 }
 
 /* ---------- mastery / completion ---------- */
@@ -400,7 +1202,8 @@ function toast(msg){
   })();
   const t = document.createElement('div');
   t.textContent = msg;
-  t.style.cssText='background:#182a40;color:#e7eef7;border:1px solid #22374f;padding:9px 16px;border-radius:8px;font-size:12.5px;margin-top:6px;box-shadow:0 8px 20px rgba(0,0,0,.4);';
+  t.setAttribute('role','status');
+  t.style.cssText='background:var(--bg-elevated);color:var(--text);border:1px solid var(--border);padding:9px 16px;border-radius:8px;font-size:13px;margin-top:6px;box-shadow:var(--shadow);';
   el.appendChild(t);
   setTimeout(()=>t.remove(), 3200);
 }
@@ -18183,6 +18986,8 @@ function captureScheduleDraft(){
 
 function navigate(view, params){
   ROUTE = {view, params: params||{}};
+  recordPosition(view, ROUTE.params);
+  document.body.classList.remove('nav-open');
   render();
   window.scrollTo(0,0);
 }
@@ -18200,10 +19005,13 @@ function renderStreak(){
   el.innerHTML = s.count>0 ? '&#128293; '+s.count+' day streak' : '';
 }
 function render(){
+  CODE_REGISTRY = [];
   renderSidebar();
   renderStreak();
   const fn = VIEWS[ROUTE.view] || VIEWS.dashboard;
   document.getElementById('mainContent').innerHTML = fn(ROUTE.params);
+  enhanceAccessibility(document.getElementById('app'));
+  renderSyncStatus();
   requestSave();
 }
 
@@ -18244,9 +19052,10 @@ function wireSearch(){
   const results = document.getElementById('searchResults');
   input.addEventListener('input', ()=>{
     SEARCH_HITS = globalSearch(input.value);
-    if(!input.value.trim() || SEARCH_HITS.length===0){ results.hidden = true; results.innerHTML=''; return; }
+    if(!input.value.trim()){ results.hidden = true; results.innerHTML=''; return; }
     results.hidden = false;
-    results.innerHTML = SEARCH_HITS.map((h,i)=>'<div class="search-hit" data-hit="'+i+'"><div class="sh-title">'+escapeHtml(h.title)+'</div><div class="sh-meta">'+escapeHtml(h.type)+(h.meta?' &middot; '+escapeHtml(h.meta):'')+'</div></div>').join('');
+    if(SEARCH_HITS.length===0){ results.innerHTML = '<div class="search-hit" style="cursor:default"><div class="sh-title">No matches</div><div class="sh-meta">Try a shorter term, a topic name, or an ORA- code.</div></div>'; return; }
+    results.innerHTML = SEARCH_HITS.map((h,i)=>'<div class="search-hit" role="button" tabindex="0" data-hit="'+i+'"><div class="sh-meta" style="margin:0 0 2px"><span class="chip chip-neutral">'+escapeHtml(h.type)+'</span>'+(h.meta?' '+escapeHtml(h.meta):'')+'</div><div class="sh-title">'+escapeHtml(h.title)+'</div></div>').join('');
   });
   results.addEventListener('click', e=>{
     const row = e.target.closest('[data-hit]');
@@ -18329,9 +19138,20 @@ function openModal(html){
   /* The backdrop carries the close action, but it must NOT stop propagation --
      doing so severs every button inside the modal from the delegated click
      handler below. Clicks landing inside the modal are filtered there instead. */
-  document.getElementById('modalRoot').innerHTML = '<div class="modal-backdrop" data-action="close-modal"><div class="modal"><span class="modal-close" data-action="close-modal">&times;</span>'+html+'</div></div>';
+  document.getElementById('modalRoot').innerHTML = '<div class="modal-backdrop" data-action="close-modal"><div class="modal" role="dialog" aria-modal="true"><button type="button" class="modal-close" data-action="close-modal" aria-label="Close" style="background:none;border:0">&times;</button>'+html+'</div></div>';
+  const first = document.querySelector('#modalRoot .modal button:not(.modal-close), #modalRoot .modal textarea, #modalRoot .modal input');
+  if(first) setTimeout(()=>first.focus(), 0);
 }
 function closeModal(){ document.getElementById('modalRoot').innerHTML=''; }
+
+/* ---------- keyboard activation for role="button" elements ---------- */
+document.addEventListener('keydown', function(e){
+  if(e.key !== 'Enter' && e.key !== ' ') return;
+  const el = e.target;
+  if(!el || !el.getAttribute || el.getAttribute('role') !== 'button' || el.tagName === 'BUTTON') return;
+  e.preventDefault();
+  el.click();
+});
 
 /* ---------- delegated action handling ---------- */
 document.addEventListener('click', function(e){
@@ -18350,6 +19170,34 @@ document.addEventListener('click', function(e){
 function handleAction(action, d, e){
   switch(action){
     case 'close-modal': closeModal(); return;
+    case 'copy-code': {
+      const text = CODE_REGISTRY[+d.idx];
+      const btn = e && e.target && e.target.closest('.copy-btn');
+      if(text == null) return;
+      copyText(text).then(()=>{ if(btn){ btn.textContent='Copied'; btn.classList.add('done'); setTimeout(()=>{ btn.textContent='Copy'; btn.classList.remove('done'); }, 1600); } },
+                          ()=>toast('Copy failed -- select the text and copy it manually'));
+      return;
+    }
+    case 'jump': { const el = document.getElementById(d.target); if(el){ el.scrollIntoView({behavior:'smooth', block:'start'}); const h = el.querySelector('h2'); if(h){ h.setAttribute('tabindex','-1'); h.focus({preventScroll:true}); } } return; }
+    case 'resume': { const p = STATE.lastPosition; if(p && VIEWS[p.view]) navigate(p.view, p.params||{}); return; }
+    case 'set-theme': setThemePreference(d.theme); render(); return;
+    case 'open-sync': navigate('settings', {section:'sync'}); setTimeout(()=>{ const el = document.getElementById('syncCard'); if(el) el.scrollIntoView({block:'start'}); }, 0); return;
+    case 'sync-now': SYNC.available = null; SYNC.failures = 0; scheduleSync(0); toast('Syncing\u2026'); return;
+    case 'sync-toggle': {
+      SYNC_META.enabled = !SYNC_META.enabled; saveSyncMeta();
+      if(SYNC_META.enabled){ SYNC.available = null; scheduleSync(0); }
+      render(); return;
+    }
+    case 'delete-cloud': {
+      openModal('<h3>Delete your synced copy?</h3><p style="color:var(--text-muted);font-size:13.5px">This removes your progress and notes from the sync store. The copy in this browser is kept, and it will be uploaded again the next time this device syncs unless you turn sync off first.</p>'+
+        '<div style="margin-top:14px;display:flex;gap:8px"><button class="btn" data-action="close-modal">Cancel</button><button class="btn" style="border-color:var(--red);color:var(--red)" data-action="confirm-delete-cloud">Delete synced copy</button></div>');
+      return;
+    }
+    case 'confirm-delete-cloud': {
+      closeModal();
+      deleteCloudCopy().then(()=>{ toast('Synced copy deleted'); render(); }, ()=>toast('Could not reach the sync service -- nothing was deleted'));
+      return;
+    }
     case 'open-topic': navigate('topicDetail', {id:d.topic}); return;
     case 'back-to-topics': navigate('topics', TOPICS_LIST_CONTEXT); return;
     case 'toggle-mastery-dim': {
@@ -18466,7 +19314,7 @@ function handleAction(action, d, e){
     }
     case 'import-file': { document.getElementById('importFileInput').click(); return; }
     case 'reset-all': {
-      openModal('<h3>Reset all progress?</h3><p style="color:var(--text-muted);font-size:13px">This clears all mastery, schedule, and practice progress. This cannot be undone.</p>'+
+      openModal('<h3>Reset all progress?</h3><p style="color:var(--text-muted);font-size:13px">This clears all mastery, schedule, practice progress and notes -- on this device and, when sync is on, in your synced copy too. It cannot be undone. Consider exporting first.</p>'+
         '<div style="margin-top:14px;display:flex;gap:8px"><button class="btn" data-action="close-modal">Cancel</button><button class="btn btn-primary" data-action="confirm-reset">Reset everything</button></div>');
       return;
     }
@@ -18520,11 +19368,12 @@ function viewHeader(title, desc, right){
 function fmtDate(d){ return d || '--'; }
 function block(label, content, cls){
   if(!content) return '';
-  return '<div class="detail-box'+(cls?' '+cls:'')+'"><b style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-faint)">'+label+'</b><div style="margin-top:6px;font-size:13.5px;white-space:pre-wrap">'+escapeHtml(content)+'</div></div>';
+  return '<div class="detail-box'+(cls?' '+cls:'')+'"><div class="ls-h" style="margin-bottom:6px">'+label+'</div>'+renderProse(content)+'</div>';
 }
 function codeBlock(label, content){
   if(!content) return '';
-  return '<div style="margin:12px 0"><b style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-faint)">'+label+'</b><pre class="code">'+escapeHtml(content)+'</pre></div>';
+  const isOutput = /output|result/i.test(label);
+  return '<div style="margin:12px 0">'+codeBox(label, content, isOutput ? {output:true} : null)+'</div>';
 }
 /* ---------- topic-to-topic navigation UX helpers (used by VIEWS.topicDetail) ---------- */
 function breadcrumbHTML(id){
@@ -18627,6 +19476,7 @@ VIEWS.dashboard = function(){
   const milestones = milestoneStatus();
 
   return viewHeader('Dashboard', 'SQL + PL/SQL senior mastery -- overview of progress, schedule, and readiness.') +
+    resumeCardHTML()+
     '<div class="grid g-4" style="margin-bottom:16px">'+
       statCard('Topics Mastered', mastered+' / '+totalTopics, 'All 6 mastery dimensions complete')+
       statCard('Core Progress (P0-P2)', core.pct+'%', core.done+' / '+core.total+' done')+
@@ -18838,29 +19688,7 @@ VIEWS.topicDetail = function(params){
   if(!dc){
     contentHTML = '<div class="card card-pad"><p style="color:var(--text-muted);font-size:13px">Deep content for this topic hasn\'t been authored yet -- shown honestly rather than faked. The topic exists in the curriculum and can still be scheduled and marked mastered.</p></div>';
   } else {
-    contentHTML = '<div class="card card-pad">'+
-      block('Definition', dc.definition)+
-      block('Why it matters', dc.why)+
-      block('Analogy', dc.analogy)+
-      block('Mental model', dc.mentalModel)+
-      codeBlock('Syntax', dc.syntax)+
-      codeBlock('Example', dc.example)+
-      codeBlock('Schema', dc.schema)+
-      codeBlock('Sample data', dc.sampleData)+
-      codeBlock('Expected output', dc.expectedOutput)+
-      block('Execution reasoning', dc.executionReasoning)+
-      codeBlock('PL/SQL block', dc.block)+
-      block('Expected behavior', dc.expectedBehavior)+
-      block('Exception cases', dc.exceptionCases)+
-      (dc.stepByStep && dc.stepByStep.length ? '<div style="margin:12px 0"><b style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-faint)">Step by step</b><ol style="margin:6px 0 0;padding-left:20px;font-size:13.5px">'+dc.stepByStep.map(s=>'<li style="margin-bottom:4px">'+escapeHtml(s)+'</li>').join('')+'</ol></div>' : '')+
-      block('Performance', dc.performance)+
-      block('Production notes', dc.production)+
-      block('Common mistake', dc.commonMistake, 'mistake')+
-      (dc.traps && dc.traps.length ? dc.traps.map(tr=>block('Trap', tr, 'trap')).join('') : '')+
-      (dc.interviewQ ? '<div class="detail-box"><b style="font-size:12px;text-transform:uppercase;color:var(--text-faint)">Interview Question</b><div style="margin-top:6px;font-weight:600;font-size:13.5px">'+escapeHtml(dc.interviewQ.q)+'</div><div style="margin-top:6px;font-size:13px;color:var(--text-muted)">'+escapeHtml(dc.interviewQ.a)+'</div></div>' : '')+
-      (dc.advancedQ ? '<div class="detail-box"><b style="font-size:12px;text-transform:uppercase;color:var(--text-faint)">Advanced Question</b><div style="margin-top:6px;font-weight:600;font-size:13.5px">'+escapeHtml(dc.advancedQ.q)+'</div><div style="margin-top:6px;font-size:13px;color:var(--text-muted)">'+escapeHtml(dc.advancedQ.a)+'</div></div>' : '')+
-      (dc.resources && dc.resources.length ? '<div class="stat-sub" style="margin-top:10px">Resources: '+dc.resources.map(escapeHtml).join(', ')+'</div>' : '')+
-      '</div>';
+    contentHTML = renderLesson(dc);
   }
 
   const prereqNames = t.prereqs.map(pid=>TOPICS[pid]?'<span class="chip chip-neutral link" data-action="open-topic" data-topic="'+pid+'">'+escapeHtml(TOPICS[pid].name)+'</span>':'').join(' ');
@@ -18885,8 +19713,10 @@ VIEWS.topicDetail = function(params){
     (learningPlan ? renderRecallChecklist(learningPlan) : '')+
     nextActionCardHTML(id)+
     '<div class="card card-pad" style="margin-top:14px;margin-bottom:14px"><div class="section-title">Notes</div>'+
-      '<textarea id="noteArea" rows="4" style="width:100%">'+escapeHtml(STATE.notes[id]||'')+'</textarea>'+
-      '<div style="margin-top:8px"><button class="btn" data-action="save-note" data-topic="'+id+'">Save note</button></div></div>'+
+      '<label class="sr-only" for="noteArea">Your notes for '+escapeHtml(t.name)+'</label>'+
+      '<textarea id="noteArea" rows="5" style="width:100%" placeholder="Nothing here yet. Write what you want to remember about this topic -- a gotcha, a query that finally made it click, a question to revisit.">'+escapeHtml(STATE.notes[id]||'')+'</textarea>'+
+      '<div style="margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><button class="btn" data-action="save-note" data-topic="'+id+'">Save note</button>'+
+      '<span class="note-hint">Private to you. Saved on this device and, when sync is on, to your account.</span></div></div>'+
     topicNavBarHTML(id, {sticky:false});
 };
 
@@ -18936,6 +19766,35 @@ VIEWS.bookmarks = function(){
 };
 
 /* ================= SETTINGS ================= */
+function appearanceCardHTML(){
+  const pref = themePreference();
+  const opt = (v, label) => '<button type="button" data-action="set-theme" data-theme="'+v+'" aria-pressed="'+(pref===v)+'">'+label+'</button>';
+  return '<div class="card card-pad" style="margin-bottom:14px"><div class="section-title">Appearance</div>'+
+    '<div class="seg" role="group" aria-label="Colour theme">'+opt('system','System')+opt('light','Light')+opt('dark','Dark')+'</div>'+
+    '<p class="stat-sub" style="margin-top:8px">System follows your operating system. Your choice is saved with your progress, so it carries to other devices when sync is on.</p></div>';
+}
+function syncCardHTML(){
+  const available = SYNC.available;
+  const on = SYNC_META.enabled;
+  let mode;
+  if(!/^https?:$/.test(location.protocol)) mode = 'This copy is opened as a file, so progress is saved in this browser only.';
+  else if(available === false) mode = 'Cloud sync is not set up on this site yet, so progress is saved in this browser only. Nothing is lost -- once sync is configured, this device uploads everything it has.';
+  else if(!on) mode = 'Sync is turned off on this device. Progress is saved in this browser only.';
+  else mode = 'Progress, notes, bookmarks, schedule and theme are saved in this browser first and then synced to your console account, so they follow you to any device or deployment URL where you sign in with the same console login.';
+  const last = SYNC_META.lastSyncedAt ? new Date(SYNC_META.lastSyncedAt).toLocaleString() : 'not yet';
+  return '<div class="card card-pad" id="syncCard" style="margin-bottom:14px"><div class="section-title">Sync &amp; account</div>'+
+    '<p style="font-size:13.5px;color:var(--text-muted);margin:0 0 6px;max-width:78ch">'+mode+'</p>'+
+    '<div class="kv"><span class="k">Status</span><span>'+escapeHtml(syncStatusText())+'</span>'+
+    '<span class="k">Last synced</span><span>'+escapeHtml(last)+'</span>'+
+    '<span class="k">Account</span><span>Your console login (the name and password this site asked for)</span>'+
+    '<span class="k">Changes waiting</span><span>'+pendingChangeCount()+'</span></div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+      (on && available !== false ? '<button class="btn" data-action="sync-now">Sync now</button>' : '')+
+      '<button class="btn" data-action="sync-toggle">'+(on ? 'Turn sync off on this device' : 'Turn sync on')+'</button>'+
+      (on && available ? '<button class="btn" style="border-color:var(--red);color:var(--red)" data-action="delete-cloud">Delete synced copy</button>' : '')+
+    '</div>'+
+    '<p class="stat-sub" style="margin-top:10px">To stop using this browser, close it: the site asks for the login again in a new browser session. Export below gives you a full copy of your data at any time.</p></div>';
+}
 VIEWS.settings = function(){
   const authored = TOPIC_ORDER.filter(id=>contentReady(id)).length;
   return viewHeader('Settings', 'Export/import your progress, and an honest snapshot of what this console currently contains.') +
@@ -18944,6 +19803,8 @@ VIEWS.settings = function(){
       statCard('Deep Content Authored', authored+' / '+TOPIC_ORDER.length, Math.round(authored/TOPIC_ORDER.length*100)+'%')+
       statCard('Schema Version', STATE.schemaVersion)+
     '</div>'+
+    appearanceCardHTML()+
+    syncCardHTML()+
     '<div class="card card-pad" style="margin-bottom:14px"><div class="section-title">Data</div>'+
       '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
       '<button class="btn" data-action="export-state">Export progress (JSON)</button>'+
@@ -19454,9 +20315,21 @@ function renderRelatedPracticeLinks(id, related){
    ============================================================ */
 (async function boot(){
   await initPersistence();
+  applyTheme();
   wireSearch();
   initDownloadSupport();   /* reveals the download control only where it can work */
+  const themeSel = document.getElementById('themeSelect');
+  themeSel.value = themePreference();
+  themeSel.addEventListener('change', ()=>{ setThemePreference(themeSel.value); render(); });
+  try{ window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', ()=>{ if(themePreference()==='system') applyTheme(); }); }catch(e){}
+  const menuBtn = document.getElementById('menuBtn');
+  document.addEventListener('click', e=>{
+    if(document.body.classList.contains('nav-open') && !e.target.closest('#sidebar') && !e.target.closest('#menuBtn')) document.body.classList.remove('nav-open');
+  });
+  menuBtn.addEventListener('click', ()=>{ const open = document.body.classList.toggle('nav-open'); menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false'); });
+  document.addEventListener('keydown', e=>{ if(e.key === 'Escape') document.body.classList.remove('nav-open'); });
   render();
+  initSync();
 })();
 
 </script>
