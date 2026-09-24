@@ -333,6 +333,17 @@ pre.code{border:1px solid var(--code-border);border-radius:8px;}
 .note-hint{font-size:12px;color:var(--text-faint);margin-top:6px;}
 textarea#noteArea{font-family:var(--font);font-size:14px;line-height:1.6;min-height:110px;resize:vertical;}
 input::placeholder,textarea::placeholder{color:var(--text-faint);opacity:1;}
+/* practice problems */
+.hint-stack{display:flex;flex-direction:column;gap:8px;max-width:78ch;}
+details.hint{border:1px solid var(--border-soft);border-radius:9px;background:var(--bg-elevated);}
+details.hint summary{cursor:pointer;padding:9px 14px;font-size:13.5px;font-weight:600;color:var(--text-muted);}
+details.hint[open] summary{color:var(--text);border-bottom:1px solid var(--border-soft);}
+details.hint .prose{padding:10px 14px;}
+details.solution{border:1px solid var(--accent-dim);border-radius:12px;}
+details.solution > summary{cursor:pointer;padding:12px 16px;font-size:14px;font-weight:600;color:var(--accent);background:var(--accent-soft);border-radius:11px;}
+details.solution[open] > summary{border-radius:11px 11px 0 0;border-bottom:1px solid var(--accent-dim);}
+.solution-body{padding:18px;}
+.solution-body .ls{margin-bottom:22px;}
 </style>
 <meta name="robots" content="noindex, nofollow">
 </head>
@@ -1082,6 +1093,76 @@ function copyText(text){
   });
 }
 
+
+/* ---------- practice problem page (SQL and PL/SQL share one layout) ---------- */
+const PRACTICE_KINDS = {
+  sql:   {view:'sqlpractice',   bank:()=>SQL_PROBLEMS,   progress:()=>STATE.sqlProblemProgress,   action:'sql-problem-status',   label:'SQL Practice'},
+  plsql: {view:'plsqlpractice', bank:()=>PLSQL_PROBLEMS, progress:()=>STATE.plsqlProblemProgress, action:'plsql-problem-status', label:'PL/SQL Practice'}
+};
+function difficultyChip(d){
+  return '<span class="chip '+(d==='hard'?'chip-critical':d==='medium'?'chip-important':'chip-good')+'">'+escapeHtml(d||'')+'</span>';
+}
+function renderPracticeProblem(kind, p){
+  const K = PRACTICE_KINDS[kind];
+  const ids = Object.keys(K.bank());
+  const pos = ids.indexOf(p.id);
+  const prevId = pos > 0 ? ids[pos-1] : null, nextId = pos >= 0 && pos < ids.length-1 ? ids[pos+1] : null;
+  const st = (K.progress()[p.id]||{}).status;
+  const statusChip = st==='solved' ? '<span class="chip chip-good">Solved</span>' : st ? '<span class="chip chip-neutral">Attempted</span>' : '<span class="chip chip-neutral">Not started</span>';
+  const navBtn = (id, dir) => id
+    ? '<button type="button" class="tnav-btn'+(dir==='next'?' next':'')+'" data-action="open-problem" data-kind="'+kind+'" data-id="'+escapeHtml(id)+'"><span class="tnav-label">'+(dir==='next'?'Next &rarr;':'&larr; Previous')+'</span><span class="tnav-name">'+escapeHtml(K.bank()[id].title)+'</span></button>'
+    : '<button type="button" class="tnav-btn'+(dir==='next'?' next':'')+'" disabled><span class="tnav-label">'+(dir==='next'?'Next':'Previous')+'</span><span class="tnav-name">&mdash;</span></button>';
+  const nav = '<div class="topic-navbar">'+navBtn(prevId,'prev')+
+    '<div class="tnav-mid"><div class="tnav-phase-progress">Problem '+(pos+1)+' of '+ids.length+'</div><div class="tnav-overall-progress">'+escapeHtml(K.label)+'</div></div>'+
+    navBtn(nextId,'next')+'</div>';
+
+  const parts = [];
+  const add = (key, label, html) => { if(html) parts.push(lessonSection(key, label, html)); };
+  add('problem', 'Problem', renderProse(p.problemStatement));
+  add('concepts', 'Concepts', p.concepts && p.concepts.length ? '<div style="display:flex;flex-wrap:wrap;gap:6px">'+p.concepts.map(c=>'<span class="chip chip-neutral">'+escapeHtml(c)+'</span>').join('')+'</div>' : '');
+  add('setup', 'Setup', [codeBox('Schema', p.schema), codeBox('Sample data', p.sampleData)].filter(Boolean).join(''));
+  add('expected', 'Expected result', p.expectedOutput ? codeBox('Expected output', p.expectedOutput, {output:true}) : renderProse(p.expectedBehavior));
+  add('hints', 'Hints', p.hints && p.hints.length ? '<div class="hint-stack">'+p.hints.map((h,i)=>
+      '<details class="hint"><summary>Hint '+(i+1)+(i===0?' (gentlest)':i===p.hints.length-1?' (closest to the answer)':'')+'</summary><div class="prose"><p>'+escapeHtml(h)+'</p></div></details>').join('')+'</div>' : '');
+  const solution =
+    codeBox('Solution', p.solution)+
+    (p.explanation ? '<div style="margin-top:16px">'+lessonSection('why-works', 'Why it works', renderProse(p.explanation))+'</div>' : '')+
+    (p.altSolution ? lessonSection('alt', 'Another approach', codeBox('Alternative', p.altSolution)) : '')+
+    (p.performanceNotes ? lessonSection('perf', 'Performance', renderProse(p.performanceNotes)) : '')+
+    (p.interviewFollowups && p.interviewFollowups.length ? lessonSection('followups', 'Interview follow-ups', '<ul class="trap-list">'+p.interviewFollowups.map(f=>'<li>'+escapeHtml(f)+'</li>').join('')+'</ul>') : '');
+  add('solution', 'Solution', p.solution ? '<details class="solution"><summary>Try it first &mdash; then reveal the solution</summary><div class="solution-body">'+solution+'</div></details>' : '');
+
+  return '<div class="back-to-topics" data-action="nav-view" data-view="'+K.view+'">&larr; All '+escapeHtml(K.label)+' problems</div>'+
+    viewHeader(p.title, '', '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+difficultyChip(p.difficulty)+statusChip+'</div>')+
+    (p.tags && p.tags.length ? '<div class="row-meta" style="margin:-8px 0 14px">'+p.tags.map(t=>'<span class="chip chip-neutral">'+escapeHtml(t)+'</span>').join('')+'</div>' : '')+
+    nav+
+    '<article class="lesson">'+parts.join('')+'</article>'+
+    '<div class="next-action-card"><div class="na-title">How did it go?</div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+        '<button class="btn" data-action="'+K.action+'" data-id="'+escapeHtml(p.id)+'" data-status="attempted">Mark attempted</button>'+
+        '<button class="btn btn-primary" data-action="'+K.action+'" data-id="'+escapeHtml(p.id)+'" data-status="solved">Mark solved</button>'+
+        (nextId ? '<button class="btn" data-action="open-problem" data-kind="'+kind+'" data-id="'+escapeHtml(nextId)+'">Next problem &rarr;</button>' : '')+
+      '</div></div>';
+}
+function renderPracticeList(kind, title, emptyHint){
+  const K = PRACTICE_KINDS[kind];
+  const problems = Object.values(K.bank());
+  if(problems.length===0) return comingSoon(title, emptyHint);
+  const prog = K.progress();
+  const solved = problems.filter(p=>(prog[p.id]||{}).status==='solved').length;
+  const attempted = problems.filter(p=>(prog[p.id]||{}).status==='attempted').length;
+  return viewHeader(title, problems.length+' problems &middot; '+solved+' solved &middot; '+attempted+' attempted.') +
+    '<div class="card"><div class="checklist" style="max-height:none">'+
+    problems.map(p=>{
+      const st = (prog[p.id]||{}).status;
+      return '<div class="check-row link" data-action="open-problem" data-kind="'+kind+'" data-id="'+escapeHtml(p.id)+'"><div class="row-main"><div class="row-title">'+escapeHtml(p.title)+'</div>'+
+        '<div class="row-meta">'+difficultyChip(p.difficulty)+
+        (st==='solved'?'<span class="chip chip-good">Solved</span>':st?'<span class="chip chip-neutral">Attempted</span>':'')+
+        (p.tags||[]).slice(0,4).map(t=>'<span>'+escapeHtml(t)+'</span>').join('')+'</div></div><span class="row-arrow">Open &rarr;</span></div>';
+    }).join('')+
+    '</div></div>';
+}
+
 /* ---------- theme ---------- */
 const THEME_LOCAL_KEY = 'sql_plsql_mastery_console_theme';
 function themePreference(){
@@ -1114,8 +1195,8 @@ const RESUME_SKIP_VIEWS = ['dashboard','settings'];
 function positionTitle(view, params){
   params = params || {};
   if(view === 'topicDetail' && TOPICS[params.id]) return TOPICS[params.id].name;
-  if(view === 'sqlProblemDetail' && typeof SQL_PROBLEMS!=='undefined' && SQL_PROBLEMS[params.id]) return SQL_PROBLEMS[params.id].title;
-  if(view === 'plsqlProblemDetail' && typeof PLSQL_PROBLEMS!=='undefined' && PLSQL_PROBLEMS[params.id]) return PLSQL_PROBLEMS[params.id].title;
+  if(view === 'sqlpractice' && params.id && typeof SQL_PROBLEMS!=='undefined' && SQL_PROBLEMS[params.id]) return SQL_PROBLEMS[params.id].title;
+  if(view === 'plsqlpractice' && params.id && typeof PLSQL_PROBLEMS!=='undefined' && PLSQL_PROBLEMS[params.id]) return PLSQL_PROBLEMS[params.id].title;
   for(const g of NAV) for(const it of g.items) if(it.id === view) return it.label;
   return view;
 }
@@ -19027,10 +19108,10 @@ function globalSearch(qRaw){
     if(hay.includes(q)) hits.push({type:'Topic', id, title:t.name, meta:PHASE_MAP[t.phase].name, nav:()=>navigate('topicDetail',{id})});
   });
   (typeof SQL_PROBLEMS!=='undefined'?Object.values(SQL_PROBLEMS):[]).forEach(p=>{
-    if(normalizeSearchStr(p.title+' '+(p.tags||[]).join(' ')).includes(q)) hits.push({type:'SQL Problem', id:p.id, title:p.title, meta:p.difficulty, nav:()=>navigate('sqlProblemDetail',{id:p.id})});
+    if(normalizeSearchStr(p.title+' '+(p.tags||[]).join(' ')).includes(q)) hits.push({type:'SQL Problem', id:p.id, title:p.title, meta:p.difficulty, nav:()=>navigate('sqlpractice',{id:p.id})});
   });
   (typeof PLSQL_PROBLEMS!=='undefined'?Object.values(PLSQL_PROBLEMS):[]).forEach(p=>{
-    if(normalizeSearchStr(p.title).includes(q)) hits.push({type:'PL/SQL Problem', id:p.id, title:p.title, meta:p.difficulty, nav:()=>navigate('plsqlProblemDetail',{id:p.id})});
+    if(normalizeSearchStr(p.title).includes(q)) hits.push({type:'PL/SQL Problem', id:p.id, title:p.title, meta:p.difficulty, nav:()=>navigate('plsqlpractice',{id:p.id})});
   });
   (typeof QUESTION_BANK!=='undefined'?QUESTION_BANK:[]).forEach(qq=>{
     if(normalizeSearchStr(qq.q).includes(q)) hits.push({type:'Interview Q', id:qq.id, title:qq.q, meta:qq.category, nav:()=>navigate('interview',{focus:qq.id})});
@@ -19179,6 +19260,8 @@ function handleAction(action, d, e){
       return;
     }
     case 'jump': { const el = document.getElementById(d.target); if(el){ el.scrollIntoView({behavior:'smooth', block:'start'}); const h = el.querySelector('h2'); if(h){ h.setAttribute('tabindex','-1'); h.focus({preventScroll:true}); } } return; }
+    case 'open-problem': { const K = PRACTICE_KINDS[d.kind]; if(K) navigate(K.view, {id:d.id}); return; }
+    case 'nav-view': navigate(d.view, {}); return;
     case 'resume': { const p = STATE.lastPosition; if(p && VIEWS[p.view]) navigate(p.view, p.params||{}); return; }
     case 'set-theme': setThemePreference(d.theme); render(); return;
     case 'open-sync': navigate('settings', {section:'sync'}); setTimeout(()=>{ const el = document.getElementById('syncCard'); if(el) el.scrollIntoView({block:'start'}); }, 0); return;
@@ -19825,43 +19908,12 @@ function sqlProblemStatusInfo(id){
 }
 VIEWS.sqlpractice = function(params){
   params = params || {};
-  const problems = Object.values(SQL_PROBLEMS);
-  if(problems.length===0) return comingSoon('SQL Practice', 'A bank of 100+ SQL coding problems, gaps-and-islands, top-N, pivot/unpivot, with runnable-style checks and difficulty tiers.');
-
   if(params.id){
     const p = SQL_PROBLEMS[params.id];
-    if(!p) return viewHeader('Problem not found','') + '<div class="empty-state">No such problem.</div>';
-    const st = sqlProblemStatusInfo(p.id);
-    return viewHeader(p.title, '<span class="chip chip-'+(p.difficulty==='hard'?'critical':p.difficulty==='medium'?'important':'good')+'">'+p.difficulty+'</span> &middot; '+(p.tags||[]).join(', '),
-        '<button class="btn" onclick="navigate(\'sqlpractice\',{})">&larr; All problems</button>')+
-      '<div class="card card-pad"><div class="section-title">Problem</div><div style="font-size:13.5px;white-space:pre-wrap">'+escapeHtml(p.problemStatement)+'</div></div>'+
-      (p.schema?'<div style="margin:12px 0"><b style="font-size:12px;text-transform:uppercase;color:var(--text-faint)">Schema</b><pre class="code">'+escapeHtml(p.schema)+'</pre></div>':'')+
-      (p.sampleData?'<div style="margin:12px 0"><b style="font-size:12px;text-transform:uppercase;color:var(--text-faint)">Sample Data</b><pre class="code">'+escapeHtml(p.sampleData)+'</pre></div>':'')+
-      (p.expectedOutput?'<div style="margin:12px 0"><b style="font-size:12px;text-transform:uppercase;color:var(--text-faint)">Expected Output</b><pre class="code">'+escapeHtml(p.expectedOutput)+'</pre></div>':'')+
-      (p.hints && p.hints.length ? '<div class="card card-pad" style="margin-top:12px"><div class="section-title">Hints</div><ol style="margin:0;padding-left:18px;font-size:13px">'+p.hints.map(h=>'<li style="margin-bottom:4px">'+escapeHtml(h)+'</li>').join('')+'</ol></div>' : '')+
-      '<div style="margin-top:14px"><button class="btn btn-primary" data-action="reveal-answer" data-id="'+p.id+'">Reveal solution</button></div>'+
-      '<div id="reveal-'+p.id+'" hidden style="margin-top:12px">'+
-        '<pre class="code">'+escapeHtml(p.solution)+'</pre>'+
-        '<div class="detail-box"><b style="font-size:12px;text-transform:uppercase;color:var(--text-faint)">Explanation</b><div style="margin-top:6px;font-size:13.5px;white-space:pre-wrap">'+escapeHtml(p.explanation)+'</div></div>'+
-        (p.altSolution?'<div style="margin:12px 0"><b style="font-size:12px;text-transform:uppercase;color:var(--text-faint)">Alternative Approach</b><pre class="code">'+escapeHtml(p.altSolution)+'</pre></div>':'')+
-        (p.performanceNotes?block('Performance considerations', p.performanceNotes):'')+
-        (p.interviewFollowups && p.interviewFollowups.length ? '<div class="detail-box"><b style="font-size:12px;text-transform:uppercase;color:var(--text-faint)">Interview Follow-ups</b><ul style="margin:6px 0 0;padding-left:18px;font-size:13px">'+p.interviewFollowups.map(f=>'<li style="margin-bottom:4px">'+escapeHtml(f)+'</li>').join('')+'</ul></div>' : '')+
-      '</div>'+
-      '<div style="margin-top:14px;display:flex;gap:8px">'+
-        '<button class="btn" data-action="sql-problem-status" data-id="'+p.id+'" data-status="attempted">Mark attempted</button>'+
-        '<button class="btn btn-primary" data-action="sql-problem-status" data-id="'+p.id+'" data-status="solved">Mark solved</button>'+
-      '</div>';
+    if(!p) return viewHeader('Problem not found','') + '<div class="empty-state">That problem is not in the bank. <span class="link" data-action="nav-view" data-view="sqlpractice">Back to all SQL problems</span></div>';
+    return renderPracticeProblem('sql', p);
   }
-
-  const solvedCount = problems.filter(p=>sqlProblemStatusInfo(p.id).label==='Solved').length;
-  return viewHeader('SQL Practice', problems.length+' problems &middot; '+solvedCount+' solved so far. More problems are added as modules are completed.') +
-    '<div class="card"><div class="checklist" style="max-height:none">'+
-    problems.map(p=>{
-      const st = sqlProblemStatusInfo(p.id);
-      return '<div class="check-row link" onclick="navigate(\'sqlpractice\',{id:\''+p.id+'\'})"><div class="row-main"><div class="row-title">'+escapeHtml(p.title)+'</div>'+
-        '<div class="row-meta"><span class="chip '+(p.difficulty==='hard'?'chip-critical':p.difficulty==='medium'?'chip-important':'chip-good')+'">'+p.difficulty+'</span><span class="chip '+st.cls+'">'+st.label+'</span>'+(p.tags||[]).map(t=>'<span>'+escapeHtml(t)+'</span>').join('')+'</div></div></div>';
-    }).join('')+
-    '</div></div>';
+  return renderPracticeList('sql', 'SQL Practice', 'A bank of 100+ SQL coding problems, gaps-and-islands, top-N, pivot/unpivot, with runnable-style checks and difficulty tiers.');
 };
 
 
@@ -19933,42 +19985,12 @@ VIEWS.debugging = function(params){
 /* ================= PL/SQL PRACTICE ================= */
 VIEWS.plsqlpractice = function(params){
   params = params || {};
-  const problems = Object.values(PLSQL_PROBLEMS);
-  if(problems.length===0) return comingSoon('PL/SQL Practice', '50+ PL/SQL coding problems covering cursors, BULK COLLECT/FORALL, packages, exception handling, and triggers.');
-
   if(params.id){
     const p = PLSQL_PROBLEMS[params.id];
-    if(!p) return viewHeader('Problem not found','') + '<div class="empty-state">No such problem.</div>';
-    return viewHeader(p.title, '<span class="chip chip-'+(p.difficulty==='hard'?'critical':p.difficulty==='medium'?'important':'good')+'">'+p.difficulty+'</span> &middot; '+(p.tags||[]).join(', '),
-        '<button class="btn" onclick="navigate(\'plsqlpractice\',{})">&larr; All problems</button>')+
-      '<div class="card card-pad"><div class="section-title">Problem</div><div style="font-size:13.5px;white-space:pre-wrap">'+escapeHtml(p.problemStatement)+'</div></div>'+
-      codeBlock('Schema', p.schema)+
-      (p.hints && p.hints.length ? '<div class="card card-pad" style="margin-top:12px"><div class="section-title">Hints</div><ol style="margin:0;padding-left:18px;font-size:13px">'+p.hints.map(h=>'<li style="margin-bottom:4px">'+escapeHtml(h)+'</li>').join('')+'</ol></div>' : '')+
-      '<div style="margin-top:14px"><button class="btn btn-primary" data-action="reveal-answer" data-id="'+p.id+'">Reveal solution</button></div>'+
-      '<div id="reveal-'+p.id+'" hidden style="margin-top:12px">'+
-        '<pre class="code">'+escapeHtml(p.solution)+'</pre>'+
-        block('Explanation', p.explanation)+
-        (p.altSolution?codeBlock('Alternative approach', p.altSolution):'')+
-        (p.performanceNotes?block('Performance considerations', p.performanceNotes):'')+
-        (p.interviewFollowups && p.interviewFollowups.length ? '<div class="detail-box"><b style="font-size:12px;text-transform:uppercase;color:var(--text-faint)">Interview Follow-ups</b><ul style="margin:6px 0 0;padding-left:18px;font-size:13px">'+p.interviewFollowups.map(f=>'<li style="margin-bottom:4px">'+escapeHtml(f)+'</li>').join('')+'</ul></div>' : '')+
-      '</div>'+
-      '<div style="margin-top:14px;display:flex;gap:8px">'+
-        '<button class="btn" data-action="plsql-problem-status" data-id="'+p.id+'" data-status="attempted">Mark attempted</button>'+
-        '<button class="btn btn-primary" data-action="plsql-problem-status" data-id="'+p.id+'" data-status="solved">Mark solved</button>'+
-      '</div>';
+    if(!p) return viewHeader('Problem not found','') + '<div class="empty-state">That problem is not in the bank. <span class="link" data-action="nav-view" data-view="plsqlpractice">Back to all PL/SQL problems</span></div>';
+    return renderPracticeProblem('plsql', p);
   }
-
-  const solvedCount = problems.filter(p=>(STATE.plsqlProblemProgress[p.id]||{}).status==='solved').length;
-  return viewHeader('PL/SQL Practice', problems.length+' problems &middot; '+solvedCount+' solved so far.') +
-    '<div class="card"><div class="checklist" style="max-height:none">'+
-    problems.map(p=>{
-      const st = (STATE.plsqlProblemProgress[p.id]||{}).status;
-      return '<div class="check-row link" onclick="navigate(\'plsqlpractice\',{id:\''+p.id+'\'})"><div class="row-main"><div class="row-title">'+escapeHtml(p.title)+'</div>'+
-        '<div class="row-meta"><span class="chip '+(p.difficulty==='hard'?'chip-critical':p.difficulty==='medium'?'chip-important':'chip-good')+'">'+p.difficulty+'</span>'+
-        (st==='solved'?'<span class="chip chip-good">Solved</span>':st?'<span class="chip chip-neutral">Attempted</span>':'')+
-        (p.tags||[]).map(t=>'<span>'+escapeHtml(t)+'</span>').join('')+'</div></div></div>';
-    }).join('')+
-    '</div></div>';
+  return renderPracticeList('plsql', 'PL/SQL Practice', '50+ PL/SQL coding problems covering cursors, BULK COLLECT/FORALL, packages, exception handling, and triggers.');
 };
 
 /* ================= OUTPUT PREDICTION ================= */
