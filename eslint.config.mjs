@@ -18,6 +18,8 @@ const eslintConfig = [
       "out/**",
       "build/**",
       "next-env.d.ts",
+      // standalone Node test rig with its own package.json (CommonJS)
+      "scripts/sql-console-sync-test/**",
     ],
   },
 ];
