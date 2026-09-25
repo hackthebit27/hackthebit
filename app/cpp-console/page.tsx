@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 export default function CppConsolePage() {
   return (
-    <main className="bg-[#12141a]">
+    <main className="bg-[#0b1420]">
       <iframe
         src="/cpp-console/app"
         title="C++ Mastery Console"
