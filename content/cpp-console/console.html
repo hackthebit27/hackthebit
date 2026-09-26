@@ -975,6 +975,13 @@ details.gl-inline-more > summary{cursor:pointer;font-size:13px;font-weight:600;c
 .mc-k{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--text-faint);}
 .mc-t{font-size:14.5px;font-weight:600;color:var(--text);display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;}
 .mc-pos{font-size:12.5px;font-weight:500;color:var(--text-muted);}
+details.gl-precise-more > summary{cursor:pointer;list-style:none;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px;}
+details.gl-precise-more > summary::-webkit-details-marker{display:none;}
+details.gl-precise-more > summary .gl-precise-h{margin:0;}
+details.gl-precise-more > summary .gl-precise-h::before{content:"\25B8";display:inline-block;width:12px;color:var(--accent);transition:transform .15s ease;}
+details.gl-precise-more[open] > summary .gl-precise-h::before{transform:rotate(90deg);}
+details.gl-precise-more[open] > summary{margin-bottom:6px;}
+.gl-precise-n{font-size:12px;color:var(--text-faint);}
 </style>
 </head>
 <body>
@@ -1483,7 +1490,7 @@ DEEP_CONTENT['const-correctness'] = {
   def:"const-correctness means using `const` throughout your interfaces to make immutability a property the compiler enforces, not a convention you hope people follow.",
   why:"It documents intent (this function won't modify its argument), catches accidental mutation at compile time, enables safe sharing of data across threads/APIs, and lets the compiler apply optimizations that assume the value can't change.",
   analogy:"const is a contract stapled to a variable: 'nobody, including future-you six months from now, is allowed to change this.' Breaking the contract isn't a runtime failure — the compiler refuses to build the code at all.",
-  code:`class Vector3 {\npublic:\n    double x, y, z;\n    double length() const {        // promises not to modify *this\n        return std::sqrt(x*x + y*y + z*z);\n    }\n    void normalize() {              // not const — mutates *this\n        double len = length();\n        x /= len; y /= len; z /= len;\n    }\n};\n\nvoid printLength(const Vector3& v) {  // v cannot be mutated here\n    std::cout << v.length();          // OK: length() is const\n    // v.normalize();                 // ERROR: normalize() isn't const\n}`,
+  code:`#include <cmath>\n#include <iostream>\n\nclass Vector3 {\npublic:\n    double x, y, z;\n    double length() const {        // promises not to modify *this\n        return std::sqrt(x*x + y*y + z*z);\n    }\n    void normalize() {              // not const — mutates *this\n        double len = length();\n        x /= len; y /= len; z /= len;\n    }\n};\n\nvoid printLength(const Vector3& v) {  // v cannot be mutated here\n    std::cout << v.length();          // OK: length() is const\n    // v.normalize();                 // ERROR: normalize() isn't const\n}`,
   steps:[
     "A `const` member function adds an implicit `const` to `this`, so `this` becomes `const Vector3*` instead of `Vector3*`.",
     "Any attempt inside that function to write to a non-mutable member fails to compile.",
@@ -1495,7 +1502,7 @@ DEEP_CONTENT['const-correctness'] = {
   mistake:"Marking a getter non-const 'just in case', which then forces every caller holding a `const Widget&` to be unable to call it — const-correctness has to be threaded through an entire API, not bolted on at one layer.",
   interviewQ:{q:"What's the difference between `const int* p`, `int* const p`, and `const int* const p`?", a:"`const int* p` — pointer to const int (data immutable, pointer reseatable). `int* const p` — const pointer to int (pointer fixed, data mutable). `const int* const p` — both fixed. Read right-to-left from the variable name to parse any C declarator."},
   advancedQ:{q:"Why is casting away const and then writing to the object undefined behavior, even though casting away const and calling a non-const function on it is sometimes legal?", a:"The legality hinges on whether the *underlying object* was ever actually declared const. `const_cast` merely changes what the compiler will let you write; it doesn't change the object's true const-ness. If the object was declared `const` (e.g. `const Widget w;`), any write to it — even through a `const_cast` pointer — is UB. But if you have a `const Widget&` that's bound to a genuinely non-const `Widget`, `const_cast`-ing and writing is perfectly legal, because the underlying object was never const in the first place."},
-  traps:["`const` on a return-by-value type (`const std::string f()`) is mostly pointless and can even block move semantics on the returned value in older compilers — const on *returned values* is a smell, unlike const on parameters or methods.","Logical constness vs bitwise constness: a `const` method can still mutate a `mutable` member (e.g. a cache or a mutex) — the compiler only enforces bitwise constness, so `mutable` is the sanctioned escape hatch."]
+  traps:["`const` on a return-by-value type (`const std::string f()`) is mostly pointless and blocks move semantics on the returned value in every compiler (a const rvalue cannot bind to T&&, so the caller copies instead of moving) — const on *returned values* is a smell, unlike const on parameters or methods.","Logical constness vs bitwise constness: a `const` method can still mutate a `mutable` member (e.g. a cache or a mutex) — the compiler only enforces bitwise constness, so `mutable` is the sanctioned escape hatch."]
 };
 
 DEEP_CONTENT['stack-vs-heap'] = {
@@ -1943,18 +1950,18 @@ DEEP_CONTENT['pat-singleton'] = {
   def:"Singleton restricts a class to exactly one instance for the program's lifetime, and provides a single global access point (typically a static method) to reach it.",
   why:"Some resources genuinely are process-wide by nature (a logging sink, a hardware device handle, a configuration registry) — Singleton names and enforces that constraint explicitly, rather than relying on a loosely-agreed convention that 'everyone just uses one instance.'",
   analogy:"A building has exactly one reception desk. It would be confusing and wasteful to have multiple independent reception desks that don't coordinate with each other — everyone entering the building is directed to THE reception desk, a single well-known point of contact, not 'a' reception desk chosen arbitrarily.",
-  code:`class Logger {\npublic:\n    static Logger& instance() {\n        static Logger inst;              // Meyer's Singleton\n        return inst;\n    }\n    void log(const std::string& msg) { /* ... */ }\n\n    Logger(const Logger&) = delete;      // prevent copies\n    Logger& operator=(const Logger&) = delete;\nprivate:\n    Logger() = default;                  // construction only via instance()\n};\n\nvoid demo() {\n    Logger::instance().log("started");\n}`,
+  code:`class Logger {\npublic:\n    static Logger& instance() {\n        static Logger inst;              // Meyers singleton\n        return inst;\n    }\n    void log(const std::string& msg) { /* ... */ }\n\n    Logger(const Logger&) = delete;      // prevent copies\n    Logger& operator=(const Logger&) = delete;\nprivate:\n    Logger() = default;                  // construction only via instance()\n};\n\nvoid demo() {\n    Logger::instance().log("started");\n}`,
   steps:[
     "The first call to `instance()` triggers construction of the local `static Logger inst;` — C++11 guarantees this initialization is both lazy (happens on first use, not at program startup) and thread-safe (the standard mandates the compiler generate synchronization so concurrent first-callers don't race to construct it twice).",
     "Every subsequent call, from any thread, receives a reference to that exact same object — there is no code path that can construct a second `Logger`, because the constructor is private and copy/assignment are deleted.",
     "The object is destroyed during static destruction at program exit, in the reverse order of other function-local statics' construction — a detail that matters if your singleton's destructor interacts with other singletons ('static destruction order fiasco')."
   ],
-  memory:"'Meyer's Singleton' (the function-local static shown above) is generally preferred over a heap-allocated singleton reached via a raw pointer, precisely because its lifetime and thread-safe lazy initialization are both handled entirely by well-defined language guarantees, with no manual double-checked-locking code required.",
+  memory:"'Meyers singleton' (the function-local static shown above) is generally preferred over a heap-allocated singleton reached via a raw pointer, precisely because its lifetime and thread-safe lazy initialization are both handled entirely by well-defined language guarantees, with no manual double-checked-locking code required.",
   realWorld:"Application-wide loggers, configuration managers, and thread pools are commonly implemented as singletons — though modern C++ engineering guidance increasingly favors passing such 'shared services' explicitly via dependency injection instead, specifically because of the testing and coupling downsides below.",
   mistake:"Reaching for Singleton as a convenient global-variable substitute for genuinely per-use-case objects — this creates hidden global state, makes unit testing significantly harder (you can't easily substitute a mock/fake instance), and can hide accidental coupling between unrelated parts of a codebase that all quietly depend on the same shared object.",
-  interviewQ:{q:"Why is the function-local static ('Meyer's Singleton') the preferred implementation in modern C++?", a:"Because C++11 guarantees that initialization of a function-local `static` variable is both lazy (constructed on first call, avoiding unnecessary work if never used, and avoiding static-initialization-order issues between translation units) and thread-safe by the language itself (the compiler inserts the necessary synchronization) — so you get correct lazy, thread-safe singleton behavior without writing any manual locking or double-checked-locking code, which was the error-prone pre-C++11 approach."},
+  interviewQ:{q:"Why is the function-local static ('Meyers singleton') the preferred implementation in modern C++?", a:"Because C++11 guarantees that initialization of a function-local `static` variable is both lazy (constructed on first call, avoiding unnecessary work if never used, and avoiding static-initialization-order issues between translation units) and thread-safe by the language itself (the compiler inserts the necessary synchronization) — so you get correct lazy, thread-safe singleton behavior without writing any manual locking or double-checked-locking code, which was the error-prone pre-C++11 approach."},
   advancedQ:{q:"What are the concrete downsides of Singleton that make many senior engineers avoid it as a default design choice?", a:"It introduces hidden global state and hidden coupling — any code anywhere in the program can silently depend on the singleton without that dependency being visible in a function's signature, making the codebase harder to reason about locally. It also actively hinders unit testing: you can't substitute a mock/fake logger or configuration source for a test without either adding complexity specifically to support that (a settable test hook) or resorting to fragile workarounds, whereas a dependency explicitly passed into a constructor can trivially be swapped for a test double. Finally, singletons that depend on each other during destruction can hit the 'static destruction order fiasco', where one singleton's destructor runs after another it depends on has already been destroyed."},
-  traps:["Using Singleton where a normal object passed via dependency injection would be more testable and equally correct.","Static destruction order issues when singletons reference each other during teardown.","Thread-safety: pre-C++11 hand-rolled singletons often have subtly broken double-checked locking — Meyer's Singleton in C++11+ avoids this entirely and should be preferred over manual pointer-based implementations."]
+  traps:["Using Singleton where a normal object passed via dependency injection would be more testable and equally correct.","Static destruction order issues when singletons reference each other during teardown.","Thread-safety: pre-C++11 hand-rolled singletons often have subtly broken double-checked locking — Meyers singleton in C++11+ avoids this entirely and should be preferred over manual pointer-based implementations."]
 };
 /* ============================================================
    DEEP CONTENT BATCH 8 -- TIER 1: object lifetime & memory,
@@ -4492,7 +4499,7 @@ DEEP_CONTENT['linker-errors'] = {
     "The standard fix pattern for sharing a global variable across translation units is: declare it `extern` in the header (a promise, not a definition) and define it exactly once in a single .cpp file — or, since C++17, mark the header-level definition `inline`, which explicitly tells the linker 'multiple identical definitions of this are expected and fine, please merge them into one.'",
     "Reading these error messages systematically: 'undefined reference to X' → search for X's definition, confirm the .cpp/.o/.a containing it is actually passed to the final link command; 'multiple definition of X' → search for where X is actually DEFINED (not just declared) and confirm it happens in only one place (usually the fix is converting an accidental header-level definition into a declaration + single .cpp definition, or adding `inline`/`static` as appropriate)."
   ],
-  memory: "Both categories of linker error are fundamentally about the One Definition Rule (see odr) applied at link time: 'undefined reference' means ZERO definitions were found; 'multiple definition' means MORE THAN ONE (non-inline) definition was found — exactly one definition is what the linker needs to succeed.",
+  memory: "Both categories of linker error are fundamentally about the One Definition Rule (see odr) applied at link time: 'undefined reference' means ZERO definitions were found; 'multiple definition' means MORE THAN ONE (non-inline) definition was found — for an ordinary (non-inline, non-weak) symbol, exactly one definition is what the linker needs to succeed -- inline functions, template instantiations and weak symbols are the sanctioned cases where the linker merges duplicates instead.",
   realWorld: "In large, multi-team C++ codebases, 'undefined reference' errors are extremely common when a new source file's build-system registration is forgotten (the .cpp exists and compiles, but wasn't added to the CMakeLists.txt/Makefile's list of files to link into the target) — checking the build configuration, not just the source code, is often the actual fix.",
   mistake: "Defining a non-const, non-inline global variable or a non-inline, non-template function directly in a header file that gets #included by multiple .cpp files — this is a nearly guaranteed 'multiple definition' linker error the moment that header is included from more than one translation unit that's linked together, and is one of the most common header-organization mistakes beginners make.",
   interviewQ: { q: "You get a 'multiple definition of X' linker error. Walk through your diagnosis and fix.", a: "First, identify exactly what X is and where it's DEFINED (not just declared/used) — the error message typically lists the conflicting object files. The most common root cause is a non-inline, non-const global variable or non-inline free function being defined directly inside a header file (rather than just declared there), which then gets a separate definition compiled into EVERY translation unit that #includes that header — each such .o file legitimately defines X once, but the linker sees multiple definitions across the combined set. The fix: in the header, change the definition into a declaration (`extern int X;` for a variable, or just the function prototype), and move the actual DEFINITION into exactly one .cpp file. Alternatively, if the intent really is to share an identical definition across many translation units without a single canonical .cpp (common for header-only utility code), mark it `inline` (C++17+ for variables, always available for functions), which explicitly tells the compiler/linker that identical definitions across multiple translation units are expected and should be merged rather than treated as a conflict." },
@@ -6416,7 +6423,7 @@ DEEP_CONTENT['translation-units'] = {
  memory: "Each TU is compiled into its own object file with its own symbol table. Entities with external linkage become symbols the linker can see and match by (mangled) name across TUs. Entities with internal linkage (static globals/functions, unnamed-namespace members, const globals by default at namespace scope) never become visible outside their own TU's symbol table at all -- the linker literally cannot see them to conflict, which is why internal linkage is the standard tool for avoiding ODR/multiple-definition problems for TU-local helpers.",
  realWorld: "ODR violations are notoriously caused in real codebases by: mixing objects compiled with different preprocessor defines (like the EXTRA_FIELD example, often from inconsistent build configs across a monorepo), mixing debug and release builds of the same library (differing struct layouts due to debug-only fields or different STL debug iterators), or linking two versions of the same third-party library where a class definition changed between versions -- all three are real, recurring root causes of 'works in isolation, corrupts randomly when linked together' bugs, and tools like AddressSanitizer's ODR checker or -Wodr in GCC exist specifically to catch a subset of these at build or link time.",
  mistake: "Defining a non-inline, non-template function or a non-const global variable in a header file without a header guard consideration for multiple inclusion in the SAME translation unit being fine, but forgetting that if that header is included by two different .cpp files, each .cpp file's TU independently compiles and exports that same-named external-linkage symbol, producing a linker 'multiple definition' error the moment both object files are linked together -- the fix is either marking it inline (C++17 inline variables, or inline functions, which explicitly permit multiple identical definitions across TUs) or moving the definition into exactly one .cpp file.",
- interviewQ: {q: "What is a translation unit, and how does that relate to why you can't just define a global function's body in a header the way you'd think of it in a scripting language?", a: "A translation unit is a single .cpp file after the preprocessor has recursively spliced in every header it includes -- it's the actual, self-contained chunk of source the compiler processes in one pass, entirely independent of every other TU. If you write a plain (non-inline) function definition, say int square(int x) { return x*x; }, inside a header and that header is #included by three different .cpp files, each of those three TUs independently compiles a full definition of square(int) and emits it as an external-linkage symbol in its own object file. When the linker merges all three object files, it finds three separate definitions of the same external symbol square(int) and errors with 'multiple definition of square(int)' -- because the language guarantees (One Definition Rule) that any external-linkage entity has exactly one definition across the whole program. The fix is to either declare it in the header and define it once in a single .cpp, or mark the header definition inline (or constexpr, which implies inline for functions), which is a linkage-level promise to the compiler and linker that every TU's copy is guaranteed identical and the linker should just keep one and discard the duplicates instead of erroring."},
+ interviewQ: {q: "What is a translation unit, and how does that relate to why you can't just define a global function's body in a header the way you'd think of it in a scripting language?", a: "A translation unit is a single .cpp file after the preprocessor has recursively spliced in every header it includes -- it's the actual, self-contained chunk of source the compiler processes in one pass, entirely independent of every other TU. If you write a plain (non-inline) function definition, say int square(int x) { return x*x; }, inside a header and that header is #included by three different .cpp files, each of those three TUs independently compiles a full definition of square(int) and emits it as an external-linkage symbol in its own object file. When the linker merges all three object files, it finds three separate definitions of the same external symbol square(int) and errors with 'multiple definition of square(int)' -- because the One Definition Rule requires a non-inline function with external linkage to have exactly one definition across the whole program. The fix is to either declare it in the header and define it once in a single .cpp, or mark the header definition inline (or constexpr, which implies inline for functions), which is a linkage-level promise to the compiler and linker that every TU's copy is guaranteed identical and the linker should just keep one and discard the duplicates instead of erroring."},
  advancedQ: {q: "Templates are almost always defined entirely in headers, and thus effectively 'defined' in every TU that instantiates them -- why doesn't this violate the One Definition Rule the way a plain function would?", a: "The ODR has an explicit carve-out for templates (and inline functions, and inline variables): it requires that if the same template specialization is defined in multiple TUs, every one of those definitions must consist of the exact same sequence of tokens (informally: they must be identical) -- and as long as that holds, it is NOT a violation for the specialization to be instantiated and defined in every TU that uses it; the linker is expected to see multiple identical definitions of the same instantiation (e.g. std::vector<int>'s member functions) across many object files and just discard the duplicates, keeping one (this is sometimes implemented via COMDAT sections/weak symbols at the object-file level, which is a linker mechanism specifically for merging duplicate-but-identical definitions instead of erroring). This is exactly WHY templates must be defined in headers in the first place: if vector<int>::push_back's body lived in a .cpp file, only that one TU could instantiate and link against it, and any other TU that included the header and used vector<int> would get a linker error, because the compiler never had the actual template body available at the point of instantiation in that other TU. The subtlety senior engineers should know: this identical-tokens requirement is why mixing headers built with different macro-driven customization (e.g. an X-macro or #ifdef inside a template's body) across TUs is a genuine ODR violation risk, even though 'it's just a template.'"},
  traps: [
   "Assuming a compile-clean, link-clean build proves there are no ODR violations -- most ODR violations produce no diagnostic at all and manifest only as runtime undefined behavior.",
@@ -6481,7 +6488,7 @@ DEEP_CONTENT['linking'] = {
 };
 
 DEEP_CONTENT['constexpr-basics'] = {
- def: "constexpr marks a function or variable as POTENTIALLY evaluable at compile time, not GUARANTEED to be -- a constexpr function must satisfy a set of restrictions (no undefined behavior, only calling other constexpr functions, since C++14 allowed loops/multiple statements/local variables) so that the compiler CAN evaluate it at compile time, but whether it actually does depends on context: called with arguments that are themselves compile-time constants in a context requiring a constant expression (array bounds, template arguments, a constexpr variable initializer), it runs at compile time; called with runtime-only arguments, the exact same function silently falls back to running as an ordinary function at runtime. consteval (C++20) removes that ambiguity entirely: a consteval ('immediate') function MUST be evaluated at compile time in every call, and it is a hard compile error if any call site cannot be constant-evaluated.",
+ def: "constexpr marks a function or variable as POTENTIALLY evaluable at compile time, not GUARANTEED to be -- a constexpr function's body must be something the compiler can evaluate during compilation (since C++14 that includes loops, multiple statements and local variables), and any call that IS evaluated at compile time must not hit undefined behavior or call a non-constexpr function -- a path that only runs at run time may still call ordinary functions, but whether it actually does depends on context: called with arguments that are themselves compile-time constants in a context requiring a constant expression (array bounds, template arguments, a constexpr variable initializer), it runs at compile time; called with runtime-only arguments, the exact same function silently falls back to running as an ordinary function at runtime. consteval (C++20) removes that ambiguity entirely: a consteval ('immediate') function MUST be evaluated at compile time in every call, and it is a hard compile error if any call site cannot be constant-evaluated.",
  why: "Compile-time computation eliminates runtime cost entirely for values known ahead of time (lookup tables, validated configuration, compile-time string hashing) and, for constexpr specifically, lets the same function serve double duty as both a compile-time and runtime implementation with no code duplication -- but senior engineers are expected to know that constexpr is a permission, not a promise, which matters when writing performance-critical code that assumes compile-time evaluation happened, and to know when consteval is the right tool to make that guarantee enforceable instead of hopeful.",
  analogy: "constexpr is like a store that says 'we CAN prepare your order fresh at 6am before opening if you place it the night before' -- if you order early enough with everything specified in advance, it's ready before the store even opens (compile-time evaluation); if you walk in and order on the spot with something only decided right then, they'll happily make it, just during business hours like a normal order (runtime evaluation), same recipe either way. consteval is a store that says 'we ONLY do overnight pre-orders, full stop' -- if you try to walk in and order on the spot, they refuse outright (compile error) rather than quietly falling back to serving you at counter speed.",
  code: "#include <array>\n\n// constexpr: CAN run at compile time, falls back to runtime if it must.\nconstexpr int factorial(int n) {\n  return (n <= 1) ? 1 : n * factorial(n - 1);\n}\n\n// consteval (C++20): MUST run at compile time, or it's a compile error.\nconsteval int factorial_strict(int n) {\n  return (n <= 1) ? 1 : n * factorial_strict(n - 1);\n}\n\nint runtime_value_from_user(); // pretend this reads user input\n\nint main() {\n  constexpr int a = factorial(5);      // forced compile-time: constexpr variable\n  std::array<int, factorial(6)> table; // MUST be compile-time: array bound\n\n  int n = runtime_value_from_user();\n  int b = factorial(n);                // compiles fine -- runs at RUNTIME instead,\n                                        // same function, no error, silent fallback\n\n  // int c = factorial_strict(n);      // COMPILE ERROR: n is not a constant\n                                        // expression, and consteval forbids fallback\n  return a + b;\n}\n",
@@ -6496,7 +6503,7 @@ DEEP_CONTENT['constexpr-basics'] = {
  realWorld: "Compile-time lookup tables and hashing are common production uses -- e.g. computing a CRC32 table, a set of trigonometric values, or a compile-time hash of a string literal (constexpr uint32_t hash = fnv1a(\"some_key\")) so the value is baked into the binary with zero runtime cost, versus computing it at every program startup; C++20's consteval is increasingly used for compile-time-only validation, like parsing and checking a format string or regular expression literal at compile time so malformed patterns are caught as compile errors rather than runtime exceptions.",
  mistake: "Assuming that marking a function constexpr GUARANTEES it runs at compile time everywhere it's called -- it does not; if the actual arguments at a given call site aren't compile-time constants, or the surrounding context doesn't require a constant expression, the exact same constexpr function quietly executes at runtime instead, with no warning, which can silently defeat a performance assumption ('I marked it constexpr so it's free') when the real call sites in the codebase pass runtime-only values.",
  interviewQ: {q: "You mark a function constexpr expecting it to always run at compile time, but a profiler shows it's actually consuming runtime CPU. What's going on, and how would you actually force compile-time evaluation?", a: "constexpr is a permission for the compiler to evaluate the function at compile time when possible -- it is not a mandate that it always will. If a particular call site passes an argument whose value isn't known until runtime (a value read from user input, a file, computed from another runtime value), the compiler cannot constant-evaluate that call, because it genuinely doesn't have the input value available during compilation -- so it silently compiles and runs the function as an ordinary runtime function instead, with no error or warning, since the function's body was written to be valid for both cases. To actually force compile-time evaluation and get a compile ERROR if that's not possible, either use the result to initialize something that requires a constant expression (constexpr int x = f(args); rather than just int x = f(args);, or an array bound, or a template non-type argument), or, in C++20, mark the function consteval instead of constexpr, which makes the compiler reject any call site that cannot be evaluated at compile time rather than silently falling back to runtime execution."},
- advancedQ: {q: "Why did C++ introduce consteval as a separate keyword instead of just adding an attribute like [[force_compile_time]] to an existing constexpr function?", a: "Because constexpr's core design goal from the start (C++11) was dual-mode: the exact same function definition should be usable in both compile-time and runtime contexts without duplicating code, which requires the function's body to be valid, well-defined C++ regardless of whether its inputs happen to be constants -- and critically, the SAME overload/function needs to remain callable from ordinary runtime code (this is what makes it possible, for example, to write one constexpr math function used both to initialize compile-time lookup tables and to compute the same thing later at runtime from user input). A pure 'always compile-time, error otherwise' semantic is a fundamentally different contract: it means the function can safely do things (or rather, callers can safely assume things about it) that only make sense if it truly never executes at runtime -- for example, functions that exist purely to validate compile-time-only invariants, produce values with no sensible runtime cost model, or intentionally prevent a library API from ever being invoked with a value the author didn't anticipate at compile time. Bolting that as an attribute onto constexpr would create an inconsistent, easily-misused hybrid (does the attribute change overload resolution? Does it change whether the function can even be called from a non-constant context, or does it become a runtime error instead of compile error?) -- a distinct keyword makes the contract explicit and lets overload resolution, name lookup, and diagnostics treat 'must be compile-time' functions as a genuinely distinct category from 'can be either' functions, which is also why a consteval function cannot even have its address taken (there's no meaningful runtime entity to point to)."},
+ advancedQ: {q: "Why did C++ introduce consteval as a separate keyword instead of just adding an attribute like [[force_compile_time]] to an existing constexpr function?", a: "Because constexpr's core design goal from the start (C++11) was dual-mode: the exact same function definition should be usable in both compile-time and runtime contexts without duplicating code, which requires the function's body to be valid, well-defined C++ regardless of whether its inputs happen to be constants -- and critically, the SAME overload/function needs to remain callable from ordinary runtime code (this is what makes it possible, for example, to write one constexpr math function used both to initialize compile-time lookup tables and to compute the same thing later at runtime from user input). A pure 'always compile-time, error otherwise' semantic is a fundamentally different contract: it means the function can safely do things (or rather, callers can safely assume things about it) that only make sense if it truly never executes at runtime -- for example, functions that exist purely to validate compile-time-only invariants, produce values with no sensible runtime cost model, or intentionally prevent a library API from ever being invoked with a value the author didn't anticipate at compile time. Bolting that as an attribute onto constexpr would create an inconsistent, easily-misused hybrid (does the attribute change overload resolution? Does it change whether the function can even be called from a non-constant context, or does it become a runtime error instead of compile error?) -- a distinct keyword makes the contract explicit and lets overload resolution, name lookup, and diagnostics treat 'must be compile-time' functions as a genuinely distinct category from 'can be either' functions, which is also why a consteval function's address cannot be taken outside another immediate (consteval) context (there's no meaningful runtime entity to point to)."},
  traps: [
   "Assuming constexpr guarantees compile-time evaluation -- it only permits it; runtime arguments silently produce runtime execution of the same function with zero diagnostic.",
   "Writing a constexpr function with undefined behavior on some inputs (e.g. signed integer overflow, out-of-bounds access) and assuming it's 'safe' because it's constexpr -- if that particular call happens to be evaluated at compile time, the compiler is required to reject it as ill-formed, but the exact same UB at runtime (a different call site with runtime arguments) is just silent, ordinary undefined behavior, same as any non-constexpr code.",
@@ -6522,10 +6529,10 @@ DEEP_CONTENT['static-keyword'] = {
  realWorld: "The 'static local variable as a thread-safe lazily-initialized singleton' pattern (Meyers' Singleton: static Widget& instance() { static Widget w; return w; }) is a standard, C++11-and-later-safe way to implement lazy singletons without hand-rolled double-checked locking, and is preferred over static class members for singletons specifically because it avoids the static initialization order fiasco across translation units that plagues plain static (global) objects.",
  mistake: "Assuming static local variable initialization is thread-safe in every C++ standard -- it is only guaranteed thread-safe since C++11; code targeting pre-C++11 compilers (or compiled with certain older compiler flags) can have a genuine data race if multiple threads race through a static local variable's first initialization, corrupting state or double-running side-effecting initializer code -- a subtle portability trap when working with legacy codebases or embedded toolchains that don't fully implement C++11 threading guarantees.",
  interviewQ: {q: "What are the three different things 'static' can mean in C++, and how do you tell which one applies just from where the keyword appears?", a: "It depends entirely on where static is written. Inside a function body, on a local variable (static int x = 0; inside a function), it means static STORAGE DURATION: the variable is allocated once for the whole program, initialized exactly once on first execution of that declaration (thread-safely, since C++11), and retains its value across calls, while its NAME remains scoped only to that function -- nothing to do with linkage or classes. Inside a class definition, on a member (static int count; or static void foo();), it means the member belongs to the class itself rather than to any instance: there is exactly one shared copy of a static data member across all objects (defined once, out-of-line, in exactly one .cpp, unless it's also const/inline), and a static member function has no implicit this parameter and can only access other static members directly. At namespace/global scope, outside any class and outside any function (static int x; or static void helper(); at file scope), it means internal linkage: the entity is visible and linkable only within its own translation unit, invisible to the linker in every other .cpp file, which is the standard tool for avoiding name collisions and multiple-definition linker errors for file-local helpers. All three share the literal keyword but are otherwise conceptually unrelated -- lifetime/storage duration, class-level sharing, and linkage, respectively."},
- advancedQ: {q: "Explain exactly how the compiler makes static local variable initialization thread-safe, and what the actual runtime cost is on every call after the first.", a: "For a function-local static with a non-trivial (runtime-computed) initializer, the compiler can't just zero-initialize it at load time the way it could for a static namespace-scope POD with a constant initializer -- it has to run real initialization code the first time control reaches that declaration, and C++11 mandates that this first-time initialization is thread-safe: if two threads simultaneously reach the declaration for the first time, exactly one of them must run the initializer while any other concurrent caller blocks until it completes, and no thread should ever observe a partially-constructed object. Compilers implement this (per the Itanium C++ ABI, used by GCC/Clang on most platforms) by emitting a hidden 64-bit guard variable alongside the static object; on entry to the function, generated code loads the low byte of the guard and checks if initialization is already complete -- if so, it's a single cheap atomic load and branch, effectively free after the first call. If not complete, the compiler emits a call to a runtime helper, __cxa_guard_acquire, which does the actual locking (historically a global mutex per guard variable, effectively a double-checked-locking pattern implemented in the C++ runtime rather than by the programmer); the initializer runs, and __cxa_guard_release marks the guard complete and releases waiting threads. So the actual steady-state cost after first initialization is just one atomic-ish load and a predictable branch per call -- essentially free -- while the one-time cost includes the actual lock acquisition, which is why this pattern is favored for lazy singletons over static namespace-scope objects (which run their initializer unconditionally during static initialization, with no such guard, and are subject to unspecified cross-TU initialization order)."},
+ advancedQ: {q: "Explain exactly how the compiler makes static local variable initialization thread-safe, and what the actual runtime cost is on every call after the first.", a: "For a function-local static with a non-trivial (runtime-computed) initializer, the compiler can't just zero-initialize it at load time the way it could for a static namespace-scope POD with a constant initializer -- it has to run real initialization code the first time control reaches that declaration, and C++11 mandates that this first-time initialization is thread-safe: if two threads simultaneously reach the declaration for the first time, exactly one of them must run the initializer while any other concurrent caller blocks until it completes, and no thread should ever observe a partially-constructed object. Compilers implement this (per the Itanium C++ ABI, used by GCC/Clang on most platforms) by emitting a hidden 64-bit guard variable alongside the static object; on entry to the function, generated code loads the low byte of the guard and checks if initialization is already complete -- if so, it's a single cheap atomic load and branch, effectively free after the first call. If not complete, the compiler emits a call to a runtime helper, __cxa_guard_acquire, which does the actual locking (a single global mutex shared by all guard variables in older runtimes, a futex on the guard word on modern Linux -- effectively a double-checked-locking pattern implemented in the C++ runtime rather than by the programmer); the initializer runs, and __cxa_guard_release marks the guard complete and releases waiting threads. So the actual steady-state cost after first initialization is just one atomic-ish load and a predictable branch per call -- essentially free -- while the one-time cost includes the actual lock acquisition, which is why this pattern is favored for lazy singletons over static namespace-scope objects (which run their initializer unconditionally during static initialization, with no such guard, and are subject to unspecified cross-TU initialization order)."},
  traps: [
   "Confusing static local variable persistence with a static class member's cross-instance sharing -- they're unrelated: a static local is one persistent variable per FUNCTION, a static member is one shared variable per CLASS.",
-  "Forgetting that a static class data member must be defined exactly once outside the class body (in a .cpp) unless it's also inline (C++17) or a const integral type initialized in-class with a constant expression -- a common linker 'undefined reference' surprise for engineers used to Java/C# static fields that don't require a separate out-of-class definition.",
+  "Forgetting that a static class data member must be defined exactly once outside the class body (in a .cpp) unless it's also inline (C++17; a static constexpr member is implicitly inline) or a const integral member initialized in-class that is never odr-used (binding it to a reference, e.g. std::max(a, S::N), or taking its address still needs an out-of-class definition) -- a common linker 'undefined reference' surprise for engineers used to Java/C# static fields that don't require a separate out-of-class definition.",
   "Assuming static local initialization thread-safety ('magic statics') applies retroactively to all C++ code -- it's a C++11 guarantee; older standards or certain compiler flags (e.g. some embedded toolchains) can have a genuine race on first initialization.",
   "Using static at namespace scope for internal linkage in modern C++ instead of an unnamed (anonymous) namespace, without realizing that for entities OTHER than free functions and variables (e.g. type definitions), only anonymous namespaces achieve internal linkage-like protection -- static's internal-linkage meaning doesn't apply to types the same way.",
   "Calling a static member function through an instance (obj.staticMethod()) and mistakenly assuming it can see obj's non-static members through some implicit binding -- it cannot; static member functions never receive a this pointer regardless of call syntax."
@@ -6545,7 +6552,7 @@ DEEP_CONTENT['extern-keyword'] = {
   "When consumer.cpp (a .cpp file, so __cplusplus IS defined) includes the same header, the extern C block IS active, telling the C++ compiler: for this specific declaration, use C linkage naming rules -- so the C++ compiler emits a call instruction targeting the plain symbol c_add instead of a C++-mangled name like _Z5c_addii.",
   "At link time, consumer.o's call to plain symbol c_add matches exactly against the C-compiled library's exported plain symbol c_add, and linking succeeds -- without extern \"C\", the C++ compiler would have looked for a mangled symbol that the C-compiled library never produced, causing an 'undefined reference' linker error despite the function obviously existing."
  ],
- memory: "extern on a variable/function declaration produces zero code and zero storage by itself -- it purely affects what the compiler records in its symbol table as 'referenced, defined elsewhere' versus what it treats as a full definition needing real storage allocation. extern \"C\" affects the compiler's name-mangling algorithm specifically: with it, the emitted symbol in the object file's symbol table is the plain function name (subject to platform-specific prepending like a leading underscore on some systems), whereas without it, C++ encodes the function's full signature (parameter types, namespace, class, const-ness, template arguments) into the symbol via a mangling scheme (e.g. Itanium ABI mangling used by GCC/Clang), which is precisely what enables function overloading to work at the linker level (two overloads produce two differently-mangled, non-colliding symbols) but is also exactly why plain C code, whose toolchain never mangles anything, can't link against a C++ symbol without extern \"C\" bridging the two naming conventions.",
+ memory: "extern on a variable/function declaration produces zero code and zero storage by itself -- it purely affects what the compiler records in its symbol table as 'referenced, defined elsewhere' versus what it treats as a full definition needing real storage allocation. extern \"C\" affects the compiler's name-mangling algorithm specifically: with it, the emitted symbol in the object file's symbol table is the plain function name (subject to platform-specific prepending like a leading underscore on some systems), whereas without it, C++ encodes the function's full signature (parameter types -- including const on pointed-to or referred-to types, but not top-level const on a by-value parameter -- namespace, class, template arguments) into the symbol via a mangling scheme (e.g. Itanium ABI mangling used by GCC/Clang), which is precisely what enables function overloading to work at the linker level (two overloads produce two differently-mangled, non-colliding symbols) but is also exactly why plain C code, whose toolchain never mangles anything, can't link against a C++ symbol without extern \"C\" bridging the two naming conventions.",
  realWorld: "Virtually every major C library exposed to C++ (SQLite, zlib, most OS system-call wrappers, hardware vendor SDKs) ships headers wrapped in #ifdef __cplusplus / extern \"C\" { ... } / #endif specifically so the same header works unmodified whether it's included by a C compiler or a C++ compiler -- and this pattern is exactly what you're expected to replicate when you write a C++ library that needs a stable, C-ABI-compatible plugin interface (common in codecs, audio/video plugin systems, and cross-compiler shared library boundaries, since C++ ABI itself is not standardized across compilers/versions, but the C ABI effectively is on a given platform).",
  mistake: "Forgetting that extern \"C\" only disables name mangling -- it does NOT make full C++ features (classes, templates, overloading, exceptions crossing the boundary safely, default arguments being visible to a C caller) magically compatible with C; declaring two overloaded functions both as extern \"C\" is a compile error (extern \"C\" functions can't be overloaded, because C linkage requires their unmangled names to be unique), and throwing a C++ exception across a call boundary into C code (which has no concept of unwinding) is undefined behavior even if the function is correctly marked extern \"C\".",
  interviewQ: {q: "You have a C library with a header full of function declarations, and you need to call it from C++. Why won't it just link if you #include the header directly, and what's the standard fix?", a: "By default, a C++ compiler applies name mangling to every function it compiles, encoding the function's parameter types (and namespace/class, if any) into the actual linker symbol name, specifically so that overloaded functions with the same source-level name get distinct, non-colliding linker symbols. A C compiler never does this -- C has no overloading, so it emits the plain function name (perhaps with a single leading underscore convention on some platforms) as the linker symbol, with no encoding of parameter types. If you just #include the C library's header in a .cpp file and call its functions normally, the C++ compiler will mangle the declared functions and emit calls to mangled symbol names like _Z3addii, but the actual compiled C library's object file or .so only exports the plain, unmangled name add -- so at link time, the linker looks for _Z3addii, finds nothing matching, and every one of those calls fails with 'undefined reference,' even though the function clearly exists under a name a human would recognize. The standard fix is wrapping the C library's declarations in extern \"C\" { ... } (usually already done for you inside an #ifdef __cplusplus guard within the library's own header, precisely so the header works for both C and C++ consumers without modification) -- this tells the C++ compiler to use C linkage (no mangling) for those specific declarations, so the emitted symbol names match exactly what the C-compiled library actually exports."},
@@ -6563,7 +6570,7 @@ DEEP_CONTENT['namespaces'] = {
  def: "A namespace is a named declarative region that scopes identifiers to avoid collisions between unrelated pieces of code that happen to choose the same name -- namespace geo { class Point {}; } and namespace ui { class Point {}; } can coexist because they're accessed as geo::Point and ui::Point. Namespaces can nest (namespace company::module::detail {} since C++17's nested-namespace shorthand), and names inside them are brought into scope either narrowly via a using-declaration (using std::cout; -- imports exactly one name) or broadly via a using-directive (using namespace std; -- imports every name in the namespace into the current scope), with the latter being specifically dangerous in headers because it silently pollutes the namespace of every translation unit that (transitively) includes that header, reintroducing exactly the collision risk namespaces exist to prevent. An anonymous (unnamed) namespace is the modern, standard-recommended alternative to file-scope static for giving free functions, variables, and TYPES (which static alone cannot do) internal linkage.",
  why: "At the scale of any real codebase pulling in multiple third-party libraries plus its own large surface area, name collisions are inevitable without disciplined namespacing, and 'using namespace X;' in a header is a classic, real-world bug source: it can silently change which overload gets called, introduce ambiguous-overload compile errors in unrelated code far from the header, or even change program behavior invisibly when two included libraries both define an identically-named function and the wrong one starts winning overload resolution -- which is exactly why virtually every C++ style guide bans using-directives in headers and restricts them, if used at all, to the narrowest possible local scope inside a .cpp file.",
  analogy: "A namespace is like a person's full mailing address disambiguating 123 Main St in Springfield, Illinois from 123 Main St in Springfield, Ohio -- without the city/state qualifier (the namespace), two genuinely different places collide under the same street address. A using-directive is like posting a public notice at the town hall saying 'from now on, just say 123 Main St and we'll assume you mean the Springfield, Illinois one' -- convenient for one specific conversation, but if you post that notice inside a shared, widely-read newsletter (a header) rather than a private conversation (a local scope in one .cpp file), you've just broken mail delivery for everyone else in town who reads that newsletter and actually needed to specify Ohio.",
- code: "// geometry.h\nnamespace geo {\n  struct Point { double x, y; };\n  double distance(const Point& a, const Point& b);\n}\n\n// DANGEROUS: never do this in a header.\n// using namespace geo; // would inject Point/distance into every includer's scope\n\n// consumer.cpp\n#include \"geometry.h\"\n#include <iostream>\n\n// A narrow using-declaration: imports exactly ONE name, safe even at file scope\n// in a .cpp (never do this in a header either, but far less dangerous than a\n// using-directive since it only shadows one specific name, not everything).\nusing geo::distance;\n\nnamespace app::detail { // C++17 nested-namespace shorthand for\n                         // namespace app { namespace detail { ... } }\n  // Anonymous namespace: gives everything inside it INTERNAL LINKAGE,\n  // including types, which plain 'static' cannot do for a class/struct.\n  namespace {\n    struct Helper { int cachedValue = 0; }; // invisible outside this TU\n  }\n  int computeSomething() {\n    Helper h; // fine, visible within this same TU\n    return h.cachedValue;\n  }\n}\n\nint main() {\n  geo::Point p1{0, 0}, p2{3, 4};\n  std::cout << distance(p1, p2) << \"\\n\"; // 5, via the using-declaration\n  std::cout << app::detail::computeSomething() << \"\\n\";\n  return 0;\n}\n",
+ code: "// geometry.h\nnamespace geo {\n  struct Point { double x, y; };\n  double distance(const Point& a, const Point& b);\n}\n\n// geometry.cpp\n//   #include \"geometry.h\"\n//   #include <cmath>\n//   double geo::distance(const Point& a, const Point& b) {\n//     return std::hypot(a.x - b.x, a.y - b.y);\n//   }\n\n// DANGEROUS: never do this in a header.\n// using namespace geo; // would inject Point/distance into every includer's scope\n\n// consumer.cpp\n#include \"geometry.h\"\n#include <iostream>\n\n// A narrow using-declaration: imports exactly ONE name, safe even at file scope\n// in a .cpp (never do this in a header either, but far less dangerous than a\n// using-directive since it only shadows one specific name, not everything).\nusing geo::distance;\n\nnamespace app::detail { // C++17 nested-namespace shorthand for\n                         // namespace app { namespace detail { ... } }\n  // Anonymous namespace: gives everything inside it INTERNAL LINKAGE,\n  // including types, which plain 'static' cannot do for a class/struct.\n  namespace {\n    struct Helper { int cachedValue = 0; }; // invisible outside this TU\n  }\n  int computeSomething() {\n    Helper h; // fine, visible within this same TU\n    return h.cachedValue;\n  }\n}\n\nint main() {\n  geo::Point p1{0, 0}, p2{3, 4};\n  std::cout << distance(p1, p2) << \"\\n\"; // 5, via the using-declaration\n  std::cout << app::detail::computeSomething() << \"\\n\";\n  return 0;\n}\n",
  steps: [
   "geo::Point and geo::distance are declared inside namespace geo, so their fully-qualified names are geo::Point and geo::distance -- any code outside the geo namespace must either qualify them or explicitly bring them into scope.",
   "using geo::distance; in consumer.cpp is a using-DECLARATION: it introduces exactly the single name distance (referring specifically to geo::distance) into the current scope, so bare distance(p1, p2) resolves to geo::distance without qualification, while geo::Point still needs full qualification since it was never individually imported.",
@@ -6603,7 +6610,7 @@ DEEP_CONTENT['type-casting'] = {
  realWorld: "dynamic_cast is the standard, correct tool anytime you have a polymorphic base-class pointer/reference and genuinely need to check, at runtime, whether it's actually some more specific derived type before doing derived-specific work (a classic case: iterating a collection of Shape* and needing to specially handle only the Circle* ones) -- while reinterpret_cast shows up legitimately in low-level code like network protocol parsing (reinterpreting a raw byte buffer's bits as a specific struct layout, though std::bit_cast or memcpy are the standards-safer modern equivalents), hardware register access in embedded firmware, and implementing custom memory allocators.",
  mistake: "Reaching for a C-style cast (T)expr out of habit or brevity, without realizing it silently selects among all four named casts based purely on which one happens to compile -- code that looks like an innocuous static_cast-equivalent conversion can silently be doing a reinterpret_cast (with all its danger and lack of runtime checking) the moment the types involved aren't related in a way static_cast alone permits, and this is completely invisible from the call site's syntax, which is exactly why most modern C++ style guides ban C-style casts outright in favor of the explicit named casts.",
  interviewQ: {q: "Why is a C-style cast considered more dangerous than the four named C++ casts, given that it can technically do everything they can?", a: "The danger isn't capability, it's ambiguity and silent escalation. Each named cast has a narrow, explicit, greppable contract: static_cast performs compiler-checked-but-not-runtime-checked related-type conversions, dynamic_cast adds an actual runtime safety check for polymorphic downcasts, const_cast only ever touches const/volatile qualification, and reinterpret_cast does an essentially unchecked bit-level reinterpretation. A C-style cast (T)expr, by the language's own defined rules, is specified to try these in a fixed sequence -- roughly const_cast, then static_cast, then static_cast combined with const_cast, then finally reinterpret_cast possibly combined with const_cast -- and silently uses whichever one is the first to successfully compile for the given source and target types. This means the exact same textual cast syntax can resolve to a perfectly safe, compiler-verified static_cast for one pair of types, and to a completely unchecked reinterpret_cast for a different pair of types, with absolutely no visual or syntactic difference between the two at the call site -- a reviewer (or the original author, months later) cannot tell from reading (Foo*)ptr alone whether that's a safe, related-type conversion or a dangerous bit-level reinterpretation of unrelated memory. Worse, if a class hierarchy is refactored later such that two types that used to be related (making the C-style cast resolve as a safe static_cast) become unrelated, the C-style cast doesn't produce a compile error -- it just silently falls through to becoming a reinterpret_cast instead, changing the program's safety properties with zero warning. The named casts make this failure mode structurally impossible: grep for reinterpret_cast in a diff and you immediately know exactly what kind of risk was introduced, which is precisely the auditability C-style casts destroy."},
- advancedQ: {q: "dynamic_cast requires the source type to be polymorphic (have at least one virtual function). Explain mechanistically why that requirement exists, and what happens if you try to dynamic_cast from a non-polymorphic type.", a: "dynamic_cast's entire runtime safety check depends on being able to discover an object's ACTUAL, most-derived dynamic type at runtime, as opposed to its static (compile-time-known) type -- and the only place C++ stores that runtime type information is in the vtable that every polymorphic object carries a pointer to as a hidden member (inserted by the compiler the moment a class declares or inherits any virtual function). Each polymorphic class's vtable is associated with a type_info object (part of RTTI) and, in most ABI implementations (e.g. Itanium), additional structures describing the class's actual inheritance graph, letting the dynamic_cast runtime routine start from the object's vptr, find its true most-derived type_info, and then walk that type's real inheritance relationships to determine whether the requested target type is actually reachable from there (accounting for multiple and virtual inheritance, where naive static offset arithmetic wouldn't be sufficient anyway). A non-polymorphic object has no vtable pointer and no associated RTTI at all -- there is literally no runtime-accessible information distinguishing 'this is genuinely a Derived object' from 'this is genuinely a Base object' beyond its static, compile-time type, because nothing about a non-polymorphic object's memory layout records its dynamic type. Consequently, attempting dynamic_cast on a pointer/reference to a non-polymorphic type is a COMPILE-time error (not a runtime failure) -- the compiler statically knows dynamic_cast can never work for that type and refuses to compile it, specifically because it would have no runtime type information to consult even if it tried. This is also exactly why an interviewer might probe: 'if you need runtime type-safe downcasting on a class hierarchy, that hierarchy MUST already have at least one virtual function' -- often satisfied incidentally by simply having a virtual destructor, which is itself best practice for any base class intended to be deleted polymorphically, so the two considerations (safe polymorphic deletion, and dynamic_cast eligibility) frequently align."},
+ advancedQ: {q: "dynamic_cast requires the source type to be polymorphic (have at least one virtual function). Explain mechanistically why that requirement exists, and what happens if you try to dynamic_cast from a non-polymorphic type.", a: "dynamic_cast's entire runtime safety check depends on being able to discover an object's ACTUAL, most-derived dynamic type at runtime, as opposed to its static (compile-time-known) type -- and the only place C++ stores that runtime type information is in the vtable that every polymorphic object carries a pointer to as a hidden member (inserted by the compiler the moment a class declares or inherits any virtual function). Each polymorphic class's vtable is associated with a type_info object (part of RTTI) and, in most ABI implementations (e.g. Itanium), additional structures describing the class's actual inheritance graph, letting the dynamic_cast runtime routine start from the object's vptr, find its true most-derived type_info, and then walk that type's real inheritance relationships to determine whether the requested target type is actually reachable from there (accounting for multiple and virtual inheritance, where naive static offset arithmetic wouldn't be sufficient anyway). A non-polymorphic object has no vtable pointer and no associated RTTI at all -- there is literally no runtime-accessible information distinguishing 'this is genuinely a Derived object' from 'this is genuinely a Base object' beyond its static, compile-time type, because nothing about a non-polymorphic object's memory layout records its dynamic type. Consequently, attempting a dynamic_cast DOWNCAST (or cross-cast) from a non-polymorphic type is a COMPILE-time error (not a runtime failure) -- an upcast to a base class is still allowed, because it needs no runtime check -- the compiler statically knows dynamic_cast can never work for that type and refuses to compile it, specifically because it would have no runtime type information to consult even if it tried. This is also exactly why an interviewer might probe: 'if you need runtime type-safe downcasting on a class hierarchy, that hierarchy MUST already have at least one virtual function' -- often satisfied incidentally by simply having a virtual destructor, which is itself best practice for any base class intended to be deleted polymorphically, so the two considerations (safe polymorphic deletion, and dynamic_cast eligibility) frequently align."},
  traps: [
   "Using static_cast for a downcast (base pointer to derived pointer) without first confirming, by some other means, that the object really is of the derived type -- static_cast performs zero runtime verification, silently producing undefined behavior on a wrong guess instead of a checkable failure.",
   "Forgetting to check a dynamic_cast pointer result for nullptr before dereferencing it, which defeats the entire safety benefit dynamic_cast exists to provide.",
@@ -6615,7 +6622,7 @@ DEEP_CONTENT['type-casting'] = {
 
 DEEP_CONTENT['enums'] = {
  def: "A plain (unscoped) enum, enum Color { Red, Green, Blue };, injects its enumerator names directly into the ENCLOSING scope (so Red, not Color::Red, is what you write) and implicitly converts to its underlying integer type in arithmetic and comparison contexts -- both of which are common sources of bugs: name collisions with the enclosing scope, and accidental comparisons/arithmetic between logically unrelated enums that both happen to convert to int. enum class (scoped enum, C++11), enum class Color { Red, Green, Blue };, fixes both problems: enumerator names are scoped to the enum itself (must be written Color::Red), and there is NO implicit conversion to int or to any other enum type -- you must use static_cast to convert explicitly. Both kinds let you specify the underlying integer type explicitly (enum class Color : uint8_t { ... }), controlling the enum's storage size, which matters for memory layout, serialization, and ABI compatibility.",
- why: "enum class is one of the clearest 'always prefer the newer feature' recommendations in modern C++ because it eliminates two real, recurring bug classes at zero runtime cost -- name pollution (an unscoped enum's Red colliding with another enum's Red, or with an unrelated variable/function named Red, in the same scope) and accidental cross-enum comparisons (if (trafficLightState == fruitColorState) silently compiling and evaluating true/false based on both enums' underlying int values, which is almost certainly a bug the moment it happens) -- so seeing (and defending) enum class as the default choice, reserving plain enum only for specific legacy-interop or implicit-conversion-is-actually-wanted cases, is a standard marker of current C++ fluency.",
+ why: "enum class is one of the clearest 'always prefer the newer feature' recommendations in modern C++ because it eliminates two real, recurring bug classes at zero runtime cost -- name pollution (an unscoped enum's Red colliding with another enum's Red, or with an unrelated variable/function named Red, in the same scope) and accidental cross-enum comparisons (if (trafficLightState == fruitColorState) compiling (at best with a warning) and evaluating true/false based on both enums' underlying int values, which is almost certainly a bug the moment it happens) -- so seeing (and defending) enum class as the default choice, reserving plain enum only for specific legacy-interop or implicit-conversion-is-actually-wanted cases, is a standard marker of current C++ fluency.",
  analogy: "A plain enum is like a small startup company where every employee's first name is used company-wide with no last name or department qualifier -- fine until two departments both hire someone named Alex, and now 'tell Alex' is genuinely ambiguous, or worse, someone accidentally emails the wrong Alex without any error, because both are equally valid unqualified names in the same shared space. enum class is like requiring department-qualified names (Engineering.Alex vs Sales.Alex) -- unambiguous by construction, and it also refuses to let you accidentally compare an Engineering employee's ID number against a Sales employee's ID number just because both ID numbers happen to be integers under the hood; you'd have to explicitly say 'compare these as raw numbers' (static_cast) if you really meant to do that.",
  code: "#include <cstdint>\n#include <iostream>\n\n// Unscoped enum: names pollute the enclosing scope, implicit int conversion.\nenum TrafficLight { Red, Yellow, Green }; // Red == 0, Yellow == 1, Green == 2\nenum FruitColor { Apple_Red, Banana_Yellow }; // avoids collision only by\n                                               // manually prefixing names --\n                                               // a workaround the language\n                                               // shouldn't require\n\nvoid unscopedProblem() {\n  TrafficLight light = Red;\n  int asInt = light;              // implicit conversion, no cast needed\n  if (light == 0) { /* silently compiles: comparing enum to raw int */ }\n}\n\n// Scoped enum (enum class): names are scoped, NO implicit int conversion,\n// and you control the underlying storage type explicitly.\nenum class Color : uint8_t { Red, Green, Blue }; // exactly 1 byte of storage\nenum class Status : uint8_t { Red, Pending, Green }; // 'Red' reused safely --\n                                                       // no collision at all\n\nvoid scopedSafety() {\n  Color c = Color::Red;           // must qualify with Color::\n  // int bad = c;                 // COMPILE ERROR: no implicit conversion\n  int good = static_cast<int>(c); // must be explicit about the intent\n\n  // if (c == Status::Red)        // COMPILE ERROR: different enum types,\n                                   // not implicitly comparable at all --\n                                   // exactly the bug class enum class exists\n                                   // to catch at compile time\n  std::cout << good << \"\\n\";\n}\n",
  steps: [
@@ -6634,9 +6641,9 @@ DEEP_CONTENT['enums'] = {
  traps: [
   "Relying on a plain enum's enumerator names being available unqualified, then adding a second enum to the same scope that happens to want an identically-named enumerator, causing a redefinition error that enum class would have avoided by construction.",
   "Assuming enum class and plain enum share the same default underlying type -- an enum class with no explicit type is always int, while a plain enum with no explicit type gets an implementation-defined integer type large enough for its enumerators (commonly int), and relying on that unspecified default size for anything serialization- or ABI-sensitive is a portability risk.",
-  "Forgetting that switch statements over an enum class still require the fully qualified case Color::Red: syntax (not bare case Red:), a small but very common early adoption friction point.",
+  "Forgetting that switch statements over an enum class still require the fully qualified case Color::Red: syntax (not bare case Red:), a small but very common early adoption friction point -- C++20's using enum Color; inside the switch lets you write the bare names again.",
   "Writing static_cast<int>(enumClassValue) so often, in so many places, that the codebase effectively re-creates plain enum's implicit-conversion behavior manually and loses most of the type-safety benefit -- a sign the design should centralize the conversion in one named helper function or overloaded operator instead of scattering casts everywhere.",
-  "Comparing two plain (unscoped) enum values from logically unrelated enum TYPES and having it silently compile and produce a meaningless true/false result, because both freely convert to a common integer type for the comparison -- exactly the bug enum class is designed to catch as a compile error instead."
+  "Comparing two plain (unscoped) enum values from logically unrelated enum TYPES and having it compile and produce a meaningless true/false result, because both freely convert to a common integer type for the comparison (GCC warns by default with -Wenum-compare, and C++20 deprecates comparing different enumeration types, but it still compiles) -- exactly the bug enum class is designed to catch as a compile error instead."
  ]
 };
 
@@ -6651,9 +6658,9 @@ DEEP_CONTENT['structs'] = {
   "class BankAccount { double balance_ = 0.0; ... }; declares balance_ with no access specifier -- the compiler applies class's default of private, so acc.balance_ would be a compile error from main(), forcing all access through the explicitly public deposit()/balance() methods.",
   "StrictPoint demonstrates a struct with an explicit private: section for its data, followed by an explicit public: constructor -- functionally indistinguishable from writing the identical thing as a class, proving the keyword choice made zero difference once access specifiers are written explicitly.",
   "struct Derived : public Base {} demonstrates a struct participating in inheritance and polymorphism (Base has a virtual destructor) exactly as a class would -- the only default-related nuance is that if Derived had instead been written as struct Derived : Base {} (no access specifier on the base), it would default to PUBLIC inheritance (because Derived is a struct), whereas class Derived : Base {} without an access specifier would default to PRIVATE inheritance -- this is actually the second (often overlooked) default-access difference between the two keywords, applying to base-class access as well as member access.",
-  "Both Point and BankAccount compile, run, and produce identical machine code shapes for equivalent designs -- the keyword itself leaves zero trace in the compiled output; it exists purely to set defaults the programmer can always override explicitly."
+  "Both Point and BankAccount compile, run, and produce identical machine code shapes for equivalent designs -- under GCC and Clang the keyword itself leaves no trace in the compiled output (MSVC's name mangling is the exception); it exists purely to set defaults the programmer can always override explicitly."
  ],
- memory: "struct versus class has absolutely no effect on memory layout, size, alignment, vtable presence, or any other runtime/ABI property -- two types with identical members, methods, and explicitly-written access specifiers produce byte-for-byte identical object layouts and identical generated code regardless of which keyword declared them; the keyword is purely a compile-time default-access-specifier selector consumed entirely by the front end during parsing/semantic analysis, with zero representation left in the emitted object code.",
+ memory: "struct versus class has absolutely no effect on memory layout, size, alignment, vtable presence, or any other runtime/ABI property -- two types with identical members, methods, and explicitly-written access specifiers produce byte-for-byte identical object layouts and identical generated code regardless of which keyword declared them; the keyword is purely a compile-time default-access-specifier selector consumed entirely by the front end during parsing/semantic analysis. One exception worth knowing: MSVC's name mangling DOES encode the keyword (class as V, struct as U), so declaring a type as struct in one file and class in another can cause link errors under the Microsoft ABI -- GCC and Clang's Itanium mangling doesn't encode it, and Clang warns about such mismatches with -Wmismatched-tags.",
  realWorld: "Standard library and API design conventions consistently follow the struct-means-data / class-means-behavior convention as a readability signal: std::pair and std::tuple-like helper types, coordinate/vector-math types in graphics libraries, and configuration/options structs passed to functions (e.g. a struct RequestOptions { bool retry = true; int timeoutMs = 5000; }; passed as a single named-parameter-like bundle) are virtually always declared as struct with public data and minimal behavior, immediately signaling to any reader 'this is a plain data bag, feel free to construct and inspect it directly' without needing to read past the keyword.",
  mistake: "Believing struct is somehow more restricted than class (can't have constructors, can't have private members, can't inherit, can't have virtual functions) -- none of that is true; the ONLY differences are the two default-access rules (member access defaults to public for struct/private for class, and base-class inheritance access defaults to public for struct/private for class), and every other capability is fully and identically available to both keywords.",
  interviewQ: {q: "In C++, what is the actual, technical difference between struct and class -- not the convention, the language rule?", a: "There are exactly two, both about DEFAULTS, and nothing else: first, members declared with no explicit access specifier default to public in a struct and private in a class; second, when deriving from a base class/struct without writing an explicit access specifier on the base (e.g. struct D : Base {} versus class D : Base {}), the inheritance itself defaults to public for a struct-derived type and private for a class-derived type. Every other language feature -- constructors, destructors, member functions (including virtual and pure virtual), static members, templates, operator overloading, friend declarations, the ability to inherit from or be inherited by anything -- is fully and identically available to both keywords with zero restriction either way; you can write a struct that is byte-for-byte and behavior-for-behavior identical to some class simply by adding explicit access specifiers matching what you want. This is genuinely different from languages like C# or Swift, where struct and class denote fundamentally different things (value-type-with-stack-or-inline-allocation-and-copy-semantics versus reference-type-with-heap-allocation-and-identity-semantics) -- in C++, struct and class are the exact same underlying construct, and the choice between them in idiomatic modern C++ is purely a readability convention (struct signals 'simple public data aggregate,' class signals 'encapsulated behavior with private invariants'), never an enforced language distinction."},
@@ -6700,7 +6707,7 @@ DEEP_CONTENT['functions-basics'] = {
  analogy: "Pass-by-value is photocopying an entire report and handing someone the copy -- they can scribble all over it freely, and the original stays untouched on your desk, but you paid the cost of the photocopier for every page. Pass-by-reference is handing someone the actual original report in a shared binder that both of you can see and (if not marked read-only) write in -- no copying cost, but they're now looking at and potentially altering your real document. Pass-by-pointer is like leaving a report at a specific desk location and handing someone a sticky note with that desk's address -- they can go check the report (or find nothing, if the desk is empty/null), and can even redirect the sticky note to point at a totally different desk later, which a reference can never do once bound.",
  code: "#include <string>\n#include <iostream>\n\n// Pass-by-value: makes a full copy (or move, for an rvalue argument).\n// Fine for small/cheap types; wasteful for a large std::string if unneeded.\nvoid byValue(std::string s) { s += \"!\"; } // modifies only the LOCAL copy\n\n// Pass-by-const-reference: no copy at all, read-only access to caller's object.\nvoid byConstRef(const std::string& s) { std::cout << s.size() << \"\\n\"; }\n\n// Pass-by-reference (mutable): no copy, function can modify caller's object.\nvoid byRef(std::string& s) { s += \"!\"; } // modifies the CALLER's actual object\n\n// Pass-by-pointer: no copy, explicitly nullable, requires a null check.\nvoid byPointer(std::string* s) {\n  if (s) *s += \"!\"; // must check for null; caller passed &original or nullptr\n}\n\n// Return by value: RVO / mandatory copy elision (C++17, for this exact\n// pattern) constructs the result DIRECTLY in the caller's storage --\n// no temporary, no copy, no move, despite 'returning by value'.\nstd::string buildGreeting(const std::string& name) {\n  return \"Hello, \" + name; // constructed directly into caller's variable\n}\n\nint main() {\n  std::string greeting = \"hi\";\n  byValue(greeting);      // greeting is UNCHANGED -- byValue only touched a copy\n  byConstRef(greeting);   // no copy, read-only\n  byRef(greeting);        // greeting IS now \"hi!\" -- mutated through the reference\n  byPointer(&greeting);   // greeting is now \"hi!!\" -- mutated through the pointer\n\n  std::string result = buildGreeting(\"Ada\"); // no extra copy thanks to RVO\n  std::cout << greeting << \" / \" << result << \"\\n\";\n  return 0;\n}\n",
  steps: [
-  "byValue(greeting) copies greeting's entire character buffer into the function's local parameter s (a full, independent std::string) -- this copy costs an allocation and a memcpy-like operation proportional to the string's length, and any modification to s inside byValue has zero effect on the caller's greeting.",
+  "byValue(greeting) copies greeting's characters into the function's local parameter s (a full, independent std::string) -- for a long string this costs a heap allocation plus a copy proportional to its length (a short string like \"hi\" fits in the small-string buffer, so here it is just a small copy), and any modification to s inside byValue has zero effect on the caller's greeting.",
   "byConstRef(greeting) binds the reference parameter s directly to greeting's own memory -- no allocation, no copy, and the const qualifier prevents the function from accidentally mutating the caller's object, making the function's read-only intent both fast and explicit in its signature.",
   "byRef(greeting) similarly binds directly to greeting with no copy, but WITHOUT const, so s += \"!\"; inside the function directly mutates greeting itself -- after this call returns, greeting has actually changed, which is why non-const reference parameters should be used deliberately and named/documented clearly, since the call site f(greeting) gives no syntactic hint that greeting might be modified (unlike f(&greeting), whose & at least visually signals 'address being taken/possibly modified').",
   "byPointer(&greeting) explicitly takes greeting's address; inside the function, the if (s) null check is mandatory good practice because a pointer, unlike a reference, is legitimately allowed to be nullptr, and dereferencing a null pointer is undefined behavior.",
@@ -6717,7 +6724,7 @@ DEEP_CONTENT['functions-basics'] = {
   "Passing by non-const reference when the intent is only to avoid a copy for read-only access -- this compiles and 'happens to work' but forfeits the const-correctness that documents and enforces the function's read-only contract, and silently allows accidental mutation.",
   "Assuming references are always strictly better than pointers because 'no null check needed' -- forgetting that a reference parameter can still be bound to a dereferenced null or invalid pointer at the call site (e.g. f(*ptr) where ptr happens to be null), which is undefined behavior the reference itself does nothing to prevent; a reference guarantees syntactic non-nullability, not actual runtime validity.",
   "Believing NRVO (named return value optimization, returning an already-declared local variable) is guaranteed by the standard the same way prvalue-return copy elision is since C++17 -- it remains merely permitted/optional, and portable code shouldn't rely on a copy/move constructor's side effects being skipped for that specific case.",
-  "Writing std::move on a return statement for a local variable (return std::move(localVar);) under the mistaken belief this helps performance -- for a case eligible for (N)RVO, this actually PREVENTS the compiler from eliding the move/copy entirely (since std::move produces an xvalue, not the local object itself, disqualifying it from the prvalue-materialization/elision rules), turning a potential zero-cost construction into an actual move construction, which is strictly worse."
+  "Writing std::move on a return statement for a local variable (return std::move(localVar);) under the mistaken belief this helps performance -- for a case eligible for (N)RVO, this actually PREVENTS the compiler from eliding the move/copy entirely (named return value elision only applies when the return operand is the variable's plain name; std::move(localVar) is a different expression, an xvalue, so elision is disqualified and a real move constructor runs), turning a potential zero-cost construction into an actual move construction, which is strictly worse."
  ]
 };
 DEEP_CONTENT['function-overloading'] = {
@@ -6737,15 +6744,15 @@ DEEP_CONTENT['function-overloading'] = {
  ],
  memory: "Overload resolution is entirely a compile-time/link-name-generation concern -- it produces zero runtime cost and leaves no trace at execution time. Each selected overload compiles down to a call instruction targeting a distinct mangled symbol (name mangling encodes the parameter types specifically so f(int), f(double), and f(long) become three completely different linker symbols like _Z1fi, _Z1fd, _Z1fl). This is exactly why you can't overload on return type: return type is not encoded in most platforms' C++ name mangling scheme in a way that would let the linker or the call-site compiler disambiguate two same-named, same-parameter functions from context alone, and even if it were mangled, the caller's compiler would need to know the intended usage context to pick a mangled name before it even resolves the expression.",
  realWorld: "Standard library APIs lean on overloading constantly for ergonomic, type-safe APIs without runtime dispatch cost -- std::stoi/std::stol/std::stod overload conceptually as a family (though actually distinct names), and more concretely std::cout's operator<< is overloaded per type (int, double, const char*, custom types via free-function operator<<) so streaming any type uses the identical syntax while the compiler picks the exact-match overload for each type at zero runtime cost, unlike a printf-style format-string API which defers type interpretation to runtime and has no compile-time type checking at all.",
- mistake: "Assuming the 'best' or 'most specific' overload always wins intuitively, and being surprised when passing 0 or NULL to an overload set containing both f(int) and f(char*) calls f(int) (because 0/NULL are integer literals, not a distinct pointer type in C++) -- this is precisely why nullptr was introduced in C++11 with its own distinct type std::nullptr_t, so f(std::nullptr_t) or f(char*) resolves unambiguously to the pointer overload instead of silently picking the integer one.",
+ mistake: "Assuming the 'best' or 'most specific' overload always wins intuitively, and being surprised when passing 0 to an overload set containing both f(int) and f(char*) calls f(int) (0 is an integer literal, not a distinct pointer type) -- while NULL is implementation-defined: with GCC and Clang (where NULL is __null) f(NULL) is an ambiguous-call compile error, and where NULL is plain 0 it silently calls f(int) -- this is precisely why nullptr was introduced in C++11 with its own distinct type std::nullptr_t, so f(std::nullptr_t) or f(char*) resolves unambiguously to the pointer overload instead of silently picking the integer one.",
  interviewQ: {q: "Why is 'int foo(); double foo();' illegal, even though the call sites int x = foo(); and double y = foo(); look perfectly disambiguated by the assignment target?", a: "Because C++ overload resolution is determined purely by the function's parameter list at the call site, evaluated independently of how the caller uses the result -- the expression foo() by itself, in isolation (e.g. as a discarded statement, or passed to another overloaded function, or in a context with no obvious target type), gives the compiler zero information about which foo was intended. The language deliberately does not do 'return-type-directed' overload resolution the way, say, Haskell's type inference can -- C++ resolves calls left-to-right based on argument types only, before it even looks at what surrounds the call expression. Since both foo() declarations have literally identical parameter lists (empty), they are indistinguishable at the point of the call syntax itself, so the standard flatly forbids declaring them as two overloads -- it's a redeclaration/redefinition error at the declaration point, not something that even gets to overload resolution."},
  advancedQ: {q: "Given void f(int); void f(double); and a call f(1u) where 1u is unsigned int, which overload is chosen, and why is this a case senior engineers should specifically double check rather than assume?", a: "unsigned int to int is a standard conversion (not a promotion -- promotions only apply to types smaller than int, like char/short/bool, or float-to-double; unsigned int is already not 'smaller than int' so converting it to int is ranked as a standard conversion), and unsigned int to double is also a standard conversion (integral-to-floating conversion). Both candidates land in the same rank (Conversion), and -- contrary to a common belief -- the standard has no sub-ranking that prefers integral-to-integral over integral-to-floating conversions, so neither overload is better and the call is ambiguous: GCC and Clang reject it with 'call of overloaded f(unsigned int) is ambiguous'. The reason this deserves a double-check rather than gut-feel: an overload set that compiles today can turn ambiguous, or silently start picking a different function, the moment someone adds or removes an overload, and when an unsigned value does get converted to int, large values change meaning (4000000000 becomes a negative number -- modular wrap-around guaranteed since C++20, implementation-defined before). The robust fixes are an explicit unsigned/size_t overload, or a static_cast at the call site that states which conversion you intended."},
  traps: [
   "Believing you can overload on return type alone -- the compiler rejects this at declaration time regardless of how differently the two versions would be called.",
-  "Passing 0 or NULL where both a pointer overload and an integer overload exist and being surprised it calls the integer overload -- always prefer nullptr in modern code to route to the pointer overload unambiguously.",
+  "Passing 0 or NULL where both a pointer overload and an integer overload exist and being surprised by the result -- 0 calls the integer overload, and NULL either does the same or is an ambiguous call depending on how the implementation defines it; always prefer nullptr in modern code to route to the pointer overload unambiguously.",
   "Assuming a top-level const on a by-value parameter (void f(int x) vs void f(const int x)) creates a legal overload distinction -- it does not; top-level const on a value parameter is not part of the function's signature for overloading purposes (only const/reference on pointer and reference parameters matters), so declaring both is a redefinition error, not two overloads.",
   "Forgetting that default arguments can create silent ambiguity: given void f(int a, int b = 0); and void f(int a);, the call f(5) is ambiguous because both are equally viable with an empty vs supplied second argument, and the compiler has no tie-breaker between 'a real overload' and 'a defaulted overload' at the same rank.",
-  "Not realizing that overload resolution runs entirely before templates get involved in mixed sets -- a non-template exact match is always preferred over a template that would also match exactly, which surprises people who expect 'more specific' template specializations to always win over plain functions."
+  "Not realizing that function templates take part in the same overload resolution as ordinary functions -- when a template specialization and a non-template function are equally good matches, the non-template wins, which surprises people who expect the 'more specific' template to win; but a template that matches exactly still beats a non-template that needs a conversion (h(1L) with template<class T> void h(T) and void h(int) calls the template)."
  ]
 };
 
@@ -6795,7 +6802,7 @@ DEEP_CONTENT['inline-functions'] = {
  realWorld: "Header-only C++ libraries (much of Boost, Eigen, nlohmann/json, and virtually all class templates in the standard library) rely fundamentally on inline (and the closely related template instantiation ODR exemption) to let consumers simply #include a header with zero separate compilation/linking step -- every function defined in the header is either implicitly inline (class member functions defined in-class) or explicitly marked inline (free functions), specifically so the same header can be included by an arbitrary number of .cpp files across a project without a single linker error, regardless of whether the compiler ever actually inlines a single call site.",
  mistake: "Believing that adding the inline keyword to a function is a performance optimization technique -- writing inline in front of a large, complex function expecting it to 'run faster because it's inlined', when in reality (a) the compiler will very likely ignore the hint and not inline it at the call site if its heuristics say it's too large, and (b) even if it were force-inlined, a large function inlined at many call sites can actually HURT performance by bloating code size (instruction cache pressure), which is precisely the tradeoff the compiler's heuristics are trying to balance far better than a blanket keyword ever could.",
  interviewQ: {q: "What does the inline keyword actually guarantee in standard C++, and how is that different from what most people assume it does?", a: "Most people assume inline is an instruction to the compiler: 'substitute this function's body directly at every call site instead of emitting a real call, to eliminate call overhead.' That is NOT what the standard guarantees. What inline actually, formally guarantees is a linkage relaxation of the One Definition Rule: an inline function (or, since C++17, an inline variable) may be defined identically in multiple translation units without that being a multiple-definition/ODR violation, as long as every definition is token-for-token identical -- the linker is required to collapse all those duplicate definitions down to a single entity in the final binary instead of erroring. This is precisely why you're allowed to write a full function body directly inside a header file that gets #included by many .cpp files -- without inline (or the implicit inline granted to functions defined inside a class body, or template instantiations, which have a similar ODR exemption), doing so would cause a 'multiple definition' linker error the moment two or more TUs including that header get linked together. Whether the compiler physically substitutes the function's instructions at each call site is a completely separate, independent optimization decision based on the compiler's own cost/benefit heuristics -- it can and does inline functions that were never marked inline, and it can and does refuse to inline functions that were explicitly marked inline, entirely at its own discretion, and this has been true since the earliest C++ standards."},
- advancedQ: {q: "If inline doesn't force call-site inlining, why does explicitly marking a hot, small helper function inline sometimes measurably improve performance in practice, and what's the more reliable modern alternative when you truly need to force it?", a: "Marking a small function inline can indirectly influence the compiler's inlining heuristic as a WEAK hint in some compilers/versions (historically, some compiler heuristics gave a slight preference bump to functions explicitly marked inline when the size/benefit tradeoff was borderline), but this behavior is compiler-specific, non-guaranteed, and has weakened over time as modern compilers (GCC, Clang, MSVC) increasingly make inlining decisions almost entirely based on their own cost models (function size after early optimization passes, call-site context, profile-guided data when available) regardless of the keyword's presence. The more concrete reason marking a function inline (or defining it in a header at all, enabling it to be visible at every call site) helps performance is that call-site inlining REQUIRES the function's definition to be visible to the compiler at the point of the call within the same translation unit -- a function defined only in a separate .cpp file (out-of-line, with just a declaration in the header) can essentially NEVER be inlined at a call site in a different TU by ordinary compilation, because the compiler compiling that TU has literally never seen the callee's body (this is exactly what link-time optimization/LTO exists to relax, by deferring codegen so the linker-invoked backend CAN see cross-TU bodies). So the practical performance lever most engineers are actually pulling when they mark a small function inline in a header is 'make the definition visible at call sites across TUs', not 'the inline keyword itself forces substitution'. When you genuinely need to force inlining regardless of the compiler's own heuristics (e.g. a security-sensitive constant-time crypto primitive where you must guarantee no call-boundary exists for a timing side-channel reason, or a hot inner-loop micro-benchmark), the correct modern tool is a compiler-specific, non-standard attribute -- __attribute__((always_inline)) on GCC/Clang or __forceinline on MSVC -- precisely because the standard inline keyword deliberately makes no such promise, and these attributes exist as an explicit, separate, non-portable escape hatch for exactly that gap."},
+ advancedQ: {q: "If inline doesn't force call-site inlining, why does explicitly marking a hot, small helper function inline sometimes measurably improve performance in practice, and what's the more reliable modern alternative when you truly need to force it?", a: "Marking a small function inline can indirectly influence the compiler's inlining heuristic as a WEAK hint in some compilers/versions (historically, some compiler heuristics gave a slight preference bump to functions explicitly marked inline when the size/benefit tradeoff was borderline), but this behavior is compiler-specific and non-guaranteed (GCC, for example, still gives functions declared inline a larger size budget at -O2: max-inline-insns-single = 70 versus max-inline-insns-auto = 15 for other functions), and modern compilers (GCC, Clang, MSVC) increasingly make inlining decisions based mainly on their own cost models (function size after early optimization passes, call-site context, profile-guided data when available) regardless of the keyword's presence. The more concrete reason marking a function inline (or defining it in a header at all, enabling it to be visible at every call site) helps performance is that call-site inlining REQUIRES the function's definition to be visible to the compiler at the point of the call within the same translation unit -- a function defined only in a separate .cpp file (out-of-line, with just a declaration in the header) can essentially NEVER be inlined at a call site in a different TU by ordinary compilation, because the compiler compiling that TU has literally never seen the callee's body (this is exactly what link-time optimization/LTO exists to relax, by deferring codegen so the linker-invoked backend CAN see cross-TU bodies). So the practical performance lever most engineers are actually pulling when they mark a small function inline in a header is 'make the definition visible at call sites across TUs', not 'the inline keyword itself forces substitution'. When you genuinely need to force inlining regardless of the compiler's own heuristics (e.g. a security-sensitive constant-time crypto primitive where you must guarantee no call-boundary exists for a timing side-channel reason, or a hot inner-loop micro-benchmark), the correct modern tool is a compiler-specific, non-standard attribute -- __attribute__((always_inline)) on GCC/Clang or __forceinline on MSVC -- precisely because the standard inline keyword deliberately makes no such promise, and these attributes exist as an explicit, separate, non-portable escape hatch for exactly that gap."},
  traps: [
   "Believing inline is a compiler directive that forces call-site code substitution -- its only standard-guaranteed effect is exempting the function from ODR's single-definition restriction across translation units.",
   "Marking a large or complex function inline expecting a performance win, when the compiler's own heuristics may simply decline to inline it at any call site, making the keyword a no-op for performance in that case.",
@@ -9133,7 +9140,7 @@ QUESTION_BANK.push(
  deep:'This is a classic time-of-check-to-time-of-use (TOCTOU) race — atomicity of individual reads/writes says nothing about atomicity of a COMPOUND sequence of operations spanning them. The correct fix is either a genuine compare-and-swap on a single atomic ("claim" the initialization slot in one atomic step: `bool expected=false; if (initialized.compare_exchange_strong(expected, true)) doInit();`), or simply using std::call_once with a std::once_flag, which the standard library provides specifically to guarantee exactly-once execution across threads.',
  code:'std::once_flag flag;\nvoid ensureInit() {\n    std::call_once(flag, [] { doInit(); });   // guaranteed exactly once, thread-safe\n}',
  wrong:'"Making the flag atomic fixes any race involving it" — atomicity guarantees each individual operation on the variable is indivisible; it does NOT make a multi-step check-then-act sequence built from several such operations atomic as a whole.',
- trap:'Believing "double-checked locking" style patterns are automatically safe just because the flag involved is atomic — the classic pre-C++11 double-checked-locking bug was exactly this kind of subtle compound-operation race, which is why std::call_once and Meyer\'s Singleton exist as the vetted, correct alternatives.',
+ trap:'Believing "double-checked locking" style patterns are automatically safe just because the flag involved is atomic — the classic pre-C++11 double-checked-locking bug was exactly this kind of subtle compound-operation race, which is why std::call_once and Meyers singleton exist as the vetted, correct alternatives.',
  followups:['How does compare_exchange_strong solve this in one atomic step instead of two separate ones?'],
  related:['atomics-basics','compare-exchange','pat-singleton']},
 {id:'q037',cat:'atomics',diff:'Expert',q:'Why would you ever choose memory_order_relaxed over the default memory_order_seq_cst?',
@@ -10828,7 +10835,7 @@ OUTPUT_QUESTIONS.push(
 const PATTERNS_DATA = [
 {id:'singleton', topicId:'pat-singleton', name:'Singleton',
  problem:'Some resources are genuinely process-wide (a logger, a config registry) — without an enforced constraint, nothing stops accidental creation of multiple, uncoordinated instances.',
- solution:'Make the constructor private and provide one static accessor that lazily creates and returns a reference to the single instance (Meyer\'s Singleton: a function-local static).',
+ solution:'Make the constructor private and provide one static accessor that lazily creates and returns a reference to the single instance (Meyers singleton: a function-local static).',
  code:'class Logger {\npublic:\n    static Logger& instance() { static Logger inst; return inst; }\n    void log(const std::string& m) { /*...*/ }\n    Logger(const Logger&) = delete;\nprivate:\n    Logger() = default;\n};',
  realWorld:'Application-wide loggers, configuration managers.',
  pros:['Thread-safe lazy init via language guarantee (C++11+)','No manual locking code needed','Guarantees a single instance by construction'],
@@ -13469,7 +13476,7 @@ function renderInterviewCheckpoint(id, relatedQs){
      completion:  { message },   // optional override of the "first pass complete" text
      deepDive:    { intro, items:[{id,title,hint, text|list|field|fields|shell|after|jump}],
                     nextTopics:[ids], nextTopicsLabel },
-     interview:   { think, advancedTitle, advancedHint },
+     interview:   { think, advancedTitle, advancedHint, followUp:'<QUESTION_BANK id>' },  // followUp picks the most relevant linked question
      recall:      [[question, answer] | {pilot:i, a:answer}, ..]   // 2-4 recall questions (learning check, not mastery)
      canNow:      [ 'You should now be able to ..' items ]   // device-local self-check; defaults to orientation.outcomes
    }
@@ -16101,6 +16108,2170 @@ const GUIDED_LESSONS = {
     "a": "A std::mutex around the increment, or std::atomic<int>. Per-thread counters summed afterwards avoid sharing entirely."
    }
   ]
+ },
+ "const-correctness": {
+  "orientation": {
+   "what": "Using const so the compiler enforces what may and may not change — on variables, parameters, pointers and member functions.",
+   "why": "const turns 'please don't change this' into a compile error, documents intent in every signature, and is what lets a const object or const reference still be used.",
+   "outcomes": [
+    "Read const on variables, pointers and member functions",
+    "Explain what a const member function promises and why callers need it",
+    "Explain what mutable is for",
+    "Explain why writing through const_cast is only safe for objects that weren't declared const"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: where const can go",
+    "intro": "Each position means something different:",
+    "stages": [
+     {
+      "name": "const int x = 5;",
+      "io": "a value",
+      "note": "The object can't be changed after initialization."
+     },
+     {
+      "name": "void f(const T& p)",
+      "io": "a parameter",
+      "note": "The function promises not to modify the caller's object."
+     },
+     {
+      "name": "double length() const",
+      "io": "a member function",
+      "note": "this becomes a pointer to const, so the function can't modify members (except mutable ones)."
+     },
+     {
+      "name": "const int* p  /  int* const p",
+      "io": "pointers",
+      "note": "Read right to left from the name: pointer to const int, versus const pointer to int."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "const is a compile-time contract: the compiler rejects any modification made through a const name.",
+     "A member function marked const can be called on const objects and through const references; one that isn't marked cannot.",
+     "const-correctness has to run through a whole API: one getter missing const blocks every caller that holds a const reference."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A contract stapled to a variable",
+    "field": "analogy"
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "A const member function next to a mutating one, used through a const reference:",
+    "field": "code"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "struct Counter {\n    int n = 0;\n    int get() const { return n; }\n    void bump() { ++n; }\n};\n\nvoid show(const Counter& c) {\n    c.get();\n    c.bump();\n}",
+    "q": "Does this compile?",
+    "options": [
+     [
+      "A",
+      "Yes"
+     ],
+     [
+      "B",
+      "No: c.get() is an error"
+     ],
+     [
+      "C",
+      "No: c.bump() is an error"
+     ],
+     [
+      "D",
+      "No: both calls are errors"
+     ]
+    ],
+    "reveal": [
+     "C — only c.bump() is rejected.",
+     "c is a const reference, so only const member functions can be called through it.",
+     "get() is marked const, so it is fine; bump() is not, so the compiler refuses the call.",
+     "Mark every member function that only reads as const, or callers holding a const reference can't use it."
+    ]
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: what const does to a member function",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What does the const after a member function's parameter list mean?",
+    "The function may not modify the object's members (other than mutable ones), so it can be called on const objects and through const references."
+   ],
+   [
+    "What is the difference between const int* p and int* const p?",
+    "const int* p points to a const int: you can't change *p, but you can point p elsewhere. int* const p is a const pointer: you can change *p, but not repoint p."
+   ],
+   [
+    "Why take read-only parameters as const T& rather than T&?",
+    "const T& avoids the copy, documents that the argument won't change, and also accepts const objects and temporaries, which T& rejects."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "const at run time",
+     "hint": "why it usually costs nothing",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: const through an API",
+     "hint": "const_iterator, const T& parameters, const accessors",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "constexpr-basics",
+    "references",
+    "pointers"
+   ]
+  },
+  "interview": {
+   "think": "Read each declaration from right to left, starting at the variable name.",
+   "advancedTitle": "Advanced follow-up: when const_cast is legal"
+  },
+  "recall": [
+   [
+    "What is mutable for?",
+    "Letting a member such as a cache or a mutex change inside a const member function, because it isn't part of the object's logical state."
+   ],
+   [
+    "When is writing through a const_cast pointer undefined behavior?",
+    "When the object itself was declared const. It is only safe if the underlying object is non-const and was merely reached through a const path."
+   ],
+   [
+    "Why is const on a by-value return type usually a mistake?",
+    "It stops the caller from moving from the returned temporary, so it gets copied instead."
+   ]
+  ]
+ },
+ "constexpr-basics": {
+  "orientation": {
+   "what": "constexpr lets a variable or function be evaluated at compile time; consteval (C++20) makes compile-time evaluation mandatory.",
+   "why": "Compile-time computation removes run-time cost and turns some bugs into compile errors — but only if you know when constexpr really runs at compile time and when it quietly doesn't.",
+   "outcomes": [
+    "Explain the difference between a constexpr variable and a constexpr function",
+    "Predict whether a call runs at compile time or at run time",
+    "Explain what consteval guarantees that constexpr doesn't",
+    "Force compile-time evaluation when you need it"
+   ],
+   "firstPass": "~20–25 min",
+   "laterPass": "~25–35 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: permission versus requirement",
+    "intro": "The same function, called in four different places:",
+    "stages": [
+     {
+      "name": "constexpr int x = f(5);",
+      "io": "must be compile time",
+      "note": "A constexpr variable needs a constant expression, so the compiler evaluates f(5) — or the program doesn't compile."
+     },
+     {
+      "name": "std::array<int, f(6)> t;",
+      "io": "must be compile time",
+      "note": "Array bounds and template arguments also require constants."
+     },
+     {
+      "name": "int y = f(n);",
+      "io": "run time",
+      "note": "n is only known when the program runs, so the same f runs as an ordinary function. No warning."
+     },
+     {
+      "name": "consteval g(n)",
+      "io": "compile error",
+      "note": "A consteval function must always be evaluated at compile time, so a run-time argument is rejected.",
+      "err": "error: 'n' is not a constant expression"
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "constexpr on a function is a permission: the compiler may evaluate a call at compile time when the arguments are constants and the context needs a constant.",
+     "constexpr on a variable is a requirement: its initializer must be a constant expression.",
+     "consteval (C++20) turns the permission into a requirement for every call."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A bakery that can pre-bake overnight orders",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "constexpr int square(int x) { return x * x; }\n\nint main(int argc, char**) {\n    constexpr int a = square(4);   // (1)\n    int b = square(argc);          // (2)\n    return a + b;\n}",
+    "q": "Which call must be evaluated at compile time?",
+    "options": [
+     [
+      "A",
+      "Both"
+     ],
+     [
+      "B",
+      "Only (1)"
+     ],
+     [
+      "C",
+      "Only (2)"
+     ],
+     [
+      "D",
+      "Neither"
+     ]
+    ],
+    "reveal": [
+     "B — only (1).",
+     "a is a constexpr variable, so square(4) has to be a constant expression; the compiler computes 16.",
+     "argc is only known at run time, so square(argc) is an ordinary call (the optimizer may still inline it).",
+     "If square were consteval, line (2) would not compile."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Full example",
+    "title": "The full example",
+    "intro": "constexpr and consteval side by side, including the silent run-time fallback:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: which calls run when",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Does marking a function constexpr guarantee compile-time evaluation?",
+    "No, it only allows it. A call is evaluated at compile time when its result is needed as a constant (a constexpr variable, an array bound, a template argument) and its arguments are constants."
+   ],
+   [
+    "How do you force a constexpr function call to happen at compile time?",
+    "Use its result to initialize a constexpr variable, or anything else that requires a constant, or make the function consteval in C++20."
+   ],
+   [
+    "What happens if you call a consteval function with a run-time value?",
+    "The program does not compile: every call to a consteval function must be a constant expression."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "What ends up in the binary",
+     "hint": "literals for compile-time calls, ordinary code for run-time ones",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: lookup tables and compile-time checks",
+     "hint": "CRC tables, string hashing, format validation",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "const-correctness",
+    "function-templates"
+   ]
+  },
+  "interview": {
+   "think": "Separate what constexpr allows from what the call site requires.",
+   "advancedTitle": "Advanced follow-up: why consteval is a separate keyword"
+  },
+  "recall": [
+   [
+    "Is constexpr int x = runtime_value; allowed?",
+    "No. A constexpr variable must be initialized by a constant expression, so it is a compile error."
+   ],
+   [
+    "What happens if a constexpr function hits undefined behavior during compile-time evaluation?",
+    "The compiler must reject that evaluation (for example, 'overflow in constant expression'); at run time the same code is just ordinary undefined behavior."
+   ],
+   [
+    "Can ordinary code take the address of a consteval function?",
+    "No, only another immediate (consteval) context can, because the function never exists at run time."
+   ]
+  ]
+ },
+ "static-keyword": {
+  "orientation": {
+   "what": "One keyword, three unrelated meanings: a function-local static that persists, a class member shared by all objects, and a namespace-scope name hidden from other files.",
+   "why": "'What does static do?' has three correct answers depending on where it is written. Mixing them up causes shared-state bugs, missing-definition link errors and name collisions.",
+   "outcomes": [
+    "Tell which meaning of static applies from where it is written",
+    "Explain when a static local is initialized, and why that is thread-safe since C++11",
+    "Define and use a static data member correctly",
+    "Explain internal linkage and the unnamed-namespace alternative"
+   ],
+   "firstPass": "~20–30 min",
+   "laterPass": "~25–35 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: where it is written decides what it means",
+    "intro": "Three positions, three unrelated meanings:",
+    "stages": [
+     {
+      "name": "Inside a function",
+      "io": "static int count;",
+      "note": "Storage duration: one variable for the whole program that keeps its value between calls. Initialized once, the first time control reaches it."
+     },
+     {
+      "name": "Inside a class",
+      "io": "static int instances;",
+      "note": "Class membership: one variable shared by every object. A static member function has no this."
+     },
+     {
+      "name": "At namespace scope",
+      "io": "static void helper();",
+      "note": "Linkage: the name is private to this .cpp file; other files can't see it or collide with it."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "static means three unrelated things; where the keyword is written decides which one.",
+     "A static local is initialized once, the first time its declaration runs, and that initialization is thread-safe since C++11.",
+     "A static data member usually needs one out-of-class definition, unless it is inline (C++17) — which static constexpr members are automatically."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "One word, three meanings",
+    "field": "analogy"
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "All three meanings in one file:",
+    "field": "code"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <iostream>\nstruct Widget {\n    static int count;\n    Widget() { ++count; }\n};\nint Widget::count = 0;\n\nint main() {\n    Widget a, b;\n    { Widget c; }\n    std::cout << Widget::count;\n}",
+    "q": "What does this print?",
+    "options": [
+     [
+      "A",
+      "1"
+     ],
+     [
+      "B",
+      "2"
+     ],
+     [
+      "C",
+      "3"
+     ],
+     [
+      "D",
+      "0"
+     ]
+    ],
+    "reveal": [
+     "C — it prints 3.",
+     "count is a static member: one variable shared by every Widget, not one per object.",
+     "Each constructor increments it: a, b and c make 3.",
+     "c being destroyed doesn't change count, because nothing decrements it."
+    ]
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: the three meanings at work",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What does static mean on a local variable?",
+    "The variable has static storage duration: it is created once, keeps its value between calls, and is initialized the first time control passes its declaration."
+   ],
+   [
+    "What does static mean on a class member?",
+    "The member belongs to the class, not to any object: all objects share one copy, and a static member function has no this pointer."
+   ],
+   [
+    "What does static mean on a function at namespace scope?",
+    "Internal linkage: the function is visible only inside its own .cpp file, so another file may define its own function with the same name."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "How thread-safe statics are implemented",
+     "hint": "guard variables and __cxa_guard_acquire",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: lazy singletons",
+     "hint": "the Meyers singleton and initialization order",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "extern-keyword",
+    "namespaces",
+    "storage-duration"
+   ]
+  },
+  "interview": {
+   "think": "Name all three meanings, and say how you tell which applies from where the keyword is written.",
+   "advancedTitle": "Advanced follow-up: what a thread-safe static costs"
+  },
+  "recall": [
+   [
+    "Why can a static data member cause 'undefined reference' at link time?",
+    "The in-class line is only a declaration. Without inline (C++17) or a definition in one .cpp file, nothing provides the storage the linker needs."
+   ],
+   [
+    "What is the modern alternative to static for file-private functions and types?",
+    "An unnamed namespace: it gives internal linkage to everything inside, including types, which static can't."
+   ],
+   [
+    "After the first call, what does a thread-safe static local cost?",
+    "A cheap check of a guard flag and a predictable branch; locking only happens during the first initialization."
+   ]
+  ]
+ },
+ "extern-keyword": {
+  "orientation": {
+   "what": "extern has two jobs: declaring a variable that is defined in another file, and extern \"C\", which turns off C++ name mangling so C and C++ code can link together.",
+   "why": "Sharing a global across files and calling C libraries both depend on extern. Getting it wrong produces linker errors that point at code which looks correct.",
+   "outcomes": [
+    "Explain the difference between extern int x; and int x;",
+    "Share one global variable correctly across .cpp files",
+    "Explain what extern \"C\" changes, and what it doesn't",
+    "Write a header that works from both C and C++"
+   ],
+   "firstPass": "~15–25 min",
+   "laterPass": "~25–35 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: one definition, many declarations",
+    "intro": "How a shared global and a C function get connected:",
+    "stages": [
+     {
+      "name": "shared_counter.cpp",
+      "io": "int globalCounter = 0;",
+      "note": "The definition: this file allocates the storage.",
+      "artifact": true
+     },
+     {
+      "name": "other_file.cpp",
+      "io": "extern int globalCounter;",
+      "note": "A declaration only — 'it exists somewhere else'. No storage is allocated here."
+     },
+     {
+      "name": "Linker",
+      "io": "match by name",
+      "note": "Connects every use to the single definition."
+     },
+     {
+      "name": "extern \"C\" { … }",
+      "io": "no mangling",
+      "note": "Makes C++ use the plain C symbol name, so it matches what the C compiler produced."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "extern int x; declares a variable without defining it; exactly one .cpp file must contain the definition int x;.",
+     "extern \"C\" turns off C++ name mangling for the declared functions, so they link against code compiled as C.",
+     "extern \"C\" only changes linkage. Classes, overloading, templates and exceptions still don't cross a C boundary."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A citation, and a shared plain-language glossary",
+    "field": "analogy"
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "A shared global, plus a C library header wrapped for C++:",
+    "field": "code"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "// counter.h\nextern int hits;\n\n// a.cpp\n#include \"counter.h\"\nvoid hit() { ++hits; }\n\n// main.cpp\n#include \"counter.h\"\nvoid hit();\nint main() { hit(); return hits; }",
+    "q": "You build a.cpp and main.cpp together. What happens?",
+    "options": [
+     [
+      "A",
+      "The program returns 1"
+     ],
+     [
+      "B",
+      "Compile error: hits is undeclared"
+     ],
+     [
+      "C",
+      "Link error: undefined reference to hits"
+     ],
+     [
+      "D",
+      "The program returns 0"
+     ]
+    ],
+    "reveal": [
+     "C — undefined reference to hits.",
+     "extern int hits; is only a declaration, so both files compile.",
+     "Neither file defines hits (int hits = 0; without extern), so the linker has nothing to connect the uses to.",
+     "Add int hits = 0; to exactly one .cpp file and the program returns 1."
+    ]
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: declaration, definition and C linkage",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What is the difference between extern int x; and int x; at namespace scope?",
+    "extern int x; only declares that x exists elsewhere; int x; defines it and allocates storage. The program needs exactly one definition."
+   ],
+   [
+    "Why does calling a C library from C++ need extern \"C\"?",
+    "C++ mangles function names while the C library exports plain names. extern \"C\" makes the C++ compiler use the plain name, so the linker finds it."
+   ],
+   [
+    "Why can't two extern \"C\" functions share a name?",
+    "C linkage has no mangling, so both would need the same plain symbol; the compiler rejects it as a conflicting declaration."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Symbols with and without mangling",
+     "hint": "what the object file records",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: C APIs and plugin boundaries",
+     "hint": "why stable plugin interfaces use C linkage",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "linking",
+    "namespaces",
+    "static-keyword"
+   ]
+  },
+  "interview": {
+   "think": "Explain what symbol name the linker is looking for on each side.",
+   "advancedTitle": "Advanced follow-up: why templates and overloads can't be extern \"C\""
+  },
+  "recall": [
+   [
+    "What does the #ifdef __cplusplus guard around extern \"C\" { achieve?",
+    "The same header works in C, where extern \"C\" isn't valid syntax and is skipped, and in C++, where it applies."
+   ],
+   [
+    "Can a C program call a C++ member function through extern \"C\"?",
+    "Not directly. Expose a free extern \"C\" function that takes an opaque handle and calls the member function inside."
+   ],
+   [
+    "What happens if extern int x; is never defined anywhere?",
+    "It compiles, then fails to link with an undefined reference to x."
+   ]
+  ]
+ },
+ "namespaces": {
+  "orientation": {
+   "what": "Named scopes that keep identifiers from colliding — geo::Point and ui::Point can both exist — plus the rules for bringing names into scope.",
+   "why": "Every real program combines libraries that reuse common names. Namespaces make that safe, and using namespace in the wrong place quietly breaks it again.",
+   "outcomes": [
+    "Explain how namespaces prevent name collisions",
+    "Tell a using-declaration from a using-directive and know where each is safe",
+    "Explain why using namespace in a header is harmful",
+    "Use an unnamed namespace for file-private code"
+   ],
+   "firstPass": "~20–25 min",
+   "laterPass": "~25–35 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: surnames for names",
+    "intro": "Ways a name from a namespace reaches your code:",
+    "stages": [
+     {
+      "name": "namespace geo { struct Point; }",
+      "io": "geo::Point",
+      "note": "The full name includes the namespace, so it can't clash with ui::Point."
+     },
+     {
+      "name": "using geo::distance;",
+      "io": "using-declaration",
+      "note": "Brings exactly one name into the current scope. Precise and safe."
+     },
+     {
+      "name": "using namespace geo;",
+      "io": "using-directive",
+      "note": "Makes every name from geo visible unqualified. Convenient in a small scope, harmful in a header."
+     },
+     {
+      "name": "namespace { … }",
+      "io": "unnamed namespace",
+      "note": "Everything inside is private to this .cpp file, including types."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "A namespace is a named scope; from outside, its members are written ns::name.",
+     "A using-declaration imports one name; a using-directive imports them all, which can create ambiguities or silently change which function is called.",
+     "Never put using namespace in a header: every file that includes it inherits the effect."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "City and state on a street address",
+    "field": "analogy"
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "A library namespace, a narrow using-declaration, nested namespaces and an unnamed namespace:",
+    "field": "code"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <iostream>\n\nnamespace a { void hello() { std::cout << \"a\"; } }\nnamespace b { void hello() { std::cout << \"b\"; } }\n\nusing namespace a;\nusing namespace b;\n\nint main() {\n    hello();\n}",
+    "q": "What happens?",
+    "options": [
+     [
+      "A",
+      "It prints a"
+     ],
+     [
+      "B",
+      "It prints b"
+     ],
+     [
+      "C",
+      "It prints ab"
+     ],
+     [
+      "D",
+      "Compile error: the call is ambiguous"
+     ]
+    ],
+    "reveal": [
+     "D — hello() is ambiguous.",
+     "Both using-directives make a::hello and b::hello visible unqualified, and neither is a better match.",
+     "The compiler refuses to guess; writing a::hello() or b::hello() fixes it.",
+     "The same thing happens, far less visibly, when a header's using namespace pulls in a name your code already uses."
+    ]
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: how each name is found",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What is the difference between using std::cout; and using namespace std;?",
+    "The first imports only cout; the second makes every name in std visible unqualified in that scope."
+   ],
+   [
+    "Why is using namespace in a header harmful?",
+    "It applies to every file that includes the header, so their code can suddenly hit ambiguities or call a different function, far from the cause."
+   ],
+   [
+    "How do you make a helper class private to one .cpp file?",
+    "Put it in an unnamed namespace. static can do this for functions and variables, but not for types."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Namespaces at run time and in symbols",
+     "hint": "zero cost, encoded in mangled names",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: library namespaces and code review",
+     "hint": "why style guides ban using-directives in headers",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "static-keyword",
+    "function-overloading"
+   ]
+  },
+  "interview": {
+   "think": "Explain the scope of each, then what happens when a header uses the directive.",
+   "advancedTitle": "Advanced follow-up: unnamed namespace versus static"
+  },
+  "recall": [
+   [
+    "How does argument-dependent lookup affect unqualified calls?",
+    "A function can be found without qualification when one of its arguments is a type from that function's namespace."
+   ],
+   [
+    "Do unnamed namespaces in two .cpp files collide?",
+    "No: each translation unit gets its own unique unnamed namespace."
+   ],
+   [
+    "What does namespace app::detail { } mean?",
+    "It is the C++17 shorthand for namespace app { namespace detail { } }."
+   ]
+  ]
+ },
+ "type-casting": {
+  "orientation": {
+   "what": "C++'s four named casts — static_cast, dynamic_cast, const_cast and reinterpret_cast — each with a narrow job, and why a C-style cast hides which one you got.",
+   "why": "Casts are where you override the type system. The named casts make each override visible and checkable; a C-style cast can silently become the most dangerous one.",
+   "outcomes": [
+    "Choose the right named cast for a conversion",
+    "Explain what dynamic_cast checks at run time, and what it needs",
+    "Explain when const_cast is safe",
+    "Explain why C-style casts are discouraged"
+   ],
+   "firstPass": "~25–30 min",
+   "laterPass": "~30–40 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: four tools, four jobs",
+    "intro": "What each cast is allowed to do:",
+    "stages": [
+     {
+      "name": "static_cast",
+      "io": "checked at compile time",
+      "note": "Conversions between related types: numbers, up and down a known class hierarchy, void* to T*. No run-time check."
+     },
+     {
+      "name": "dynamic_cast",
+      "io": "checked at run time",
+      "note": "Safe downcasts in a polymorphic hierarchy: nullptr (pointers) or std::bad_cast (references) if the object isn't that type."
+     },
+     {
+      "name": "const_cast",
+      "io": "qualifiers only",
+      "note": "Adds or removes const or volatile. Writing through the result is only safe if the object wasn't declared const."
+     },
+     {
+      "name": "reinterpret_cast",
+      "io": "raw bits",
+      "note": "Treats the bits as an unrelated type. Almost always non-portable."
+     },
+     {
+      "name": "(T)expr",
+      "io": "C-style cast",
+      "note": "Tries const_cast, static_cast, then reinterpret_cast, and uses the first that compiles — the syntax doesn't say which."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Each named cast states exactly what kind of conversion you mean, so the compiler can reject the wrong kind.",
+     "Only dynamic_cast checks at run time, and it needs a polymorphic type (at least one virtual function) to downcast.",
+     "A C-style cast between unrelated types silently becomes a reinterpret_cast."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Four labelled keys and an unlabelled multi-tool",
+    "field": "analogy"
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "All four casts, and a C-style cast that quietly becomes the dangerous one:",
+    "field": "code"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "struct Base { virtual ~Base() = default; };\nstruct Cat : Base {};\nstruct Dog : Base {};\n\nBase* b = new Dog;\nCat* c1 = dynamic_cast<Cat*>(b);\nCat* c2 = static_cast<Cat*>(b);",
+    "q": "What are c1 and c2?",
+    "options": [
+     [
+      "A",
+      "Both are valid Cat pointers"
+     ],
+     [
+      "B",
+      "c1 is nullptr; c2 compiles, but using it as a Cat is undefined behavior"
+     ],
+     [
+      "C",
+      "Both are nullptr"
+     ],
+     [
+      "D",
+      "The static_cast line doesn't compile"
+     ]
+    ],
+    "reveal": [
+     "B — c1 is nullptr; c2 is a Cat* that doesn't point to a Cat.",
+     "dynamic_cast checks the real type at run time: the object is a Dog, so the cast fails cleanly.",
+     "static_cast only checks that Cat derives from Base, which it does, so it compiles and performs no run-time check.",
+     "Use dynamic_cast whenever you aren't certain of the object's dynamic type."
+    ]
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: what each cast does to the code",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Which cast checks the object's real type at run time?",
+    "dynamic_cast, for polymorphic types. A failed pointer cast returns nullptr; a failed reference cast throws std::bad_cast."
+   ],
+   [
+    "When is it safe to write through a pointer obtained with const_cast?",
+    "Only when the object itself was not declared const — for example, a non-const object passed in through a const reference."
+   ],
+   [
+    "Why is (Foreign*)b dangerous when Foreign is unrelated to b's type?",
+    "The C-style cast falls through to a reinterpret_cast, silently producing a pointer to the wrong type with no check."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "What each cast costs at run time",
+     "hint": "pointer adjustment, no-ops and __dynamic_cast",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: when each cast is legitimate",
+     "hint": "hierarchies, serialization, hardware registers",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "classes-basics",
+    "const-correctness",
+    "virtual-functions"
+   ]
+  },
+  "interview": {
+   "think": "Say what each named cast allows, then what a C-style cast does with that.",
+   "advancedTitle": "Advanced follow-up: why dynamic_cast needs a virtual function",
+   "followUp": "q050"
+  },
+  "recall": [
+   [
+    "What is the standards-compliant way to reinterpret a float's bits as an int?",
+    "std::bit_cast (C++20) or std::memcpy. Dereferencing a reinterpret_cast pointer of the wrong type breaks the strict aliasing rule."
+   ],
+   [
+    "What does a failed dynamic_cast to a reference do?",
+    "It throws std::bad_cast, because a reference can't be null."
+   ],
+   [
+    "Can static_cast change a pointer's address value?",
+    "Yes. With multiple inheritance, casting between a base and a derived class may add or subtract an offset."
+   ]
+  ]
+ },
+ "enums": {
+  "orientation": {
+   "what": "Named sets of integer constants: plain enums leak their names and convert to int; enum class keeps its names scoped and refuses implicit conversions.",
+   "why": "enum class removes two real bug sources — name collisions and accidental comparisons between unrelated enums — at zero run-time cost.",
+   "outcomes": [
+    "Explain the two problems with plain enums",
+    "Use enum class and convert explicitly when needed",
+    "Choose an underlying type with : uint8_t, and explain why it matters",
+    "Write a switch over an enum class"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~20–25 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: two kinds of enum",
+    "intro": "The same colours, declared both ways:",
+    "stages": [
+     {
+      "name": "enum Color { Red };",
+      "io": "unscoped",
+      "note": "Red is visible in the enclosing scope and converts to int automatically."
+     },
+     {
+      "name": "enum class Color { Red };",
+      "io": "scoped",
+      "note": "Written Color::Red. No implicit conversion to int or to another enum."
+     },
+     {
+      "name": ": uint8_t",
+      "io": "underlying type",
+      "note": "Fixes the size: here every value is exactly one byte."
+     },
+     {
+      "name": "static_cast<int>(c)",
+      "io": "explicit conversion",
+      "note": "The only way to get the number from an enum class, and it is visible in review."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "A plain enum's names land in the surrounding scope, and its values quietly become ints.",
+     "enum class scopes its names (Color::Red) and forbids implicit conversions, so mixing unrelated enums is a compile error.",
+     "The underlying type sets the size. An enum class defaults to int; a plain enum gets an implementation-defined type."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Department-qualified names",
+    "field": "analogy"
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "The same idea written with a plain enum and with enum class:",
+    "field": "code"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "enum class Light : unsigned char { Red, Yellow, Green };\nenum class Fruit { Apple, Banana };\n\nLight l = Light::Red;\nint n = l;                       // (1)\nbool same = (l == Fruit::Apple); // (2)\nstd::size_t sz = sizeof(Light);  // (3)",
+    "q": "Which of the numbered lines compile?",
+    "options": [
+     [
+      "A",
+      "All three"
+     ],
+     [
+      "B",
+      "Only (3)"
+     ],
+     [
+      "C",
+      "(1) and (3)"
+     ],
+     [
+      "D",
+      "None"
+     ]
+    ],
+    "reveal": [
+     "B — only (3) compiles, and sz is 1.",
+     "(1) fails: an enum class doesn't convert to int implicitly; write static_cast<int>(l).",
+     "(2) fails: Light and Fruit are different types with no comparison between them.",
+     "(3) is fine: the underlying type unsigned char makes every Light one byte."
+    ]
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: what each declaration allows",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What two problems does enum class fix?",
+    "Its names are scoped (Color::Red instead of leaking Red into the surrounding scope), and it doesn't implicitly convert to int or compare with unrelated enums."
+   ],
+   [
+    "How do you get the integer value of an enum class?",
+    "static_cast<int>(value), or std::to_underlying(value) in C++23."
+   ],
+   [
+    "What is the underlying type of enum class E { A, B }; if you don't give one?",
+    "int. A plain enum without one gets an implementation-defined type big enough for its values."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Enums in memory and on the wire",
+     "hint": "just integers of the underlying type",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: fixed-size enums in protocols",
+     "hint": "why : uint8_t matters for serialization",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "structs",
+    "type-casting"
+   ]
+  },
+  "interview": {
+   "think": "Name both problems, then say when a plain enum is still reasonable.",
+   "advancedTitle": "Advanced follow-up: flags and arithmetic on enum class"
+  },
+  "recall": [
+   [
+    "How do you write bit flags with enum class?",
+    "Overload operator|, operator& and operator~ for that enum, converting to the underlying type inside each operator."
+   ],
+   [
+    "What does using enum Color; do in C++20?",
+    "It brings Color's enumerators into the current scope, so a switch can say case Red: instead of case Color::Red:."
+   ],
+   [
+    "Does comparing two different plain enums compile?",
+    "Yes, though GCC warns (-Wenum-compare) and C++20 deprecates it; with enum class it is a compile error."
+   ]
+  ]
+ },
+ "structs": {
+  "orientation": {
+   "what": "In C++, struct and class are the same construct except for default access: struct members and bases are public by default, class members and bases private.",
+   "why": "Interviewers ask about this to check whether you know C++ precisely rather than by analogy with C or C#, where struct means something different.",
+   "outcomes": [
+    "State the exact language difference between struct and class",
+    "Explain the convention for when to use each",
+    "Predict default inheritance access for struct and class",
+    "Know the one ABI caveat (MSVC name mangling)"
+   ],
+   "firstPass": "~10–15 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: one construct, two defaults",
+    "intro": "What the keyword changes:",
+    "stages": [
+     {
+      "name": "struct Point { double x; };",
+      "io": "public by default",
+      "note": "Members and base classes are public unless you say otherwise."
+     },
+     {
+      "name": "class Account { double balance_; };",
+      "io": "private by default",
+      "note": "Members and base classes are private unless you say otherwise."
+     },
+     {
+      "name": "Everything else",
+      "io": "identical",
+      "note": "Constructors, member functions, virtual functions, inheritance and templates work the same way in both."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "struct and class differ only in default access — for members and for base classes.",
+     "By convention, struct signals a simple data aggregate and class signals an encapsulated type with invariants.",
+     "The compiler enforces the defaults, not the convention."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Two rental forms with one pre-ticked box",
+    "field": "analogy"
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "A data struct, an encapsulated class, and proof that each can do what the other does:",
+    "field": "code"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "class Base { public: int id = 1; };\nstruct D1 : Base {};\nclass  D2 : Base {};\n\nint main() {\n    D1 a;  int x = a.id;   // (1)\n    D2 b;  int y = b.id;   // (2)\n}",
+    "q": "Which line fails to compile?",
+    "options": [
+     [
+      "A",
+      "(1)"
+     ],
+     [
+      "B",
+      "(2)"
+     ],
+     [
+      "C",
+      "Both"
+     ],
+     [
+      "D",
+      "Neither"
+     ]
+    ],
+    "reveal": [
+     "B — line (2).",
+     "struct D1 : Base inherits publicly by default, so id stays public.",
+     "class D2 : Base inherits privately by default, so id is private in D2 and main can't reach it.",
+     "Writing the access explicitly (class D2 : public Base) removes the surprise."
+    ]
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: the defaults at work",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What is the only language difference between struct and class?",
+    "Default access: public for struct and private for class — for members and for base classes."
+   ],
+   [
+    "Can a struct have constructors, private members and virtual functions?",
+    "Yes. Anything a class can have, a struct can have too."
+   ],
+   [
+    "When should you use struct rather than class?",
+    "By convention, for simple data with public members and no invariants to protect; use class when the type hides state behind member functions."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Layout, and the MSVC exception",
+     "hint": "same layout; different mangled names on Windows",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In practice: the struct/class convention",
+     "hint": "options structs, math types, data bags",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "classes-basics",
+    "enums"
+   ]
+  },
+  "interview": {
+   "think": "Give the language rule first, then the convention.",
+   "advancedTitle": "Advanced follow-up: why C++ kept two keywords"
+  },
+  "recall": [
+   [
+    "What is the default access in class D : Base {};?",
+    "Private inheritance: Base's public members become private in D."
+   ],
+   [
+    "Does choosing struct or class change an object's size or layout?",
+    "No. Layout depends only on the members; the keyword only sets defaults."
+   ],
+   [
+    "Why can declaring a type struct in one file and class in another break a Windows build?",
+    "MSVC encodes the keyword in mangled names, so the two declarations produce different symbols and fail to link."
+   ]
+  ]
+ },
+ "classes-basics": {
+  "orientation": {
+   "what": "A class bundles data with the functions that act on it, and access specifiers decide what outside code may touch. Members are always initialized in the order they are declared.",
+   "why": "Encapsulation is how C++ types protect their invariants — and member initialization order is one of the sharpest gotchas when a constructor uses one member to initialize another.",
+   "outcomes": [
+    "Explain public, protected and private",
+    "Explain what a member-initializer list is for",
+    "Predict initialization order from the class declaration",
+    "Explain why destruction runs in reverse order"
+   ],
+   "firstPass": "~20–25 min",
+   "laterPass": "~25–30 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: declaration order rules",
+    "intro": "For BadOrder in the example below:",
+    "stages": [
+     {
+      "name": "Declared in the class",
+      "io": "int b_;  int a_;",
+      "note": "This fixes the order for every constructor: b_ is constructed first, then a_."
+     },
+     {
+      "name": "Initializer list",
+      "io": "a_(10), b_(a_ + 1)",
+      "note": "Supplies each member's initial value. The order it is written in does not change the construction order."
+     },
+     {
+      "name": "Construction",
+      "io": "b_, then a_",
+      "note": "b_(a_ + 1) runs first and reads a_ before a_ is initialized: undefined behavior."
+     },
+     {
+      "name": "Destruction",
+      "io": "a_, then b_",
+      "note": "Always the reverse of construction."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Access specifiers decide who can use each member: public for anyone, private for the class itself, protected also for derived classes.",
+     "Members are initialized in declaration order, whatever order the initializer list is written in.",
+     "Declare members in dependency order and write the initializer list in the same order; -Wall's -Wreorder warns when they differ."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A printed seating chart",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "struct P {\n    int x;\n    int y;\n    P() : y(5), x(y * 2) {}\n};",
+    "q": "After P p; what are p.x and p.y?",
+    "options": [
+     [
+      "A",
+      "x = 10, y = 5"
+     ],
+     [
+      "B",
+      "y = 5, but x read y before y was initialized: undefined behavior"
+     ],
+     [
+      "C",
+      "It doesn't compile"
+     ],
+     [
+      "D",
+      "x = 0, y = 5"
+     ]
+    ],
+    "reveal": [
+     "B — y ends up 5, and x's value is undefined behavior.",
+     "x is declared before y, so x is initialized first, even though the list names y first.",
+     "x(y * 2) therefore reads y while it is still uninitialized.",
+     "GCC and Clang warn about this with -Wreorder (part of -Wall). Declaring y before x fixes it."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Full example",
+    "title": "The full example",
+    "intro": "A class with the order wrong, and one with it right:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: construction order",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What decides member initialization order: the declaration order or the initializer list order?",
+    "The declaration order in the class body. The initializer list order has no effect on sequencing."
+   ],
+   [
+    "What does private mean?",
+    "Only the class's own member functions (and its friends) can access the member."
+   ],
+   [
+    "In what order are members destroyed?",
+    "In reverse order of declaration, after the destructor body has run."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Why construction follows layout",
+     "hint": "construction in order, destruction in reverse",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: ordering RAII members",
+     "hint": "logger before file, lock before data",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "constructors",
+    "destructors",
+    "structs"
+   ]
+  },
+  "interview": {
+   "think": "Look at the class body first, not at the initializer list.",
+   "advancedTitle": "Advanced follow-up: why C++ uses declaration order"
+  },
+  "recall": [
+   [
+    "Which compiler warning catches initializer lists written out of order?",
+    "-Wreorder, enabled by -Wall in GCC and Clang."
+   ],
+   [
+    "When are base classes constructed relative to members?",
+    "Before any of the derived class's own members, and destroyed after them."
+   ],
+   [
+    "Why declare a logger member before a file member whose destructor logs?",
+    "Members are destroyed in reverse order, so the logger is still alive when the file's destructor uses it."
+   ]
+  ]
+ },
+ "functions-basics": {
+  "orientation": {
+   "what": "How arguments get into a function — by value, by reference or by pointer — and how results come back out cheaply.",
+   "why": "Parameter-passing choices are among the most common performance and correctness issues in code review, and returning by value is cheaper than intuition suggests.",
+   "outcomes": [
+    "Choose between by value, const T&, T& and T* for a parameter",
+    "Predict whether the caller's object changes",
+    "Explain the sink-parameter idiom (take by value, then move)",
+    "Explain guaranteed copy elision for returned temporaries"
+   ],
+   "firstPass": "~20–30 min",
+   "laterPass": "~25–35 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: what the function receives",
+    "intro": "The same argument, passed four ways:",
+    "stages": [
+     {
+      "name": "void f(T x)",
+      "io": "by value",
+      "note": "A separate copy (or a move from a temporary). Changes stay inside the function."
+     },
+     {
+      "name": "void f(const T& x)",
+      "io": "const reference",
+      "note": "No copy; read-only access to the caller's object."
+     },
+     {
+      "name": "void f(T& x)",
+      "io": "reference",
+      "note": "No copy; the function can change the caller's object."
+     },
+     {
+      "name": "void f(T* x)",
+      "io": "pointer",
+      "note": "No copy; may be nullptr, so the function must check."
+     },
+     {
+      "name": "T make() { return T(…); }",
+      "io": "return by value",
+      "note": "Since C++17 a returned temporary is built directly in the caller's variable: no copy, no move."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Small, cheap types (int, double, pointers) go by value; larger types you only read go by const T&.",
+     "Use T& only when the function is meant to modify the caller's object, and T* when 'no object' is a valid input.",
+     "Returning by value is usually free: copy elision builds the result in the caller's storage."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A photocopy, the original binder, and an address on a sticky note",
+    "field": "analogy"
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "Four ways to pass a string, and a function that returns one:",
+    "field": "code"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <iostream>\n#include <string>\n\nvoid a(std::string s)  { s += \"!\"; }\nvoid b(std::string& s) { s += \"?\"; }\n\nint main() {\n    std::string t = \"hi\";\n    a(t);\n    b(t);\n    a(t);\n    std::cout << t;\n}",
+    "q": "What does this print?",
+    "options": [
+     [
+      "A",
+      "hi"
+     ],
+     [
+      "B",
+      "hi!?"
+     ],
+     [
+      "C",
+      "hi?"
+     ],
+     [
+      "D",
+      "hi?!"
+     ]
+    ],
+    "reveal": [
+     "C — it prints hi?.",
+     "a takes its parameter by value, so it changes a copy; t is untouched.",
+     "b takes a reference, so s += \"?\" changes t itself.",
+     "The second call to a again changes only its own copy."
+    ]
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: what each call does",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "When should a parameter be passed by const T&?",
+    "When the type is more than a few machine words to copy and the function only reads it."
+   ],
+   [
+    "When is pass-by-value better, even for a large type?",
+    "When the function keeps its own copy anyway (a constructor or setter): take it by value and std::move it into place, so callers passing temporaries pay only for a move."
+   ],
+   [
+    "Why is returning a large object by value usually not a performance problem?",
+    "A returned temporary is constructed directly in the caller's storage (guaranteed since C++17), and returning a named local is usually elided or moved."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "What each style costs at the machine level",
+     "hint": "addresses in registers, copies on the stack",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: parameter-passing guidelines",
+     "hint": "Core Guidelines and style-guide rules",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "function-overloading",
+    "default-arguments",
+    "references"
+   ]
+  },
+  "interview": {
+   "think": "Give a rule for each style, then name the exception to 'always use const T&'.",
+   "advancedTitle": "Advanced follow-up: what copy elision guarantees since C++17"
+  },
+  "recall": [
+   [
+    "Does a reference parameter guarantee the argument is valid?",
+    "No. Calling f(*ptr) with a null ptr is undefined behavior before f even runs; a reference only rules out null syntactically."
+   ],
+   [
+    "Why is return std::move(local); worse than return local;?",
+    "It prevents named return value elision and forces a move; return local; already elides or moves automatically."
+   ],
+   [
+    "Can a function return a non-copyable, non-movable type by value?",
+    "Yes, when it returns a prvalue such as return T(args);. Since C++17 no copy or move constructor is needed."
+   ]
+  ]
+ },
+ "function-overloading": {
+  "orientation": {
+   "what": "Several functions sharing one name, told apart by their parameters; the compiler picks one at compile time by ranking how well each matches the arguments.",
+   "why": "Overload resolution explains ambiguous-call errors, surprising picks with 0 or NULL, and why you can't overload on return type.",
+   "outcomes": [
+    "Explain what makes two overloads different, and what doesn't",
+    "Rank candidates: exact match, promotion, conversion, user-defined conversion",
+    "Predict which overload a call selects, or when it is ambiguous",
+    "Explain why nullptr exists"
+   ],
+   "firstPass": "~20–30 min",
+   "laterPass": "~25–35 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: the ranking ladder",
+    "intro": "Each viable overload is scored by the conversion its arguments need; the best tier wins:",
+    "stages": [
+     {
+      "name": "Exact match",
+      "io": "int → int",
+      "note": "Includes adding const and binding a reference. Beats everything below."
+     },
+     {
+      "name": "Promotion",
+      "io": "char → int, float → double",
+      "note": "Widening to int or double; better than any conversion."
+     },
+     {
+      "name": "Standard conversion",
+      "io": "int → double, unsigned → int",
+      "note": "All standard conversions share one rank, so two of them tie."
+     },
+     {
+      "name": "User-defined conversion",
+      "io": "constructor or operator T()",
+      "note": "The worst ordinary match."
+     },
+     {
+      "name": "A tie at the best rank",
+      "io": "ambiguous",
+      "note": "The compiler refuses to choose, and the call doesn't compile.",
+      "err": "call of overloaded 'f(unsigned int)' is ambiguous"
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Overloads must differ in their parameter lists; return type alone doesn't count, and neither does top-level const on a by-value parameter.",
+     "The compiler ranks each viable overload by the conversions its arguments need and picks the one that is strictly best.",
+     "If two overloads tie at the best rank, the call is ambiguous and doesn't compile."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A hiring panel scoring candidates",
+    "field": "analogy"
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "Which overload each call picks, and why:",
+    "field": "code"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "void f(int);\nvoid f(double);\n\nf('a');    // (1)\nf(3.0f);   // (2)\nf(3u);     // (3)",
+    "q": "Which overload does each call pick?",
+    "options": [
+     [
+      "A",
+      "(1) int, (2) double, (3) int"
+     ],
+     [
+      "B",
+      "(1) int, (2) double, (3) ambiguous"
+     ],
+     [
+      "C",
+      "(1) double, (2) double, (3) int"
+     ],
+     [
+      "D",
+      "All three are ambiguous"
+     ]
+    ],
+    "reveal": [
+     "B — f(int), f(double), and a compile error.",
+     "char to int is a promotion, which beats the conversion char to double.",
+     "float to double is a promotion, which beats the conversion float to int.",
+     "unsigned int to int and unsigned int to double are both standard conversions of the same rank, so neither wins: the call is ambiguous."
+    ]
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: how the compiler resolves a call",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Can two functions differ only in return type?",
+    "No. Calls are resolved from the arguments alone, so the two declarations conflict."
+   ],
+   [
+    "Why does f(0) call f(int) rather than f(char*)?",
+    "0 is an int literal: an exact match for int, whereas turning it into a null pointer is a conversion."
+   ],
+   [
+    "What makes a call ambiguous?",
+    "Two or more viable overloads that tie at the best conversion rank, with neither better for any argument."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Overloads in the binary",
+     "hint": "one mangled symbol per overload",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: operator<< and nullptr",
+     "hint": "overloading as an API design tool",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "default-arguments",
+    "function-templates",
+    "extern-keyword"
+   ]
+  },
+  "interview": {
+   "think": "Rank the conversion each overload would need before you reveal.",
+   "advancedTitle": "Advanced follow-up: f(1u) with int and double overloads"
+  },
+  "recall": [
+   [
+    "What does f(NULL) do when both f(int) and f(char*) exist?",
+    "It depends on how NULL is defined: with GCC and Clang it is an ambiguous-call error; where NULL is plain 0 it calls f(int). Use nullptr."
+   ],
+   [
+    "When does a template beat a non-template overload?",
+    "When it matches strictly better, for example exactly where the non-template needs a conversion; on a tie, the non-template wins."
+   ],
+   [
+    "Why can default arguments create ambiguity?",
+    "f(int a, int b = 0) and f(int a) are both callable as f(5) with equally good matches."
+   ]
+  ]
+ },
+ "default-arguments": {
+  "orientation": {
+   "what": "Values the compiler fills in for trailing arguments a caller leaves out — decided at the call site, from the declaration the caller can see.",
+   "why": "Defaults are convenient, but they are compiled into the caller. That leads to two real bugs: stale defaults after a header change, and virtual functions called with the base class's default.",
+   "outcomes": [
+    "Write default arguments correctly (trailing parameters, declared once)",
+    "Explain that defaults are substituted at the call site",
+    "Predict the default used for a virtual call through a base pointer",
+    "Explain why defaults on virtual functions are best avoided"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~20–25 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: filled in by the caller",
+    "intro": "What happens to greet(\"Ada\"):",
+    "stages": [
+     {
+      "name": "Declaration",
+      "io": "g = \"Hello\"",
+      "note": "The default lives in the declaration the caller can see (usually the header)."
+     },
+     {
+      "name": "Call site",
+      "io": "greet(\"Ada\")",
+      "note": "The compiler rewrites it as greet(\"Ada\", \"Hello\") inside the caller's own code."
+     },
+     {
+      "name": "Virtual call",
+      "io": "bp->show()",
+      "note": "The default comes from bp's static type (Base), even though Derived's body runs."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "A default argument is substituted at the call site, using the declaration visible there.",
+     "Only trailing parameters can have defaults, and a default is given once, usually in the header declaration.",
+     "For virtual functions the default comes from the static type and the body from the dynamic type, so the two can disagree."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A blank on your copy of the form",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "struct Base {\n    virtual int level(int x = 1) { return x; }\n    virtual ~Base() = default;\n};\nstruct Derived : Base {\n    int level(int x = 2) override { return x * 10; }\n};\n\nBase* p = new Derived;\nint r = p->level();",
+    "q": "What is r?",
+    "options": [
+     [
+      "A",
+      "1"
+     ],
+     [
+      "B",
+      "2"
+     ],
+     [
+      "C",
+      "10"
+     ],
+     [
+      "D",
+      "20"
+     ]
+    ],
+    "reveal": [
+     "C — r is 10.",
+     "The call is virtual, so Derived::level's body runs, and it multiplies by 10.",
+     "The missing argument is filled in from the static type of p, which is Base*, so x is 1.",
+     "Derived's code runs with Base's default: 1 × 10 = 10."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Full example",
+    "title": "The full example",
+    "intro": "Both traps in one program:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: two separate decisions",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Where is a default argument's value decided: in the function definition or at the call site?",
+    "At the call site, from the declaration the caller can see. The value is compiled into the caller's code."
+   ],
+   [
+    "Which parameters can have default arguments?",
+    "Only trailing ones: once a parameter has a default, every parameter after it needs one too."
+   ],
+   [
+    "Why can changing a default in a header have no effect on some callers?",
+    "Callers compiled earlier already contain the old value; they only pick up the new one when recompiled."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Where defaults live in the binary",
+     "hint": "in every caller, not in the function",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: the non-virtual interface (NVI) idiom",
+     "hint": "keeping defaults off virtual functions",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "function-overloading",
+    "inline-functions"
+   ]
+  },
+  "interview": {
+   "think": "Separate the two decisions: which body runs, and which default gets filled in.",
+   "advancedTitle": "Advanced follow-up: different defaults in different files"
+  },
+  "recall": [
+   [
+    "What is the NVI fix for defaults on virtual functions?",
+    "A public non-virtual function owns the default and calls a private or protected virtual function that has none."
+   ],
+   [
+    "Is a default argument evaluated once, or at every call?",
+    "At every call that omits it, in the caller, just as if the caller had written the expression."
+   ],
+   [
+    "Can you repeat a default argument in the function's definition?",
+    "Not in the same scope where it was already given: repeating it, even with the same value, is an error."
+   ]
+  ]
+ },
+ "inline-functions": {
+  "orientation": {
+   "what": "What inline really means: permission to define a function in several translation units (usually via a header) — not an order to paste its body at every call.",
+   "why": "Treating inline as a speed switch is one of the most common C++ misconceptions. Its real job is what makes header-only code link.",
+   "outcomes": [
+    "Explain the ODR meaning of inline",
+    "Explain why functions defined inside a class body don't cause link errors",
+    "Explain what decides whether a call is actually inlined",
+    "Know the tools for forcing inlining when it truly matters"
+   ],
+   "firstPass": "~15–25 min",
+   "laterPass": "~25–30 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: two separate decisions",
+    "intro": "What happens to inline int square(int) in a header:",
+    "stages": [
+     {
+      "name": "Every .cpp that includes it",
+      "io": "gets a definition",
+      "note": "Each translation unit compiles its own copy of the function."
+     },
+     {
+      "name": "Linker",
+      "io": "keeps one",
+      "note": "Duplicate definitions of an inline function are allowed and merged, instead of 'multiple definition'."
+     },
+     {
+      "name": "Optimizer",
+      "io": "its own decision",
+      "note": "Whether a call is replaced by the body depends on size, optimization level and whether the body is visible — the keyword is at most a hint."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "inline's guaranteed effect is about the ODR: the function may be defined, identically, in every translation unit that uses it.",
+     "Member functions defined inside the class body are implicitly inline, and so are constexpr functions.",
+     "Actual call-site inlining is an optimizer decision; the keyword is at most a hint."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A memo allowed on file in every office",
+    "field": "analogy"
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "A header with implicitly inline, explicitly inline and 'too big to inline' functions:",
+    "field": "code"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "// util.h, included by a.cpp and b.cpp\nint twice(int x) { return 2 * x; }\n\n// Built with full optimization, where every call gets inlined:\n//   g++ -O3 a.cpp b.cpp -o app",
+    "q": "Does this build?",
+    "options": [
+     [
+      "A",
+      "Yes: at -O3 every call is inlined, so no symbol is emitted"
+     ],
+     [
+      "B",
+      "No: multiple definition of twice(int)"
+     ],
+     [
+      "C",
+      "Only at -O0"
+     ],
+     [
+      "D",
+      "Only if twice is also static"
+     ]
+    ],
+    "reveal": [
+     "B — it fails to link with multiple definition of twice(int).",
+     "Inlining the calls doesn't remove the definition: each translation unit still emits an externally visible twice(int).",
+     "inline int twice(int x) makes the duplicates legal, and the linker keeps one.",
+     "This is the core point: inline is about definitions, not about how calls are compiled."
+    ]
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: linkage versus optimization",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What does inline guarantee?",
+    "That the function may be defined in several translation units, as long as every definition is identical; the linker merges them."
+   ],
+   [
+    "Does inline force the compiler to inline calls?",
+    "No. The optimizer decides call by call; it may inline functions not marked inline and ignore ones that are."
+   ],
+   [
+    "Why don't member functions defined inside a class body cause multiple-definition errors?",
+    "They are implicitly inline."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "COMDAT sections and stripped copies",
+     "hint": "how the linker merges duplicates",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: header-only libraries",
+     "hint": "Boost, Eigen, nlohmann/json",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "translation-units",
+    "function-templates"
+   ]
+  },
+  "interview": {
+   "think": "Separate the linkage guarantee from the optimization decision.",
+   "advancedTitle": "Advanced follow-up: when inline helps performance, and forcing it"
+  },
+  "recall": [
+   [
+    "What does an inline variable (C++17) allow?",
+    "Defining a variable in a header included by many files, with one shared instance, instead of declaring it extern and defining it in one .cpp file."
+   ],
+   [
+    "Why can't a call to a function defined only in another .cpp file normally be inlined?",
+    "The compiler hasn't seen that function's body while compiling this file; only link-time optimization (LTO) can inline across translation units."
+   ],
+   [
+    "How do you force inlining when it truly matters?",
+    "With a compiler-specific attribute such as __attribute__((always_inline)) for GCC and Clang, or __forceinline for MSVC."
+   ]
+  ]
  }
 };
 const JOURNEY_STAGES = [
@@ -16225,8 +18396,14 @@ function glCoreBlock(b, dc, F){
     case 'idea': {
       const precise = b.precise && F(b.precise);
       return '<ul class="gl-core">'+(b.points||[]).map(c=>'<li>'+inl(c)+'</li>').join('')+'</ul>'+
-        (precise ? '<div class="gl-precise"><div class="gl-precise-h">In precise terms</div>'+
-          String(precise).split(/(?<=[a-z)]\.)\s+(?=[A-Z])/).map(x=>para(x)).join('\n')+'</div>' : '');
+        (precise ? (()=>{
+          // Long formal definitions are collapsed so they don't compete with the core points on a first pass.
+          const body = String(precise).split(/(?<=[a-z)]\.)\s+(?=[A-Z])/).map(x=>para(x)).join('\n');
+          const words = String(precise).split(/\s+/).length;
+          return words > 90
+            ? '<details class="gl-precise gl-precise-more" id="'+b.id+'-precise"><summary><span class="gl-precise-h">In precise terms</span><span class="gl-precise-n">the full definition, '+words+' words</span></summary>'+body+'</details>'
+            : '<div class="gl-precise"><div class="gl-precise-h">In precise terms</div>'+body+'</div>';
+        })() : '');
     }
     case 'example':
       return (b.intro?'<p>'+inl(b.intro)+'</p>':'')+(b.code?renderCode(b.code):'')+
@@ -16334,7 +18511,7 @@ function guidedLessonHTML(id, dc, g, relatedQs){
     deepItems.join('')+extras.join('')+
     (nextTopics.length ? '<div class="gl-deeper"><span class="gl-small">'+escapeHtml(dd.nextTopicsLabel||'Go deeper next:')+'</span> '+nextTopics.map(t=>'<span class="chip chip-neutral" style="cursor:pointer" data-action="open-topic" data-topic="'+t+'">'+escapeHtml(TOPICS[t].name)+'</span>').join(' ')+'</div>' : '') : '';
 
-  const fq = relatedQs[0];
+  const fq = (iv.followUp && relatedQs.find(q=>q.id===iv.followUp)) || relatedQs[0];
   const hasInterview = (iq && iq.q) || (adv && adv.q) || mistake || traps || fq;
   const interview = hasInterview ? glPart('gl-interview', 'Part '+(partNo+(hasDeep?1:0))+' &middot; After it makes sense', 'Interview', 'Answer out loud first, then compare with the model answer.')+
     (iq && iq.q ? glSection('gl-iq', '?', 'Interview checkpoint', '<p class="gl-q">'+inl(iq.q)+'</p><p class="gl-think">'+inl(iv.think || 'Answer out loud before you reveal: what is the rule, and why does it hold?')+'</p>'+glReveal('gl-iq-r', 'Reveal answer', para(iq.a))) : '')+
