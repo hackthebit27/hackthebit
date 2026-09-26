@@ -1544,20 +1544,20 @@ DEEP_CONTENT['virtual-functions'] = {
 
 DEEP_CONTENT['rule-of-5'] = {
   def:"If a class needs to define any one of: destructor, copy constructor, copy assignment, move constructor, move assignment — it almost always needs to define (or explicitly default/delete) all five, because they exist to manage the same resource.",
-  why:"These five 'special member functions' work as a set. If you write a custom destructor to free a raw resource but let the compiler generate the copy constructor, the generated copy constructor will do a shallow bitwise copy of your resource handle — leading to a double free the moment two objects think they own the same resource.",
+  why:"These five 'special member functions' work as a set. If you write a custom destructor to free a raw resource but let the compiler generate the copy constructor, the generated copy constructor will do a shallow member-wise copy of your resource handle — leading to a double free the moment two objects think they own the same resource.",
   analogy:"Imagine a class that owns a company car. If you write custom logic for 'return the car when the employee leaves' (destructor) but leave the default 'give a new employee the same keys' (copy constructor) unedited, both employees now have working keys to one car — chaos (double free) is inevitable when either one tries to give it back.",
-  code:`class Buffer {\n    int* data;\n    size_t size;\npublic:\n    explicit Buffer(size_t n) : data(new int[n]), size(n) {}\n    ~Buffer() { delete[] data; }                       // 1: destructor\n\n    Buffer(const Buffer& o) : data(new int[o.size]), size(o.size) {\n        std::copy(o.data, o.data + size, data);\n    }                                                    // 2: copy ctor\n    Buffer& operator=(const Buffer& o) {                // 3: copy assign\n        if (this == &o) return *this;\n        int* newData = new int[o.size];\n        std::copy(o.data, o.data + o.size, newData);\n        delete[] data; data = newData; size = o.size;\n        return *this;\n    }\n    Buffer(Buffer&& o) noexcept\n        : data(o.data), size(o.size) { o.data = nullptr; o.size = 0; }   // 4: move ctor\n    Buffer& operator=(Buffer&& o) noexcept {            // 5: move assign\n        if (this == &o) return *this;\n        delete[] data;\n        data = o.data; size = o.size;\n        o.data = nullptr; o.size = 0;\n        return *this;\n    }\n};`,
+  code:`#include <algorithm>\n#include <cstddef>\n\nclass Buffer {\n    int* data;\n    std::size_t size;\npublic:\n    explicit Buffer(size_t n) : data(new int[n]), size(n) {}\n    ~Buffer() { delete[] data; }                       // 1: destructor\n\n    Buffer(const Buffer& o) : data(new int[o.size]), size(o.size) {\n        std::copy(o.data, o.data + size, data);\n    }                                                    // 2: copy ctor\n    Buffer& operator=(const Buffer& o) {                // 3: copy assign\n        if (this == &o) return *this;\n        int* newData = new int[o.size];\n        std::copy(o.data, o.data + o.size, newData);\n        delete[] data; data = newData; size = o.size;\n        return *this;\n    }\n    Buffer(Buffer&& o) noexcept\n        : data(o.data), size(o.size) { o.data = nullptr; o.size = 0; }   // 4: move ctor\n    Buffer& operator=(Buffer&& o) noexcept {            // 5: move assign\n        if (this == &o) return *this;\n        delete[] data;\n        data = o.data; size = o.size;\n        o.data = nullptr; o.size = 0;\n        return *this;\n    }\n};`,
   steps:[
     "Constructing a `Buffer(5)` heap-allocates 5 ints and stores the pointer + size.",
     "Copying a `Buffer` must deep-copy the array — otherwise both objects' `data` pointers point at the same heap block, and whichever destructor runs first frees it out from under the other.",
     "Moving a `Buffer` steals the pointer instead of copying the array, then nulls the source's pointer so its destructor becomes a safe no-op (`delete[] nullptr` is well-defined and harmless).",
     "The self-assignment check (`this == &o`) guards against `b = b;` freeing `data` before reading from `o`, since `o` *is* `*this` in that case."
   ],
-  memory:"Copy: two heap allocations, two independent arrays, O(n) time. Move: zero allocations — just three pointer/integer field swaps, O(1) time, and the moved-from object is left in a valid-but-unspecified ('empty') state, not a destroyed one.",
+  memory:"Copy: two heap allocations, two independent arrays, O(n) time. Move: zero allocations — just copying two fields and resetting the source's two, O(1) time, and the moved-from object is left in a valid-but-unspecified ('empty') state, not a destroyed one.",
   realWorld:"Every resource-owning type in the standard library follows Rule of 5 internally: `std::vector`, `std::string`, `std::unique_ptr`, `std::fstream`. This is exactly why you can put them in a `std::vector` and let the vector move elements around during reallocation cheaply.",
   mistake:"Defining a custom destructor 'just to log when an object dies' without thinking about the other four — if the class also holds a raw owning pointer, the compiler-generated copy constructor still does a shallow copy, producing a double-free the moment any copy happens.",
   interviewQ:{q:"What is the Rule of 0, and how does it relate to the Rule of 5?", a:"Rule of 0 says: prefer *not* writing any of the five special members at all, by composing your class entirely out of members that already manage their own resources correctly (`std::vector`, `std::unique_ptr`, `std::string`, etc.). Then the compiler-generated special members are correct by construction, because each member's own Rule-of-5 implementation handles its own resource. Rule of 5 is what you fall back to only when you're the one writing a low-level resource-owning type (like a smart pointer or a buffer) — most application code should never need it directly."},
-  advancedQ:{q:"Why should move constructors and move assignment be marked `noexcept`, and what breaks if they aren't?", a:"`std::vector` (and other containers) must provide the strong exception guarantee during reallocation: if growing the vector throws partway through moving elements to the new buffer, the vector must roll back to its original valid state. That's only possible if moving elements can't itself throw. So `std::vector` checks `std::is_nothrow_move_constructible`; if your move constructor isn't `noexcept`, the vector silently falls back to using the (slower) copy constructor during reallocation instead of your move constructor — a correctness-preserving but potentially serious performance regression that's easy to miss because nothing fails to compile."},
+  advancedQ:{q:"Why should move constructors and move assignment be marked `noexcept`, and what breaks if they aren't?", a:"`std::vector` (and other containers) must provide the strong exception guarantee during reallocation: if growing the vector throws partway through moving elements to the new buffer, the vector must roll back to its original valid state. That's only possible if moving elements can't itself throw. So `std::vector` checks whether the move constructor is noexcept (via std::move_if_noexcept); if your move constructor isn't `noexcept` and the type is copyable, the vector silently falls back to using the (slower) copy constructor during reallocation instead of your move constructor (a move-only type is still moved, giving up the strong guarantee) — a correctness-preserving but potentially serious performance regression that's easy to miss because nothing fails to compile."},
   traps:["Marking only the destructor and forgetting copy operations, leading to double-free.","Move operations that don't leave the source in a destructible state (forgetting to null the stolen pointer).","Missing `noexcept` on move operations, silently disabling `std::vector`'s move-based reallocation.","Self-move-assignment (`a = std::move(a);`) — must not corrupt the object; guard it like self-copy-assignment."]
 };
 
@@ -2040,18 +2040,18 @@ DEEP_CONTENT['destructors'] = {
   def:"A destructor is the special member function invoked automatically when an object's lifetime ends, responsible for releasing any resources the object owns. It takes no arguments, cannot be overloaded, and for a polymorphic base class should almost always be declared virtual.",
   why:"Destructors are the mechanism that makes RAII and deterministic cleanup possible at all in C++ -- unlike garbage-collected languages where cleanup timing is unpredictable, a C++ destructor runs at a precisely defined point (end of scope, explicit delete, or exception unwinding), which is what lets resource management be expressed as ordinary object lifetime rather than a separate cleanup pass.",
   analogy:"A destructor is like a hotel checkout procedure that runs automatically and unconditionally the moment a guest's stay ends -- keys are returned, the room is unlocked for the next guest, the bill is settled -- regardless of whether the guest left on schedule (normal return) or had to be evacuated early (an exception).",
-  code:`class FileHandle {\n    FILE* f;\npublic:\n    explicit FileHandle(const char* path) : f(fopen(path,"r")) {}\n    ~FileHandle(){ if(f) fclose(f); }   // automatic cleanup, always\n    FileHandle(const FileHandle&) = delete;         // see Rule of 5\n    FileHandle& operator=(const FileHandle&) = delete;\n};`,
+  code:`#include <cstdio>\n\nclass FileHandle {\n    FILE* f;\npublic:\n    explicit FileHandle(const char* path) : f(fopen(path,"r")) {}\n    ~FileHandle(){ if(f) fclose(f); }   // automatic cleanup, always\n    FileHandle(const FileHandle&) = delete;         // see Rule of 5\n    FileHandle& operator=(const FileHandle&) = delete;\n};`,
   steps:[
-    "Destructors run in the REVERSE order of construction: for members, in reverse declaration order (not reverse initializer-list order); for base classes, most-derived first, then up the inheritance chain; for local variables, reverse order of declaration in the block.",
-    "A destructor must not throw an exception that escapes it -- destructors are implicitly `noexcept` by default in modern C++, and a destructor throwing during stack unwinding (itself triggered by another exception) calls std::terminate, since the language has no sane way to propagate two simultaneous exceptions.",
+    "Destructors run in the REVERSE order of construction: the destructor's own body runs first, then members are destroyed in reverse declaration order (not reverse initializer-list order), then base classes -- so for a hierarchy, the most-derived destructor runs first, then up the inheritance chain; for local variables, reverse order of declaration in the block.",
+    "A destructor must not throw an exception that escapes it -- destructors are implicitly `noexcept` since C++11 (unless a member or base destructor is noexcept(false)), so an exception leaving one calls std::terminate EVEN WHEN no other exception is in flight. Only a destructor explicitly marked noexcept(false) can let an exception propagate, and even then, throwing during stack unwinding (itself triggered by another exception) calls std::terminate, since the language has no sane way to propagate two simultaneous exceptions.",
     "For a class intended to be used polymorphically (deleted through a base pointer), the base class destructor MUST be virtual -- otherwise deleting a derived object through a `Base*` only runs the base destructor, skipping the derived part's cleanup entirely (undefined behavior, typically a resource leak or worse)."
   ],
   memory:"A destructor's job is purely about RELEASING resources the object owns (closing handles, freeing heap memory, unlocking mutexes) -- it does not itself free the object's own storage for automatic/static objects (that's handled by scope-exit/program-exit), though for a `delete`d dynamic object, the deallocation step follows immediately after the destructor runs.",
   realWorld:"Forgetting a virtual destructor on a base class meant to be used polymorphically is one of the most common real production bugs in codebases with inheritance -- it compiles fine, appears to work in simple tests, and only actually leaks/corrupts when a derived object is deleted specifically through a base pointer, which may not happen until much later in a codebase's life.",
   mistake:"Writing a base class with virtual functions (implying polymorphic use) but forgetting `virtual ~Base() = default;` -- if nobody ever happens to `delete` through a base pointer in testing, this bug can hide for a long time before surfacing in production.",
-  interviewQ:{q:"Why should a base class intended for polymorphic use always have a virtual destructor?", a:"Because `delete` on a pointer-to-base only calls the STATIC type's destructor unless that destructor is virtual -- with a non-virtual destructor, `Base* p = new Derived(); delete p;` runs only `~Base()`, silently skipping `~Derived()` and leaking or corrupting any resources the derived part owned. Making the base destructor virtual ensures `delete` dispatches to the actual most-derived destructor first, which then chains up through each base destructor correctly."},
-  advancedQ:{q:"Why are destructors implicitly noexcept, and what happens if one throws anyway during stack unwinding?", a:"Destructors are assumed not to throw so that they can be safely called during stack unwinding triggered by ANOTHER exception already in flight -- if a destructor throws while the stack is already unwinding due to a first exception, the runtime would have two simultaneous exceptions with no defined way to reconcile them, so the standard mandates calling std::terminate() immediately rather than attempting to propagate both. This is why any operation with a real chance of throwing (e.g. closing a network connection that might report an error) should be given an explicit non-throwing 'best effort' path inside a destructor, with true error reporting done via a separate, explicitly-callable method instead."},
-  traps:["Forgetting `virtual` on a base class destructor meant for polymorphic deletion -- compiles fine, silently corrupts/leaks only when actually exercised through a base pointer.","Letting an exception escape a destructor during stack unwinding -- calls std::terminate(), immediately ending the program, often far from the original bug's real cause."]
+  interviewQ:{q:"Why should a base class intended for polymorphic use always have a virtual destructor?", a:"Because `delete` on a pointer-to-base only knows the STATIC type unless the destructor is virtual -- with a non-virtual destructor, `Base* p = new Derived(); delete p;` is undefined behavior by the standard; in practice GCC, Clang and MSVC run only `~Base()`, silently skipping `~Derived()` and leaking or corrupting any resources the derived part owned (GCC's -Wdelete-non-virtual-dtor and Clang's -Wdelete-non-abstract-non-virtual-dtor, both in -Wall, flag such a delete). Making the base destructor virtual ensures `delete` dispatches to the actual most-derived destructor first, which then chains up through each base destructor correctly."},
+  advancedQ:{q:"Why are destructors implicitly noexcept, and what happens if one throws anyway during stack unwinding?", a:"Destructors are assumed not to throw so that they can be safely called during stack unwinding triggered by ANOTHER exception already in flight -- if a destructor throws while the stack is already unwinding due to a first exception, the runtime would have two simultaneous exceptions with no defined way to reconcile them, so the standard mandates calling std::terminate() immediately rather than attempting to propagate both. Since C++11 destructors are also implicitly noexcept, so a throw escaping an ordinary destructor terminates the program even outside unwinding (GCC warns with -Wterminate and Clang with -Wexceptions, both on by default); only an explicit noexcept(false) lets it propagate. This is why any operation with a real chance of throwing (e.g. closing a network connection that might report an error) should be given an explicit non-throwing 'best effort' path inside a destructor, with true error reporting done via a separate, explicitly-callable method instead."},
+  traps:["Forgetting `virtual` on a base class destructor meant for polymorphic deletion -- compiles fine, silently corrupts/leaks only when actually exercised through a base pointer.","Letting an exception escape a destructor -- because destructors are implicitly noexcept, this calls std::terminate() immediately even outside stack unwinding, ending the program, often far from the original bug's real cause."]
 };
 DEEP_CONTENT['memory-stack'] = {
   def:"The call stack is a contiguous, LIFO (last-in-first-out) region of memory used for automatic-storage-duration objects, function parameters, return addresses, and saved registers -- growing and shrinking automatically as functions are called and return.",
@@ -2176,24 +2176,24 @@ DEEP_CONTENT['copy-constructor'] = {
   def:"A copy constructor initializes a new object as an independent duplicate of an existing object of the same type, typically taking its argument as `const T&`. After copying, the two objects are fully separate -- modifying one must not affect the other.",
   why:"The copy constructor (alongside copy assignment) defines what \"making a copy\" actually MEANS for a class -- for a class managing a resource (like a heap buffer), the compiler-generated default (a shallow, member-wise copy) is almost always WRONG, which is exactly why the Rule of 3/5 exists: define copy semantics deliberately once you have a resource to manage, rather than accepting a dangerously wrong default.",
   analogy:"A correct copy constructor is like photocopying a document rather than handing someone the original folder: after copying, both parties have a complete, independent document, and marking up one copy has no effect on the other. A shallow (default, member-wise) copy of a class managing a raw pointer is like handing someone a second key to the SAME folder instead -- both 'copies' point at the one real folder.",
-  code:`class Buffer {\n    int* data; size_t size;\npublic:\n    Buffer(size_t n) : data(new int[n]), size(n) {}\n    // Correct DEEP copy constructor:\n    Buffer(const Buffer& other) : data(new int[other.size]), size(other.size) {\n        std::copy(other.data, other.data + size, data);\n    }\n    ~Buffer(){ delete[] data; }\n};\n// Without a user-defined copy ctor, the compiler-generated one would just copy\n// the POINTER (data), leaving both objects pointing at the same buffer --\n// and BOTH destructors would eventually delete[] the same memory (double free).`,
+  code:`#include <algorithm>\n#include <cstddef>\n\nclass Buffer {\n    int* data; std::size_t size;\npublic:\n    explicit Buffer(std::size_t n) : data(new int[n]), size(n) {}\n    // Correct DEEP copy constructor:\n    Buffer(const Buffer& other) : data(new int[other.size]), size(other.size) {\n        std::copy(other.data, other.data + size, data);\n    }\n    ~Buffer(){ delete[] data; }\n    // Copy assignment is still the compiler's shallow version here -- the next\n    // topic (copy assignment) and the Rule of 3 add it.\n};\n// Without a user-defined copy ctor, the compiler-generated one would just copy\n// the POINTER (data), leaving both objects pointing at the same buffer --\n// and BOTH destructors would eventually delete[] the same memory (double free).`,
   steps:[
     "Without a user-declared copy constructor, the compiler generates one that member-wise copies each member -- for plain data members this is fine, but for a raw pointer member, this copies the ADDRESS, not the pointed-to data, leaving two objects that both believe they independently own the same resource.",
     "A correct copy constructor for a resource-owning class must perform a DEEP copy: allocate genuinely separate storage and copy the VALUES, so the two resulting objects share no state and can be independently destroyed without a double-free.",
     "Declaring ANY of the five special member functions (destructor, copy ctor, copy assign, move ctor, move assign) should prompt you to consider all five together (Rule of 5) -- a class needing a custom deep-copy constructor almost certainly also needs a custom destructor and copy assignment operator for the same reason."
   ],
-  memory:"The default (compiler-generated) copy constructor is a bitwise/member-wise copy -- correct and sufficient for a class whose members are all value types (ints, other correctly-copyable class types) with no owned raw resources, and actively WRONG the moment any member is a raw owning pointer/handle.",
+  memory:"The default (compiler-generated) copy constructor is a member-wise copy (each member is copied with its own copy constructor; it is only a plain bitwise copy when every member is trivially copyable) -- correct and sufficient for a class whose members are all value types (ints, other correctly-copyable class types) with no owned raw resources, and actively WRONG the moment any member is a raw owning pointer/handle.",
   realWorld:"This is exactly why the standard library's own resource-owning types (`std::vector`, `std::string`) each implement a correct deep-copy constructor internally -- so that user code copying a vector \"just works\" as an independent duplicate, without every C++ programmer needing to hand-write this logic themselves for every resource-owning type they create.",
   mistake:"Relying on the compiler-generated copy constructor for a class with a raw owning pointer member, without realizing it performs a shallow copy -- this compiles fine and often 'seems to work' until the moment BOTH copies' destructors run and double-free the shared buffer.",
   interviewQ:{q:"What is the difference between a shallow copy and a deep copy, and why does it matter for a class that owns a resource?", a:"A shallow copy duplicates a member's VALUE as-is -- for a pointer member, this copies the address, so both the original and the copy end up pointing at the exact SAME underlying resource. A deep copy instead allocates NEW, independent storage and copies the underlying DATA, so the two objects share no state afterward. For a resource-owning class, a shallow copy means both objects believe they exclusively own the same resource, leading to a double-free when both destructors eventually run -- which is why any class managing a raw resource must implement (or explicitly delete) its own copy constructor rather than relying on the compiler's default shallow behavior."},
-  advancedQ:{q:"If a class's copy constructor is expensive (e.g. deep-copies a large buffer) but is rarely actually needed, what modern alternative should you consider before optimizing the copy itself?", a:"First ask whether the copy is even necessary at that call site -- many apparently-required copies are actually eliminated by move semantics (moving a temporary/rvalue is O(1) regardless of the resource's size) or by guaranteed copy elision (C++17 mandatory RVO for prvalues). If a genuine copy of an existing named object really is required, consider whether the design could instead share the data via a `shared_ptr` to the underlying buffer (if shared, read-mostly access is acceptable) or use copy-on-write internally (deferring the actual deep copy until one of the two logical copies is actually mutated) -- though copy-on-write has its own thread-safety subtleties in modern C++ and is less commonly reached for than it once was."},
+  advancedQ:{q:"If a class's copy constructor is expensive (e.g. deep-copies a large buffer) but is rarely actually needed, what modern alternative should you consider before optimizing the copy itself?", a:"First ask whether the copy is even necessary at that call site -- many apparently-required copies are actually eliminated by move semantics (moving a temporary/rvalue is O(1) regardless of the resource's size) or by guaranteed copy elision (C++17 mandatory RVO for prvalues). If a genuine copy of an existing named object really is required, consider whether the design could instead share the data via a `shared_ptr` to the underlying buffer (if shared, read-mostly access is acceptable) or use copy-on-write internally (deferring the actual deep copy until one of the two logical copies is actually mutated) -- though copy-on-write has its own thread-safety subtleties in modern C++ and is less commonly reached for than it once was (C++11's rules for std::string effectively forbid it; GCC's libstdc++ dropped its copy-on-write string with the new ABI in GCC 5)."},
   traps:["Relying on a compiler-generated copy constructor for a class with a raw owning pointer member -- silently shallow, leading to eventual double-free.","Forgetting that declaring a custom copy constructor suppresses the compiler's implicitly-generated move constructor -- a class with an expensive custom copy but no explicit move operations will silently fall back to that expensive copy even in move-eligible contexts."]
 };
 DEEP_CONTENT['copy-assignment'] = {
   def:"The copy assignment operator (`T& operator=(const T& other)`) makes an ALREADY-EXISTING object become an independent duplicate of another existing object of the same type -- unlike the copy constructor, it must also correctly release/replace whatever resource the target object already held.",
   why:"Copy assignment has a genuinely harder correctness bar than the copy constructor: it must handle self-assignment safely (`x = x;`), and it must release the target's OLD resource without leaking it or, worse, freeing it before finishing reading from the source (a real risk in naive hand-written implementations, especially under self-assignment).",
   analogy:"If a copy constructor is photocopying a document into a fresh, empty folder, copy assignment is replacing the contents of a folder that ALREADY has papers in it -- you must first properly dispose of the old papers (without accidentally shredding pages you still need to read from, in the self-assignment case where source and destination are literally the same folder) before filing in the new copies.",
-  code:`class Buffer {\n    int* data; size_t size;\npublic:\n    // Robust copy assignment via copy-and-swap idiom:\n    Buffer& operator=(Buffer other){       // note: take by VALUE (already a copy)\n        swap(*this, other);                 // swap contents with the local copy\n        return *this;\n    }                                        // 'other' (holding our OLD data) is destroyed here\n    friend void swap(Buffer& a, Buffer& b){\n        std::swap(a.data, b.data); std::swap(a.size, b.size);\n    }\n};`,
+  code:`#include <algorithm>\n#include <cstddef>\n#include <utility>\n\nclass Buffer {\n    int* data; std::size_t size;\npublic:\n    explicit Buffer(std::size_t n) : data(new int[n]), size(n) {}\n    Buffer(const Buffer& o) : data(new int[o.size]), size(o.size) {  // deep copy\n        std::copy(o.data, o.data + size, data);\n    }\n    ~Buffer(){ delete[] data; }\n\n    // Robust copy assignment via copy-and-swap idiom:\n    Buffer& operator=(Buffer other){       // note: take by VALUE (already a copy)\n        swap(*this, other);                 // swap contents with the local copy\n        return *this;\n    }                                        // 'other' (holding our OLD data) is destroyed here\n    friend void swap(Buffer& a, Buffer& b){\n        std::swap(a.data, b.data); std::swap(a.size, b.size);\n    }\n};`,
   steps:[
     "A naive hand-written copy assignment (`delete[] data; data = new int[other.size]; ...`) is dangerous under self-assignment (`x = x;`) -- deleting `data` before checking whether `other` IS `*this` can free the very memory you're about to read from to perform the 'copy.'",
     "The copy-and-swap idiom sidesteps this entirely: taking the parameter BY VALUE means a full, independent copy of the source has already been made (via the copy constructor) before the assignment operator's body even runs, so swapping that already-correct copy's internals with `*this`'s is always safe, self-assignment included, with no explicit self-check needed.",
@@ -2210,24 +2210,24 @@ DEEP_CONTENT['move-constructor'] = {
   def:"A move constructor initializes a new object by TRANSFERRING ownership of another object's resources (typically taking an rvalue reference, `T&&`) rather than duplicating them -- the source object is left in a valid, but unspecified, 'moved-from' state, typically emptied of what it used to own.",
   why:"Before move semantics (pre-C++11), returning a large object by value, or inserting one into a growing container, meant an expensive deep COPY even when the source was a temporary about to be discarded anyway -- the move constructor lets the compiler recognize 'this source is about to be destroyed regardless, so just steal its resources instead of duplicating them,' turning what used to be an O(n) copy into an O(1) pointer-stealing operation.",
   analogy:"A move constructor is like transferring a moving truck's cargo to a new driver by handing over the keys, rather than unloading and reloading every box into a second truck (a copy) -- the original truck (source object) is left empty, but the cargo itself never had to be duplicated.",
-  code:`class Buffer {\n    int* data; size_t size;\npublic:\n    // Move constructor: STEAL the pointer, don't copy the data\n    Buffer(Buffer&& other) noexcept\n        : data(other.data), size(other.size) {\n        other.data = nullptr;   // leave source in a safe, empty, valid state\n        other.size = 0;\n    }\n    ~Buffer(){ delete[] data; }   // safe even if data is nullptr (delete on nullptr is a no-op)\n};`,
+  code:`#include <cstddef>\n\nclass Buffer {\n    int* data; std::size_t size;\npublic:\n    explicit Buffer(std::size_t n) : data(new int[n]), size(n) {}\n    // Move constructor: STEAL the pointer, don't copy the data\n    Buffer(Buffer&& other) noexcept\n        : data(other.data), size(other.size) {\n        other.data = nullptr;   // leave source in a safe, empty, valid state\n        other.size = 0;\n    }\n    ~Buffer(){ delete[] data; }   // safe even if data is nullptr (delete on nullptr is a no-op)\n};`,
   steps:[
     "A move constructor takes its source by rvalue reference (`T&&`), which the caller obtains either from a genuine temporary (a prvalue) or by explicitly opting in via `std::move` on a named lvalue that the caller has decided is safe to pillage.",
     "It copies the source's pointer/handle members directly (a cheap, fixed-cost operation regardless of the underlying resource's size) rather than duplicating the underlying data, then resets the source's members to a safe, empty state so its destructor won't also try to free the now-stolen resource.",
     "Marking the move constructor `noexcept` (when it genuinely cannot throw, which is typical since it's just a few pointer assignments) is not merely documentation -- standard containers specifically check this to decide whether they can safely use MOVE during operations like reallocation, or must fall back to a slower copy to preserve exception-safety guarantees."
   ],
   memory:"The critical safety detail is resetting the source's members to a state its OWN destructor can safely handle (e.g. `nullptr` for a pointer, since `delete nullptr` is a well-defined no-op) -- forgetting this reset step is the most common move-constructor bug, since the source object's destructor will still run eventually and would otherwise double-free the resource that was just stolen.",
-  realWorld:"Move semantics are why returning even a very large `std::vector` or `std::string` by value from a factory function is now idiomatic, efficient C++ -- pre-C++11 style guides that advised 'avoid returning large objects by value, use output parameters instead' are now largely outdated advice for exactly this reason.",
+  realWorld:"Move semantics (together with copy elision -- RVO/NRVO often construct the result directly in the caller, and C++17 guarantees it when returning a prvalue) are why returning even a very large `std::vector` or `std::string` by value from a factory function is now idiomatic, efficient C++ -- pre-C++11 style guides that advised 'avoid returning large objects by value, use output parameters instead' are now largely outdated advice for exactly this reason.",
   mistake:"Writing a move constructor that copies the source's pointer but forgets to null it out afterward -- both the moved-from object and the newly-constructed object now believe they own the same resource, and whichever destructor runs SECOND double-frees it.",
   interviewQ:{q:"Why must a move constructor leave the source object in a valid (even if unspecified) state, rather than just abandoning it?", a:"Because the source object's destructor is still going to run eventually (moving doesn't skip destruction, it only changes what the destructor will find when it runs) -- if the move constructor doesn't reset the source's members to something the destructor can safely handle (like nullptr for a pointer), the source's eventual destructor will attempt to free the SAME resource the new object just took ownership of, causing a double-free. \"Valid but unspecified\" means the moved-from object must still be safely destructible and safely reassignable, even though its specific VALUE is no longer meaningful to the caller."},
-  advancedQ:{q:"Why should a move constructor be marked noexcept whenever genuinely possible, beyond it just being accurate documentation?", a:"Standard containers like std::vector specifically check via std::move_if_noexcept whether a type's move constructor is noexcept before deciding to use MOVE during operations like reallocation. If it is not marked noexcept (even if it happens not to throw in practice), the container will conservatively fall back to COPYING elements during reallocation instead, to preserve the strong exception-safety guarantee (a copy that fails partway through leaves the original vector unmodified; a move that fails partway through could leave it in a corrupted, half-moved state with no way to roll back). So an unmarked or throwing move constructor can silently cost you the entire performance benefit you wrote it for, specifically inside container reallocation, with no compiler warning telling you this happened."},
+  advancedQ:{q:"Why should a move constructor be marked noexcept whenever genuinely possible, beyond it just being accurate documentation?", a:"Standard containers like std::vector specifically check via std::move_if_noexcept whether a type's move constructor is noexcept before deciding to use MOVE during operations like reallocation. If it is not marked noexcept (even if it happens not to throw in practice), the container will conservatively fall back to COPYING elements during reallocation instead (provided the type is copyable -- a move-only type is still moved, and the strong guarantee is given up), to preserve the strong exception-safety guarantee (a copy that fails partway through leaves the original vector unmodified; a move that fails partway through could leave it in a corrupted, half-moved state with no way to roll back). So an unmarked or throwing move constructor can silently cost you the entire performance benefit you wrote it for, specifically inside container reallocation, with no compiler warning telling you this happened."},
   traps:["Forgetting to reset the source's members after stealing them in a move constructor -- leads to a double-free once the moved-from object's destructor eventually runs.","Writing a move constructor that CAN throw (e.g. because it does some non-trivial extra work beyond stealing pointers) without realizing this silently disables its use inside container reallocation."]
 };
 DEEP_CONTENT['move-assignment'] = {
   def:"Move assignment (`T& operator=(T&& other) noexcept`) makes an ALREADY-EXISTING object take over another object's resources by transfer rather than duplication, while also correctly releasing whatever resource the target previously held.",
   why:"Move assignment combines the two hardest parts of move-constructor and copy-assignment: it must both correctly transfer (not copy) the source's resource, AND correctly dispose of the target's PRE-EXISTING resource first -- getting either part wrong under self-move-assignment (`x = std::move(x);`, rare in practice but must not crash) or ordinary use is a real source of subtle bugs.",
   analogy:"If move construction is handing over a moving truck's keys to someone with an EMPTY new garage, move assignment is handing over those same keys to someone whose garage ALREADY has a different truck's worth of stuff in it -- that old stuff has to be properly disposed of first (or swapped out, via copy-and-swap-style reasoning) before accepting the new truck's keys.",
-  code:`class Buffer {\n    int* data; size_t size;\npublic:\n    Buffer& operator=(Buffer&& other) noexcept {\n        if(this != &other){              // guard against x = std::move(x)\n            delete[] data;                 // release OUR old resource first\n            data = other.data;             // steal\n            size = other.size;\n            other.data = nullptr;          // leave source safely empty\n            other.size = 0;\n        }\n        return *this;\n    }\n    ~Buffer(){ delete[] data; }\n};`,
+  code:`#include <cstddef>\n\nclass Buffer {\n    int* data; std::size_t size;\npublic:\n    explicit Buffer(std::size_t n) : data(new int[n]), size(n) {}\n    Buffer& operator=(Buffer&& other) noexcept {\n        if(this != &other){              // guard against x = std::move(x)\n            delete[] data;                 // release OUR old resource first\n            data = other.data;             // steal\n            size = other.size;\n            other.data = nullptr;          // leave source safely empty\n            other.size = 0;\n        }\n        return *this;\n    }\n    ~Buffer(){ delete[] data; }\n};`,
   steps:[
     "First, release whatever resource the TARGET object (`*this`) already owned -- this must happen (or be handled safely) before or alongside taking ownership of the source's resource, or the target's old resource leaks.",
     "Then transfer the source's resource by copying its handle/pointer members (not the underlying data) into `*this`, exactly as in a move constructor.",
@@ -2244,7 +2244,7 @@ DEEP_CONTENT['rule-of-0'] = {
   def:"The Rule of Zero says: prefer designing classes that need NONE of the five special member functions (destructor, copy/move constructor, copy/move assignment) written by hand at all -- by composing the class entirely out of members that already manage their own resources correctly (smart pointers, standard containers, value types).",
   why:"Every hand-written special member function is a chance to introduce a resource-management bug -- the Rule of Zero's insight is that if NO member owns a raw resource directly, the compiler-generated defaults (which just call each member's own correct special member functions) are automatically correct, so the best number of special member functions to hand-write is usually zero.",
   analogy:"Rule of Zero is like furnishing a new apartment entirely with self-assembling furniture that already knows how to pack and unpack itself for a move -- you personally never need to write a custom moving procedure, because every individual piece already handles its own part of the process correctly.",
-  code:`struct Address { std::string street; };\nstruct Photo { std::vector<unsigned char> bytes; };\n\n// Rule of Zero in action: no destructor, no copy/move ctors written by hand\nclass Person {\n    std::string name;               // already manages its own memory correctly\n    std::vector<Address> addresses; // ditto\n    std::unique_ptr<Photo> photo;    // ditto\n public:\n    Person(std::string n) : name(std::move(n)) {}\n    // NO destructor, copy ctor, copy assign, move ctor, or move assign needed --\n    // the compiler-generated versions correctly call each member's own logic.\n    // (unique_ptr is move-only, so Person's implicit copy operations are\n    // deleted -- Person is movable but not copyable, which is also correct.)\n};`,
+  code:`#include <memory>\n#include <string>\n#include <utility>\n#include <vector>\n\nstruct Address { std::string street; };\nstruct Photo { std::vector<unsigned char> bytes; };\n\n// Rule of Zero in action: no destructor, no copy/move ctors written by hand\nclass Person {\n    std::string name;               // already manages its own memory correctly\n    std::vector<Address> addresses; // ditto\n    std::unique_ptr<Photo> photo;    // ditto\n public:\n    Person(std::string n) : name(std::move(n)) {}\n    // NO destructor, copy ctor, copy assign, move ctor, or move assign needed --\n    // the compiler-generated versions correctly call each member's own logic.\n    // (unique_ptr is move-only, so Person's implicit copy operations are\n    // deleted -- Person is movable but not copyable, which is also correct.)\n};`,
   steps:[
     "Design every member to be a value type or a smart pointer/standard container that ALREADY correctly implements its own five special member functions -- never a raw owning pointer/handle directly inside the class.",
     "With that composition, the compiler-generated destructor/copy/move operations are automatically correct: they simply call each member's own (already correct) corresponding special member function, in the right order.",
@@ -2254,14 +2254,14 @@ DEEP_CONTENT['rule-of-0'] = {
   realWorld:"This is precisely why modern C++ style guides consider a class with a hand-written destructor a signal worth double-checking -- it usually means either that class is itself one of the low-level resource-owning wrapper types (legitimate, rare), or it's holding a raw resource it should instead be wrapping in an existing smart pointer/container member (the more common, fixable case).",
   mistake:"Writing a hand-rolled destructor 'just in case' or for logging/debugging purposes on a class that otherwise follows Rule of Zero -- doing so suppresses the compiler's implicitly-generated move constructor and move assignment operator (declaring a destructor opts you out of the move operations being implicitly generated), silently downgrading the class to copy-only behavior even though nothing about its actual members required that.",
   interviewQ:{q:"What is the Rule of Zero and how does it relate to the Rule of Five?", a:"The Rule of Five says: if you must hand-write ANY of the five special member functions (because your class directly manages a raw resource), you should carefully consider all five together, since the compiler's defaults for the others are likely wrong once you've taken manual control of one. The Rule of Zero is the stronger, preferred outcome: design your class so it never needs to hand-write ANY of the five in the first place, by composing it entirely from members (smart pointers, containers, value types) that already correctly implement their own resource management -- letting the compiler-generated defaults, which simply delegate to each member's own correct behavior, be automatically correct."},
-  advancedQ:{q:"Why does adding an empty, seemingly harmless destructor (`~Foo(){}`) to a Rule-of-Zero class silently change its behavior?", a:"Declaring ANY destructor, even an empty one, suppresses the compiler's implicit generation of the move constructor and move assignment operator (per the special member function generation rules) -- the class falls back to being copy-only (assuming copy operations are still implicitly available), silently losing move-efficiency everywhere it's used, e.g. inside a vector's reallocation, which would now fall back to copying elements of this type instead of moving them. This is a real, easy-to-introduce performance regression that produces no compiler error or warning, which is exactly why 'don't add a destructor unless you actually need one' is a meaningful, not merely stylistic, guideline."},
+  advancedQ:{q:"Why does adding an empty, seemingly harmless destructor (`~Foo(){}`) to a Rule-of-Zero class silently change its behavior?", a:"Declaring ANY destructor, even an empty one, suppresses the compiler's implicit generation of the move constructor and move assignment operator (per the special member function generation rules) -- the class falls back to being copy-only (assuming copy operations are still implicitly available), silently losing move-efficiency everywhere it's used, e.g. inside a vector's reallocation, which would now fall back to copying elements of this type instead of moving them. It can be worse than slow: for a class holding a move-only member such as unique_ptr, the implicit copy is deleted too, so adding ~Foo(){} leaves the class neither copyable nor movable. This is a real, easy-to-introduce regression that produces no compiler error and no warning under -Wall -Wextra (GCC's -Wdeprecated-copy-dtor and Clang's -Wdeprecated-copy-with-dtor can flag the deprecated implicit copy that remains, but only when enabled explicitly), which is exactly why 'don't add a destructor unless you actually need one' is a meaningful, not merely stylistic, guideline."},
   traps:["Adding an empty or logging-only destructor to an otherwise Rule-of-Zero class, silently suppressing implicit move operation generation.","Storing a raw owning pointer as a class member 'just this once' instead of wrapping it in an existing smart pointer -- this is the exact decision that forces the class out of Rule-of-Zero territory and into needing hand-written special member functions."]
 };
 DEEP_CONTENT['rule-of-3'] = {
   def:"The Rule of Three (the pre-C++11 predecessor to the Rule of Five) says: if a class needs a user-defined destructor, copy constructor, OR copy assignment operator, it almost certainly needs all three -- because needing any one of them is a signal the class manages a resource the compiler's naive defaults can't handle correctly.",
   why:"The insight is symmetric: if your class needs a custom DESTRUCTOR (because it owns a resource requiring explicit cleanup), then the compiler-generated shallow COPY constructor is almost certainly wrong for the same reason (it would copy the resource handle, not the resource itself) -- and vice versa: if you needed a custom copy constructor because a shallow copy is wrong, you almost certainly need a custom destructor to correctly release the resource that copy constructor is managing.",
   analogy:"Rule of Three is like realizing that if a business needs a custom shipping procedure for a fragile product (destructor: careful, deliberate cleanup), it almost certainly also needs a custom PACKING procedure when duplicating an order (copy constructor) and a custom procedure for updating an existing order with new fragile contents (copy assignment) -- the fragility that necessitated one special procedure necessitates all of them.",
-  code:`class RawBuffer {                    // pre-C++11 style, Rule of Three\n    int* data; size_t size;\npublic:\n    RawBuffer(size_t n) : data(new int[n]), size(n) {}\n    ~RawBuffer(){ delete[] data; }                                  // 1: destructor\n    RawBuffer(const RawBuffer& o) : data(new int[o.size]), size(o.size) {\n        std::copy(o.data, o.data+size, data);\n    }                                                                // 2: copy ctor\n    RawBuffer& operator=(const RawBuffer& o){                       // 3: copy assign\n        if(this != &o){\n            int* newData = new int[o.size];   // allocate BEFORE freeing (exception safety)\n            std::copy(o.data, o.data+o.size, newData);\n            delete[] data;\n            data = newData; size = o.size;\n        }\n        return *this;\n    }\n};`,
+  code:`#include <algorithm>\n#include <cstddef>\n\nclass RawBuffer {                    // pre-C++11 style, Rule of Three\n    int* data; size_t size;\npublic:\n    RawBuffer(size_t n) : data(new int[n]), size(n) {}\n    ~RawBuffer(){ delete[] data; }                                  // 1: destructor\n    RawBuffer(const RawBuffer& o) : data(new int[o.size]), size(o.size) {\n        std::copy(o.data, o.data+size, data);\n    }                                                                // 2: copy ctor\n    RawBuffer& operator=(const RawBuffer& o){                       // 3: copy assign\n        if(this != &o){\n            int* newData = new int[o.size];   // allocate BEFORE freeing (exception safety)\n            std::copy(o.data, o.data+o.size, newData);\n            delete[] data;\n            data = newData; size = o.size;\n        }\n        return *this;\n    }\n};`,
   steps:[
     "Recognize the trigger: the moment a class needs to manually manage a resource (requiring a custom destructor to release it correctly), stop and explicitly consider whether the compiler-generated copy constructor and copy assignment operator are also going to be wrong for the same class.",
     "In the vast majority of cases involving a raw owned resource, they ARE wrong (shallow copy of a handle, not a deep copy of the resource) -- so all three should be defined together, deliberately, rather than discovering the bug only after a copy causes a double-free in production.",
@@ -2271,7 +2271,7 @@ DEEP_CONTENT['rule-of-3'] = {
   realWorld:"Plenty of production codebases still contain pre-C++11-style Rule-of-Three classes (correct, but missing the move-efficiency Rule of Five would add) -- recognizing this pattern during a code review or modernization pass, and knowing that ADDING move constructor/assignment to such a class is purely additive (never breaks existing Rule-of-Three correctness), is a genuinely useful, real-world skill.",
   mistake:"Defining only a custom destructor (because a resource needs cleanup) WITHOUT also defining copy constructor/assignment, mistakenly trusting the compiler-generated (shallow) defaults for those -- this is precisely the scenario Rule of Three exists to prevent: the shallow copy will duplicate the resource HANDLE, not the resource, leading to a double-free once the original and the shallow copy are both eventually destroyed.",
   interviewQ:{q:"Why does needing a custom destructor typically imply you also need custom copy constructor and copy assignment operator?", a:"A custom destructor is needed specifically because the class owns a resource that the compiler doesn't know how to release correctly on its own (e.g. a raw pointer needing delete[], a file handle needing fclose). But that exact same resource-ownership fact means the COMPILER-GENERATED copy constructor and copy assignment (which perform a shallow, member-wise copy) will ALSO be wrong -- they'll copy the resource HANDLE (e.g. the pointer value) rather than the resource itself, leaving two objects that both believe they own and will each try to free the SAME resource, causing a double-free. So the same underlying fact (this class manages a resource requiring custom cleanup) simultaneously breaks the defaults for all three operations, which is why they're addressed together."},
-  advancedQ:{q:"Is it safe to add move constructor and move assignment to an existing, correct Rule-of-Three class? What could go wrong?", a:"Yes, this is generally safe and purely additive -- a Rule-of-Three class's existing destructor, copy constructor, and copy assignment operator continue to work exactly as before; you're simply adding two NEW special member functions (move ctor/assign) that the compiler will now prefer over copying whenever the source is an rvalue. The main things to get right when adding them: correctly reset the moved-from object's state so its (unchanged, already-correct) destructor doesn't double-free after the move, and mark the new move operations noexcept where genuinely true, so standard containers can take advantage of them during reallocation -- but you do not need to touch or re-verify the correctness of the original three Rule-of-Three members at all."},
+  advancedQ:{q:"Is it safe to add move constructor and move assignment to an existing, correct Rule-of-Three class? What could go wrong?", a:"Yes, this is generally safe and purely additive -- a Rule-of-Three class's existing destructor, copy constructor, and copy assignment operator continue to work exactly as before; you're simply adding two NEW special member functions (move ctor/assign) that the compiler will now prefer over copying whenever the source is an rvalue. The main things to get right when adding them: correctly reset the moved-from object's state so its (unchanged, already-correct) destructor doesn't double-free after the move, and mark the new move operations noexcept where genuinely true, so standard containers can take advantage of them during reallocation -- and then re-check the rest of the class against the NEW moved-from state (null data, size 0): the original three members stay correct as long as they cope with it (here, copying from an emptied object allocates zero ints and copies nothing, which is fine), but any other member function that assumed data is never null must now handle it."},
   traps:["Defining a custom destructor without also addressing copy constructor/assignment, trusting the (shallow, wrong) compiler defaults for a resource-owning class.","Assuming Rule of Three and Rule of Five are competing/alternative rules rather than the same idea, with Rule of Five simply extending Rule of Three to also cover move semantics once C++11 introduced them."]
 };
 DEEP_CONTENT['stdforward'] = {
@@ -6816,21 +6816,21 @@ DEEP_CONTENT['macros'] = {
  def: "A function-like macro (#define NAME(params) body) is pure, context-blind textual substitution performed by the preprocessor before the C++ compiler ever parses anything -- the preprocessor has no concept of operator precedence, expression grouping, variable scope, or how many times an argument token-sequence is referenced in the body, it simply pastes the caller's raw argument text everywhere the parameter name appears in the body, then pastes the fully-substituted body text wherever the macro was invoked. This blind-substitution model is the root cause of three classic, senior-interview-relevant bug classes: missing-parentheses precedence bugs, multiple-evaluation-of-side-effecting-arguments bugs, and macro hygiene/name-collision bugs (since macros have no scope at all -- they are visible from their #define point to end of translation unit, or #undef, regardless of namespaces, classes, or blocks).",
  why: "Even in 2020s C++ codebases, legacy macros linger in cross-platform code, logging systems, and assert-like utilities, so senior engineers are expected to both recognize these bug patterns on sight in code review and to know the modern replacement for nearly every legitimate historical macro use case: constexpr functions/variables (typed, scoped, single-evaluation compile-time constants and computations), templates (typed, scoped generic code with real overload resolution), inline functions (safe multi-TU definitions), and enum class (typed, scoped constants) collectively eliminate almost every reason to reach for a function-like macro today -- interviewers use 'find the bug in this macro' questions specifically to separate candidates who've internalized WHY macros are dangerous (blind text substitution) from those who've just memorized 'macros are bad, use constexpr'.",
  analogy: "A macro is like a form-letter mail-merge that does a dumb find-and-replace of {{CUSTOMER_NAME}} with whatever raw text you hand it, with zero grammar checking -- if you hand it the text 'Bob, and also Steve' where a single name was expected, it happily pastes that entire fragment in, potentially breaking the sentence's grammar in ways a real assistant (a type-checked function) would never allow, because a real assistant would insist your input conform to 'a single name' as a well-defined slot, not just accept and blindly paste arbitrary text. And if two different departments each define their own {{ID}} merge tag with different meanings and both templates get merged into the same final document, whichever definition was 'active' last simply overwrites silently -- there's no compiler catching the collision, because merge tags don't have scope.",
- code: "#include <iostream>\n\n// BUG 1: missing parens around parameter AND around the whole expansion.\n#define SQUARE_BROKEN(x) x * x\n\n// FIX: parenthesize every parameter occurrence AND the overall expansion.\n#define SQUARE_FIXED(x) ((x) * (x))\n\n// BUG 2: multiple evaluation of a side-effecting argument.\n#define MAX_BROKEN(a, b) ((a) > (b) ? (a) : (b))\n\n// BUG 3: macro hygiene -- no scope, can silently collide with a local variable\n// name used inside the macro body.\n#define SWAP_BROKEN(a, b) { int tmp = a; a = b; b = tmp; }\n\n// MODERN REPLACEMENT: a constexpr template function -- typed, scoped, and\n// evaluates each argument exactly once, with real overload resolution.\ntemplate <typename T>\nconstexpr T maxFixed(const T& a, const T& b) {\n  return a > b ? a : b;\n}\n\nint main() {\n  int r1 = 5 + SQUARE_BROKEN(1 + 2);\n  // Expands to: 5 + 1 + 2 * 1 + 2  ==  5 + 1 + 2 + 2  ==  10, NOT 5 + 9 = 14\n  int r2 = 5 + SQUARE_FIXED(1 + 2);\n  // Expands to: 5 + ((1 + 2) * (1 + 2))  ==  5 + 9  ==  14  -- correct.\n  std::cout << r1 << \" vs \" << r2 << \"\\n\";\n\n  int x = 30;\n  int y = MAX_BROKEN(x++, 10);\n  // Expands to: ((x++) > (10) ? (x++) : (10)) -- x++ appears TWICE in the\n  // expansion; 30 > 10 is true, so the (x++) branch runs a SECOND increment.\n  std::cout << \"x is now \" << x << \", y is \" << y << \"\\n\"; // x is now 32, y is 31\n\n  int p = 1, tmp = 99; // local variable named 'tmp' collides with the macro's internal 'tmp'\n  // SWAP_BROKEN(p, tmp); // expands using the CALLER's 'tmp' as both the swap\n                          // target AND the macro's internal temp -- corrupts the swap.\n\n  int a = 3, b = 10;\n  std::cout << maxFixed(a, b) << \"\\n\"; // evaluates each argument exactly once, type-checked\n  return 0;\n}\n",
+ code: "#include <iostream>\n\n// BUG 1: missing parens around parameter AND around the whole expansion.\n#define SQUARE_BROKEN(x) x * x\n\n// FIX: parenthesize every parameter occurrence AND the overall expansion.\n#define SQUARE_FIXED(x) ((x) * (x))\n\n// BUG 2: multiple evaluation of a side-effecting argument.\n#define MAX_BROKEN(a, b) ((a) > (b) ? (a) : (b))\n\n// BUG 3: macro hygiene -- no scope, can silently collide with a local variable\n// name used inside the macro body.\n#define SWAP_BROKEN(a, b) { int tmp = a; a = b; b = tmp; }\n\n// MODERN REPLACEMENT: a constexpr template function -- typed, scoped, and\n// evaluates each argument exactly once, with real overload resolution.\ntemplate <typename T>\nconstexpr T maxFixed(const T& a, const T& b) {\n  return a > b ? a : b;\n}\n\nint main() {\n  int r1 = 5 + SQUARE_BROKEN(1 + 2);\n  // Expands to: 5 + 1 + 2 * 1 + 2  ==  5 + 1 + 2 + 2  ==  10, NOT 5 + 9 = 14\n  int r2 = 5 + SQUARE_FIXED(1 + 2);\n  // Expands to: 5 + ((1 + 2) * (1 + 2))  ==  5 + 9  ==  14  -- correct.\n  std::cout << r1 << \" vs \" << r2 << \"\\n\";\n\n  int x = 30;\n  int y = MAX_BROKEN(x++, 10);\n  // Expands to: ((x++) > (10) ? (x++) : (10)) -- x++ appears TWICE in the\n  // expansion; 30 > 10 is true, so the (x++) branch runs a SECOND increment.\n  std::cout << \"x is now \" << x << \", y is \" << y << \"\\n\"; // x is now 32, y is 31\n\n  int p = 1, tmp = 99; // local variable named 'tmp' collides with the macro's internal 'tmp'\n  // SWAP_BROKEN(p, tmp); // expands to { int tmp = p; p = tmp; tmp = tmp; } -- every\n                          // 'tmp' inside the braces is the macro's own, so nothing is\n                          // swapped: p stays 1 and the caller's tmp stays 99.\n\n  int a = 3, b = 10;\n  std::cout << maxFixed(a, b) << \"\\n\"; // evaluates each argument exactly once, type-checked\n  return 0;\n}\n",
  steps: [
   "The preprocessor sees SQUARE_BROKEN(1 + 2) and performs pure token substitution: every occurrence of the parameter x in the macro body 'x * x' is replaced with the literal argument tokens '1 + 2', producing '1 + 2 * 1 + 2' -- with NO grouping parentheses added anywhere, because the macro definition never asked for any.",
   "That raw substituted text is then spliced into the surrounding expression '5 + <substitution>', giving '5 + 1 + 2 * 1 + 2', which the C++ compiler parses using normal operator precedence (multiplication before addition): 5 + 1 + (2 * 1) + 2 = 5 + 1 + 2 + 2 = 10 -- catastrophically different from the intended (1+2)^2 = 9, let alone 5 + 9 = 14.",
   "SQUARE_FIXED wraps both the parameter's every occurrence AND the whole macro body in parentheses: '((x) * (x))' becomes '((1 + 2) * (1 + 2))' when substituted, which parses correctly regardless of what expression the caller passes or what surrounds the macro invocation.",
   "For MAX_BROKEN(x++, 10), the preprocessor substitutes the token sequence 'x++' for EVERY occurrence of parameter a in the body -- since a appears twice in '((a) > (b) ? (a) : (b))', the expansion is '((x++) > (10) ? (x++) : (10))', meaning x++ is a literal, separate post-increment expression appearing twice in the compiled code.",
   "At runtime the comparison evaluates one x++ (30 > 10, x becomes 31); because it is true, the chosen (a) branch evaluates x++ a SECOND time, yielding 31 and leaving x at 32 -- so x is incremented twice from a single MAX_BROKEN(x++, 10) call (had the comparison been false, the (10) branch would run and x would be incremented only once, so the damage even depends on the data), a bug that is completely invisible from reading the call site and only found by inspecting the expansion or by knowing to distrust macros with argument-referenced-more-than-once bodies.",
-  "For SWAP_BROKEN(p, tmp) where the caller happens to have a local variable literally named tmp, the macro's internal '{ int tmp = a; a = b; b = tmp; }' expands to '{ int tmp = p; p = tmp; tmp = tmp; }' -- the macro's own tmp declaration SHADOWS the caller's tmp inside that block scope, but because the caller passed their own variable named tmp as an argument, the substituted text 'b = tmp' now refers to the macro's freshly-declared inner tmp instead of the caller's, silently corrupting the intended swap logic in a way that depends entirely on accidental name collision.",
+  "For SWAP_BROKEN(p, tmp) where the caller happens to have a local variable literally named tmp, the macro's internal '{ int tmp = a; a = b; b = tmp; }' expands to '{ int tmp = p; p = tmp; tmp = tmp; }' -- the macro's own tmp declaration SHADOWS the caller's tmp inside that block scope, but because the caller passed their own variable named tmp as an argument, the substituted text 'b = tmp' now refers to the macro's freshly-declared inner tmp instead of the caller's, silently corrupting the intended swap logic in a way that depends entirely on accidental name collision -- the net effect is that nothing is swapped at all: p stays 1 and the caller's tmp stays 99.",
   "maxFixed(a, b), by contrast, is a real function: the compiler evaluates argument expressions exactly once each, binds them to real, properly-scoped parameters a and b with no textual substitution or caller-scope leakage, performs real type checking and overload resolution, and (being constexpr) can additionally be evaluated at compile time when called with compile-time-constant arguments -- eliminating all three bug classes structurally, not by caller discipline."
  ],
- memory: "Macros leave no trace in the compiler's symbol table, debug information, or the eventual object code as 'macros' at all -- by the time the compiler front end even starts, every macro invocation has already been replaced by its raw expansion text, so a debugger stepping through code compiled from a macro-heavy source file shows you the EXPANDED code's behavior (or, depending on debug info quality, potentially confusing or missing line mappings back to the macro invocation site), never the macro definition itself. This is a genuine debuggability cost distinct from the correctness bugs: there's no 'macro call frame,' no way to set a breakpoint 'inside the macro' as a distinct step, and error messages from a broken expansion point at the token positions in the EXPANDED text, which can look nothing like what you actually typed, especially for deeply nested macros.",
+ memory: "Macros leave no trace in the compiler's symbol table or the eventual object code as 'macros' at all (by default they are not in the debug information either -- GCC keeps macro definitions in the DWARF debug info only with -g3, and Clang only with -fdebug-macro, which lets gdb's 'macro expand' show an expansion) -- by the time the compiler front end even starts, every macro invocation has already been replaced by its raw expansion text, so a debugger stepping through code compiled from a macro-heavy source file shows you the EXPANDED code's behavior (or, depending on debug info quality, potentially confusing or missing line mappings back to the macro invocation site), never the macro definition itself. This is a genuine debuggability cost distinct from the correctness bugs: there's no 'macro call frame,' no way to set a breakpoint 'inside the macro' as a distinct step, and error messages from a broken expansion point at tokens in the EXPANDED text, which can look nothing like what you actually typed, especially for deeply nested macros (GCC and Clang soften this with an 'in expansion of macro' / 'expanded from macro' note that walks back to the invocation, but the error itself is still about the expansion).",
  realWorld: "Legacy C-heritage codebases and cross-platform C++ code still lean on macros for things genuinely outside what functions can do -- conditional compilation (#ifdef _WIN32), stringification/token-pasting for boilerplate generation (X-macros for enum-to-string tables), include guards, and assert()-style macros that need to embed __FILE__/__LINE__ and to compile away entirely in release builds -- but virtually every OTHER historical macro use case (typed constants, small computations, generic min/max/clamp helpers) has been superseded in modern C++ by constexpr variables/functions and templates, and major style guides (Google's C++ Style Guide, the C++ Core Guidelines) explicitly restrict function-like macros to only the handful of cases (like assert and X-macros) that genuinely can't be expressed as real C++.",
  mistake: "Writing a function-like macro whose parameters are used more than once in the body (or missing parentheses around parameters/the whole expansion) without stopping to ask 'what if the caller passes a compound expression, or an expression with a side effect, as this argument?' -- the fix isn't 'be more careful with the macro', it's structural: reach for a constexpr/inline function or a template instead, which evaluates each argument exactly once, respects scope, and gets full type checking, eliminating the entire bug class rather than requiring perpetual vigilance.",
  interviewQ: {q: "Find the bug: #define INCREMENT_AND_LOG(x) (x = x + 1, std::cout << x << std::endl) -- called as INCREMENT_AND_LOG(arr[i++]). What actually happens, and how would you rewrite this safely in modern C++?", a: "The macro parameter x is referenced THREE times in the body (x = x + 1 uses x twice, plus the std::cout << x). Because macro arguments are pure textual substitution, every occurrence of x becomes the literal text arr[i++] -- so the expansion is literally '(arr[i++] = arr[i++] + 1, std::cout << arr[i++] << std::endl)'. This means i is incremented THREE separate times (once per arr[i++] occurrence) in a single macro invocation, and worse, before C++17 the two unsequenced i++ side effects inside arr[i++] = arr[i++] + 1 are undefined behavior (C++17 sequences the right operand of = before the left, so it becomes well-defined but still increments i three times and writes to a different element than it reads) -- a class of bug that historically manifested differently across compilers and optimization levels. The safe modern rewrite is a real function that takes its argument as a reference and evaluates it exactly once: template<typename T> void incrementAndLog(T& x) { x = x + 1; std::cout << x << std::endl; } -- called as incrementAndLog(arr[i++]), where the compiler evaluates arr[i++] exactly ONCE to produce a reference bound to that one array element for the entire function call, incrementing i exactly once, with well-defined, unsurprising behavior."},
- advancedQ: {q: "Beyond precedence and multiple-evaluation bugs, explain a macro hygiene issue that a constexpr function structurally cannot have, using a concrete example involving a macro that introduces its own local variable.", a: "Consider #define FOR_RANGE(i, n) for (int i = 0; i < (n); ++i) used inside code that also has an outer variable also intended to be named i in an enclosing scope, or nested FOR_RANGE invocations that both try to declare a loop variable named i in what the macro author assumed would be a fresh scope each time -- because a macro's expansion is spliced VERBATIM into the caller's lexical context with no scope of its own beyond whatever braces happen to surround the expansion, nesting FOR_RANGE(i, 5) { FOR_RANGE(i, 3) { ... } } declares two variables both named i, where the inner 'for (int i = 0; ...)' does at least get its own for-loop-header scope in C++ (so this SPECIFIC case is saved by ordinary block scoping rules) -- but the general hygiene problem shows up in less lucky cases: a macro that introduces a local variable in a way that ISN'T automatically scoped away from the caller (e.g. a macro used inline mid-expression, not as a standalone statement, so it can't wrap its temporary in its own braces without breaking the surrounding expression's syntax) can have its internal temporary variable's name collide with, and silently interact with, an identically-named variable the CALLER happens to have in scope -- because macro expansion has no independent namespace or scope of its own; it's not hygienic macro expansion the way, say, Scheme's syntax-rules macros are, which generate fresh, uncollidable names for every macro-internal binding automatically. A constexpr function, or a template, structurally cannot have this problem: every parameter and every local variable declared inside a real function body lives in that function's OWN scope, is name-mangled/scoped by the compiler's real scoping rules, and can never accidentally bind to or shadow a caller's same-named variable, because C++'s function-call ABI and scoping rules -- unlike raw text substitution -- genuinely separate the callee's names from the caller's regardless of what identifiers either side happens to choose."},
+ advancedQ: {q: "Beyond precedence and multiple-evaluation bugs, explain a macro hygiene issue that a constexpr function structurally cannot have, using a concrete example involving a macro that introduces its own local variable.", a: "Consider #define FOR_RANGE(i, n) for (int i = 0; i < (n); ++i) used inside code that also has an outer variable also intended to be named i in an enclosing scope, or nested FOR_RANGE invocations that both try to declare a loop variable named i in what the macro author assumed would be a fresh scope each time -- because a macro's expansion is spliced VERBATIM into the caller's lexical context with no scope of its own beyond whatever braces happen to surround the expansion, nesting FOR_RANGE(i, 5) { FOR_RANGE(i, 3) { ... } } declares two variables both named i, where the inner 'for (int i = 0; ...)' does at least get its own for-loop-header scope in C++ (so this SPECIFIC case is saved by ordinary block scoping rules) -- but the general hygiene problem shows up in less lucky cases: a macro that introduces a local variable in a way that ISN'T automatically scoped away from the caller (e.g. a macro used inline mid-expression, not as a standalone statement, so it can't wrap its temporary in its own braces without breaking the surrounding expression's syntax) can have its internal temporary variable's name collide with, and silently interact with, an identically-named variable the CALLER happens to have in scope -- because macro expansion has no independent namespace or scope of its own; it's not hygienic macro expansion the way, say, Scheme's syntax-rules macros are, which generate fresh, uncollidable names for every macro-internal binding automatically. A constexpr function, or a template, structurally cannot have this problem: every parameter and every local variable declared inside a real function body lives in that function's OWN scope and can never accidentally bind to or shadow a caller's same-named variable, because C++'s scoping rules -- unlike raw text substitution -- genuinely separate the callee's names from the caller's regardless of what identifiers either side happens to choose."},
  traps: [
   "Writing a function-like macro body or a parameter reference without wrapping it in parentheses, causing the substituted expression's operator precedence to silently differ depending on the expression the caller passes as an argument.",
   "Referencing a macro parameter more than once in the macro body and not considering what happens when the caller passes an argument with a side effect (i++, a function call with observable effects, an assignment) -- causing that side effect to fire multiple times per single logical call.",
@@ -6844,7 +6844,7 @@ DEEP_CONTENT['function-pointers'] = {
  def: "A raw function pointer is a variable whose type encodes a function's exact signature (return type plus parameter types) and whose value is the address of a specific function's compiled code -- declared as ReturnType (*pointerName)(ParamTypes...), e.g. int (*fp)(int, int) declares fp as a pointer to a function taking two ints and returning int. It is the most primitive, lowest-level callable abstraction in C++: a plain machine address with a type signature, with zero storage for any additional state -- it cannot capture variables from an enclosing scope the way a lambda closure can, which structurally means a raw function pointer can only ever refer to a free function, a static member function, or a non-capturing lambda (which the standard guarantees is implicitly convertible to a raw function pointer of matching signature specifically because it holds no captured state).",
  why: "Senior engineers need to know exactly when each callable abstraction is the right tool: a raw function pointer is required whenever you're interfacing with a plain C API expecting a callback (qsort, pthread_create, signal handlers, most C library callback parameters, and huge swaths of OS and driver-level APIs), because those APIs are typically declared to accept a plain function pointer type with a fixed, small, predictable size and calling convention (no vtable, no captured-state payload) -- a std::function CANNOT be passed where a C API expects a raw function pointer, because std::function is a type-erasing wrapper class with its own (larger, implementation-defined) size, internal virtual dispatch, and potential heap allocation for captured state, which is binary-incompatible with a bare function-pointer ABI. std::function (or, in hot code, a template parameter constrained to any callable) is the right modern choice whenever you need to store or pass around a callable that might carry captured state (a stateful lambda, a bound member function, a functor with data members) and you're willing to pay a small, well-understood overhead (typically one indirect call plus possible heap allocation for larger captures) for that flexibility.",
  analogy: "A raw function pointer is like a phone number written on a sticky note -- just the digits, nothing else; dialing it always reaches the same fixed extension with no memory of who wrote the note or why. std::function is like a fully-staffed answering service you can hand ANY kind of request to -- a plain phone number, a person who additionally remembers a customer's account details (a stateful lambda's captures), a delegate with a filled-in order form (a bound member function plus object) -- and the service transparently handles dispatching to whichever underlying handler was registered, at the cost of routing every call through the service's front desk (an indirect call) and sometimes needing extra filing cabinet space (heap allocation) to remember a handler's extra details. A legacy switchboard system (a C API) can only accept the plain sticky-note number format -- it has no slot for 'and also remember this extra context' -- so no matter how convenient the full answering service is, you must hand the switchboard a bare number it can dial directly.",
- code: "#include <iostream>\n#include <functional>\n#include <cstdlib> // for qsort, a real C API taking a raw function pointer\n\n// Raw function pointer declaration syntax: ReturnType (*name)(ParamTypes...)\nint add(int a, int b) { return a + b; }\nint multiply(int a, int b) { return a * b; }\n\nint applyRaw(int (*op)(int, int), int x, int y) {\n  return op(x, y); // calling through a raw function pointer -- one indirect jump, no state\n}\n\n// A C API: qsort's comparator parameter MUST be a plain function pointer --\n// it has a fixed, ABI-defined signature and cannot accept a std::function\n// (different size/layout, not compatible with C's calling convention here).\nint compareInts(const void* a, const void* b) {\n  return (*static_cast<const int*>(a)) - (*static_cast<const int*>(b));\n}\n\nint main() {\n  int (*fp)(int, int) = add;      // raw pointer to a free function\n  std::cout << applyRaw(fp, 2, 3) << \"\\n\";        // 5\n  std::cout << applyRaw(multiply, 2, 3) << \"\\n\";   // 6 -- function name decays to pointer\n\n  int arr[] = {5, 3, 1, 4, 2};\n  qsort(arr, 5, sizeof(int), compareInts); // C API: only accepts a raw fn ptr, not std::function\n\n  // A stateful lambda CANNOT decay to a raw function pointer -- it has captured\n  // state (threshold) that a bare code address has nowhere to store.\n  int threshold = 10;\n  auto isAboveThreshold = [threshold](int x) { return x > threshold; };\n  // bool (*badFp)(int) = isAboveThreshold; // ERROR: no conversion -- lambda captures state\n\n  // std::function CAN hold it, at the cost of type erasure overhead:\n  std::function<bool(int)> predicate = isAboveThreshold;\n  std::cout << std::boolalpha << predicate(15) << \"\\n\"; // true -- state (threshold) preserved\n\n  // A NON-capturing lambda, by contrast, DOES implicitly convert to a raw\n  // function pointer, precisely because it holds zero state:\n  bool (*nonCapturingFp)(int) = [](int x) { return x % 2 == 0; };\n  std::cout << nonCapturingFp(4) << \"\\n\"; // true\n  return 0;\n}\n",
+ code: "#include <iostream>\n#include <functional>\n#include <cstdlib> // for qsort, a real C API taking a raw function pointer\n\n// Raw function pointer declaration syntax: ReturnType (*name)(ParamTypes...)\nint add(int a, int b) { return a + b; }\nint multiply(int a, int b) { return a * b; }\n\nint applyRaw(int (*op)(int, int), int x, int y) {\n  return op(x, y); // calling through a raw function pointer -- one indirect jump, no state\n}\n\n// A C API: qsort's comparator parameter MUST be a plain function pointer --\n// it has a fixed, ABI-defined signature and cannot accept a std::function\n// (different size/layout, not compatible with C's calling convention here).\nint compareInts(const void* a, const void* b) {\n  int x = *static_cast<const int*>(a);\n  int y = *static_cast<const int*>(b);\n  return (x > y) - (x < y); // not x - y: that overflows for values like INT_MIN\n}\n\nint main() {\n  int (*fp)(int, int) = add;      // raw pointer to a free function\n  std::cout << applyRaw(fp, 2, 3) << \"\\n\";        // 5\n  std::cout << applyRaw(multiply, 2, 3) << \"\\n\";   // 6 -- function name decays to pointer\n\n  int arr[] = {5, 3, 1, 4, 2};\n  std::qsort(arr, 5, sizeof(int), compareInts); // C API: only accepts a raw fn ptr, not std::function\n\n  // A stateful lambda CANNOT decay to a raw function pointer -- it has captured\n  // state (threshold) that a bare code address has nowhere to store.\n  int threshold = 10;\n  auto isAboveThreshold = [threshold](int x) { return x > threshold; };\n  // bool (*badFp)(int) = isAboveThreshold; // ERROR: no conversion -- lambda captures state\n\n  // std::function CAN hold it, at the cost of type erasure overhead:\n  std::function<bool(int)> predicate = isAboveThreshold;\n  std::cout << std::boolalpha << predicate(15) << \"\\n\"; // true -- state (threshold) preserved\n\n  // A NON-capturing lambda, by contrast, DOES implicitly convert to a raw\n  // function pointer, precisely because it holds zero state:\n  bool (*nonCapturingFp)(int) = [](int x) { return x % 2 == 0; };\n  std::cout << nonCapturingFp(4) << \"\\n\"; // true\n  return 0;\n}\n",
  steps: [
   "int (*fp)(int, int) = add; declares fp with a type that encodes the exact signature 'function taking (int, int), returning int', and initializes it with the address of add -- a plain function name used in this context implicitly decays to its address, exactly like an array name decaying to a pointer to its first element.",
   "applyRaw(fp, 2, 3) calls through fp: at the machine level this compiles to an INDIRECT call instruction (call through a register holding the address stored in fp), as opposed to a direct call instruction the compiler could emit if it statically knew which function was being called -- this indirection is the entire cost and the entire flexibility of a function pointer.",
@@ -6854,7 +6854,7 @@ DEEP_CONTENT['function-pointers'] = {
   "bool (*nonCapturingFp)(int) = [](int x) { return x % 2 == 0; }; succeeds because a NON-capturing lambda's closure type, despite technically being a distinct class type, is guaranteed by the standard to provide an implicit conversion operator to a plain function pointer of matching signature -- since it captures nothing, there's no state that would be lost by representing it as a bare code address, so the compiler can synthesize that conversion safely.",
   "The compiler-generated conversion for the non-capturing lambda effectively produces a plain function (sometimes literally an actual free function under the hood) whose address is assigned to nonCapturingFp -- from that point on, calling through nonCapturingFp is indistinguishable at the machine level from calling through fp for add: one address, one indirect call, zero captured state."
  ],
- memory: "A raw function pointer is exactly one machine-word wide (pointer-sized) at runtime, containing nothing but a code address -- no vtable, no heap allocation, no extra bookkeeping, and it participates in the plain C calling convention (cdecl or whatever the platform ABI specifies) directly, which is exactly why it's binary-compatible across a C/C++ boundary. std::function, by contrast, is a full class template instance whose size is implementation-defined but always noticeably larger than a single pointer (commonly 16-32+ bytes on mainstream implementations) because it must store: a pointer/vtable-like mechanism to the type-erased callable's invoke/copy/destroy operations, plus either an inline small-buffer for tiny captured state or a pointer to a heap-allocated copy of the captured state when it doesn't fit inline -- this is precisely why std::function cannot be passed anywhere a plain C function pointer is ABI-expected: the sizes, layouts, and calling mechanisms are fundamentally different and incompatible, not just 'different C++ types' in a superficial sense.",
+ memory: "A raw function pointer is exactly one machine-word wide (pointer-sized) at runtime, containing nothing but a code address -- no vtable, no heap allocation, no extra bookkeeping, and it participates in the plain C calling convention (cdecl or whatever the platform ABI specifies) directly, which is exactly why it's binary-compatible across a C/C++ boundary. std::function, by contrast, is a full class template instance whose size is implementation-defined but always noticeably larger than a single pointer (32 bytes with GCC's libstdc++ on x86-64; libc++ and Microsoft's STL choose their own sizes -- this is a standard-library decision, not a compiler one) because it must store: a pointer/vtable-like mechanism to the type-erased callable's invoke/copy/destroy operations, plus either an inline small-buffer for tiny captured state or a pointer to a heap-allocated copy of the captured state when it doesn't fit inline -- this is precisely why std::function cannot be passed anywhere a plain C function pointer is ABI-expected: the sizes, layouts, and calling mechanisms are fundamentally different and incompatible, not just 'different C++ types' in a superficial sense.",
  realWorld: "POSIX and OS-level APIs are the canonical place raw function pointers remain mandatory in modern C++ code: pthread_create's start routine, signal()'s handler parameter, qsort/bsearch's comparator, and most plugin/driver ABI boundaries in systems programming all specify a plain function pointer type because they are C APIs (or deliberately C-ABI-compatible C++ APIs) with no notion of C++ type erasure or closures -- meanwhile, application-level C++ code that wants a general-purpose, storable, possibly-stateful callback (an event handler registry, a GUI button's click callback, a strategy-pattern policy object configured at runtime) reaches for std::function (or, in performance-sensitive template code where the concrete callable type is known at compile time, a plain template parameter constrained with a concept, which avoids type-erasure overhead entirely by letting the compiler generate a specialized, statically-dispatched version per callable type).",
  mistake: "Trying to pass a stateful (capturing) lambda directly to a C API parameter typed as a plain function pointer and being confused by the resulting compile error, instead of recognizing that the API fundamentally cannot accept any captured state at all -- the fix is either restructuring to avoid the capture (e.g. passing the needed state through the API's own void* userdata/context parameter, a pattern many C callback APIs provide for exactly this reason) or, if the API is C++ and flexible, changing its signature to accept a std::function or a template parameter instead of a raw function pointer.",
  interviewQ: {q: "Why can't you pass a stateful lambda to a function parameter typed as a raw function pointer, and what's the idiomatic way to still get the callback registered with a C API that only accepts a plain function pointer?", a: "A stateful (capturing) lambda compiles to an instance of a compiler-generated, unnamed class type (a closure) that has real member-variable storage for whatever it captured, plus an operator() that uses that storage -- it is a genuine object with state and a nonzero size beyond a bare code address. A raw function pointer's type, by contrast, is defined to be exactly a code address with a fixed signature; it has no storage slot for extra captured data at all, so there's structurally no way to represent 'this lambda's captured state' inside a plain function pointer value -- the conversion simply doesn't exist, and the compiler rejects it at compile time (unlike a non-capturing lambda, which the standard specifically allows to convert to a function pointer because it captures nothing). The idiomatic fix when you must interoperate with a C API that only accepts a plain function pointer callback is to use the API's own 'user data' / 'context' parameter pattern, which most well-designed C callback APIs provide for exactly this situation: register a plain, non-capturing (often static, or free) function as the callback, and separately pass your actual state as an opaque void* argument that the API promises to hand back to your callback unmodified on every invocation -- inside that plain callback function, you cast the void* back to your real state type and use it there. This achieves the same effect as a capturing lambda (state available inside the callback) while still satisfying the plain-function-pointer ABI the C API requires, because the state travels alongside the call as an ordinary argument value rather than being baked into the callback's own type."},
@@ -6877,7 +6877,7 @@ DEEP_CONTENT['classes-objects'] = {
   def: "A class is a compile-time-only blueprint — a type definition that describes what data (members) and behavior (member functions) instances will have, but a class by itself occupies no memory at runtime. An object is a concrete instance of that class: a region of memory laid out according to the class's non-static data members (plus a vptr if the class is polymorphic), with its own independent copy of every non-static data member. Creating N objects of the same class allocates N separate blocks of that layout, but all N objects share the single compiled copy of the class's member functions — the code for a method exists exactly once in the binary regardless of how many objects call it.",
   why: "This distinction is the foundation everything else in OOP rests on: sizeof(SomeClass) is a compile-time constant computed purely from the class definition (member types, order, alignment/padding — never from how many objects will exist), copying an object copies its data members (not its class's code), and 'per-object cost' vs 'per-class cost' is the exact axis you need to reason about memory for every later OOP topic (static members, virtual functions, vtables).",
   analogy: "An architectural blueprint for a house costs nothing extra to 'have' whether you build 1 house or 1,000 from it — the blueprint (class) is drawn once. Each actual house (object) built from it has its own independent front door, its own furniture, its own address — changing the paint color in house #4 doesn't touch house #7, even though both were built from the identical blueprint. If the architect revises the blueprint (edits the class and recompiles), already-built houses are unaffected; only new houses built after the revision reflect the change.",
-  code: "class Point {\npublic:\n    Point(int x, int y) : x_(x), y_(y) {}\n    int getX() const { return x_; }\n    static int instanceCount;   // one copy total, shared by ALL objects\nprivate:\n    int x_, y_;                 // each object gets its OWN x_ and y_\n};\nint Point::instanceCount = 0;   // storage for the static member lives once, not per-object\n\nint main() {\n    Point a(1, 2);\n    Point b(10, 20);\n    Point c(100, 200);\n    // a, b, c each occupy sizeof(Point) == 8 bytes (two ints), independently.\n    // getX() exists as ONE function in the binary; a.getX(), b.getX(), c.getX()\n    // all call the same machine code with a different 'this' pointer each time.\n    std::cout << sizeof(Point) << '\\n';           // 8 (two ints, no vptr, no padding here)\n    std::cout << &a << ' ' << &b << ' ' << &c;     // three distinct, unrelated addresses\n}",
+  code: "#include <iostream>\n\nclass Point {\npublic:\n    Point(int x, int y) : x_(x), y_(y) {}\n    int getX() const { return x_; }\n    static int instanceCount;   // one copy total, shared by ALL objects\nprivate:\n    int x_, y_;                 // each object gets its OWN x_ and y_\n};\nint Point::instanceCount = 0;   // storage for the static member lives once, not per-object\n\nint main() {\n    Point a(1, 2);\n    Point b(10, 20);\n    Point c(100, 200);\n    // a, b, c each occupy sizeof(Point) bytes (8 wherever int is 4 bytes -- true on all\n    // mainstream 32- and 64-bit platforms, though the standard doesn't fix int's size).\n    // getX() exists as ONE function in the binary; a.getX(), b.getX(), c.getX()\n    // all call the same machine code with a different 'this' pointer each time.\n    std::cout << sizeof(Point) << '\\n';           // 8 (two ints, no vptr, no padding here)\n    std::cout << &a << ' ' << &b << ' ' << &c;     // three distinct, unrelated addresses\n}",
   steps: [
     "Compiling Point's definition emits no memory allocation at all — it only teaches the compiler the layout (two ints = 8 bytes) and generates the machine code for the constructor and getX() once.",
     "'Point a(1, 2);' reserves 8 bytes on the stack and runs the constructor with an implicit 'this' pointer set to a's address, writing 1 into a.x_ and 2 into a.y_.",
@@ -6890,11 +6890,11 @@ DEEP_CONTENT['classes-objects'] = {
   mistake: "Assuming a class 'takes up memory' by being defined, or conflating static (per-class, one copy total) members with non-static (per-object, one copy per instance) members — engineers sometimes add a static member expecting each object to get its own copy, or forget that a non-static member genuinely duplicates across every object, leading to surprising memory growth when a seemingly small class is instantiated at scale (e.g. adding one extra 8-byte member to a class instantiated 10 million times adds 80MB, not 8 bytes).",
   interviewQ: {
     q: "What is the size of an empty class in C++ (class Empty {};), and why isn't it 0?",
-    a: "sizeof(Empty) is 1, not 0. The standard requires every complete object to have a unique address, and two distinct objects can never have the same address. If an empty class were allowed to have size 0, an array of two Empty objects (or two separately-allocated Empty objects) could end up at the identical address, violating that guarantee — so the compiler pads it to at least 1 byte purely to guarantee addressability, even though that byte holds no actual data."
+    a: "The standard only requires a nonzero size; GCC, Clang and MSVC all make it 1. The reason is that two distinct complete objects of the same type must never share an address. If an empty class were allowed to have size 0, an array of two Empty objects (or two separately-allocated Empty objects) could end up at the identical address, violating that guarantee — so the compiler pads it to at least 1 byte purely to guarantee addressability, even though that byte holds no actual data. The exception is an empty BASE class, which may occupy zero bytes inside a derived object (the empty base optimization: struct D : Empty { int x; } is 4 bytes), and since C++20 a member marked [[no_unique_address]] (GCC and Clang honor it; MSVC ignores the standard attribute for ABI reasons and needs [[msvc::no_unique_address]])."
   },
   advancedQ: {
     q: "Given class A has 3 virtual functions and class B has 30 virtual functions (both otherwise holding the same non-static data members), how do sizeof(A) and sizeof(B) compare, and why?",
-    a: "sizeof(A) and sizeof(B) are identical (assuming identical data members) — both classes need exactly one vptr (one pointer, typically 8 bytes on a 64-bit system) added to their per-object layout, because the vptr just points at the whole vtable array; the NUMBER of virtual functions only affects the SIZE of the class's shared vtable (a per-class, not per-object, static array — 3 entries vs 30 entries), never the per-object footprint. Going from 0 virtual functions to 1 is the only transition that changes sizeof (adds one vptr); going from 1 virtual function to 30 costs zero additional bytes per object."
+    a: "sizeof(A) and sizeof(B) are identical (assuming identical data members and single inheritance) — on GCC and Clang (Itanium C++ ABI) and MSVC alike, both classes need exactly one vptr (the standard itself never mentions vtables; they are the universal implementation technique) (one pointer, typically 8 bytes on a 64-bit system) added to their per-object layout, because the vptr just points at the whole vtable array; the NUMBER of virtual functions only affects the SIZE of the class's shared vtable (a per-class, not per-object, static array — 3 entries vs 30 entries), never the per-object footprint. Going from 0 virtual functions to 1 is the only transition that changes sizeof (adds one vptr); going from 1 virtual function to 30 costs zero additional bytes per object."
   },
   traps: [
     "Assuming sizeof(SomeClass) depends on how many objects you plan to create — it's a fixed compile-time constant derived purely from the class definition.",
@@ -6907,9 +6907,9 @@ DEEP_CONTENT['classes-objects'] = {
 
 DEEP_CONTENT['constructors'] = {
   def: "A constructor is a special member function, named identically to its class, that runs automatically whenever an object is created, responsible for establishing the object's invariants before any other code can touch it. C++ recognizes several flavors by signature — default (no arguments), parameterized (takes arguments), copy (T(const T&)), and move (T(T&&)) — and every constructor has two distinct phases: the member initializer list, which runs first and directly INITIALIZES base subobjects and data members in declaration order, and the constructor body, which runs second and can only ASSIGN to already-initialized members.",
-  why: "The initializer list isn't a style preference — it's the only mechanism the language provides to initialize const data members, reference data members, and base classes (or members) that have no default constructor, because by the time the constructor body starts executing, every base subobject and every data member has ALREADY been default-constructed (or left uninitialized for built-in types) and any member you didn't explicitly list simply got its default constructor called with no arguments — assignment in the body can only overwrite an already-existing value, which is illegal for const/reference members (they can never be reassigned) and wasteful for class-type members (you pay for a default construction you're about to throw away).",
+  why: "The initializer list isn't a style preference — it's the only mechanism the language provides to initialize const data members, reference data members, and base classes (or members) that have no default constructor, because by the time the constructor body starts executing, every base subobject and every data member has ALREADY been initialized -- any member you didn't explicitly list got its default member initializer if the class declares one (int x_ = 0;), and otherwise was default-constructed (or left uninitialized for built-in types) — assignment in the body can only overwrite an already-existing value, which is illegal for const/reference members (they can never be reassigned) and wasteful for class-type members (you pay for a default construction you're about to throw away).",
   analogy: "The initializer list is like filling in permanent fields on a form at the print shop before the form is printed and laminated — the values are baked in as the object comes into existence. The constructor body is like getting the already-laminated form afterward and trying to write corrections in the margins with a pen: it works for fields that support being overwritten later (an ordinary int), but it's simply impossible for a field the laminator sealed as immutable (a const member) or a field that was defined as literally being another form (a reference member) — there's no 'later' slot to write into, because the value had to be correct at the moment of lamination.",
-  code: "class Engine {\npublic:\n    Engine(int hp) : horsepower_(hp) {}\n    // no default constructor — Engine MUST be given an hp at construction\nprivate:\n    int horsepower_;\n};\n\nclass Car {\npublic:\n    // Initializer list is REQUIRED here for three separate reasons:\n    Car(int hp, int yr)\n        : engine_(hp)     // 1) Engine has no default ctor -- must be initialized, not default-then-assigned\n        , year_(yr)       // 2) year_ is const -- can never be assigned in the body at all\n        , owner_(g_defaultOwner) // 3) owner_ is a reference -- must bind at construction, no rebinding later\n    {\n        // By this point engine_, year_, and owner_ already hold their final values.\n        // Nothing here could have set year_ or owner_ -- the compiler would reject:\n        //   year_ = yr;      // ERROR: cannot assign to a const member\n        //   owner_ = other;  // ERROR: references cannot be re-seated\n    }\nprivate:\n    Engine engine_;\n    const int year_;\n    std::string& owner_;\n    static std::string g_defaultOwner;\n};\nstd::string Car::g_defaultOwner = \"unassigned\";",
+  code: "#include <string>\n\nclass Engine {\npublic:\n    Engine(int hp) : horsepower_(hp) {}\n    // no default constructor — Engine MUST be given an hp at construction\nprivate:\n    int horsepower_;\n};\n\nclass Car {\npublic:\n    // Initializer list is REQUIRED here for three separate reasons:\n    Car(int hp, int yr)\n        : engine_(hp)     // 1) Engine has no default ctor -- must be initialized, not default-then-assigned\n        , year_(yr)       // 2) year_ is const -- can never be assigned in the body at all\n        , owner_(g_defaultOwner) // 3) owner_ is a reference -- must bind at construction, no rebinding later\n    {\n        // By this point engine_, year_, and owner_ already hold their final values.\n        // Nothing here could have set year_ or bound owner_:\n        //   year_ = yr;      // ERROR: cannot assign to a const member\n        //   owner_ = other;  // COMPILES, but does NOT rebind owner_: it copies other's\n        //                    // text INTO g_defaultOwner through the reference\n    }\nprivate:\n    Engine engine_;\n    const int year_;\n    std::string& owner_;\n    static std::string g_defaultOwner;\n};\nstd::string Car::g_defaultOwner = \"unassigned\";",
   steps: [
     "Car(hp, yr) begins executing: before a single line of the body runs, the compiler-generated prologue processes the initializer list in DECLARATION order (engine_, year_, owner_ as declared in the class — NOT the order they're written in the initializer list, which is only syntactic).",
     "engine_(hp) directly constructs the Engine subobject by calling Engine(int) with hp — no default Engine construction ever happens, which is good because Engine has no default constructor to call.",
@@ -6918,20 +6918,20 @@ DEEP_CONTENT['constructors'] = {
     "Only after all three have been initialized does the constructor BODY begin running — at that point everything is already fully formed and any assignment inside the body is optional/corrective, not initializing.",
     "If any member had instead been left out of the initializer list (say engine_), the compiler would try to default-construct it there instead — for Engine, which has no default constructor, this would be a hard compile error, not a warning."
   ],
-  memory: "Skipping the initializer list for a class-type member (say, using a std::string member and assigning to it in the body instead of listing it) means the compiler first default-constructs an empty std::string (an allocation-free but non-trivial operation involving small-string-optimization setup), and THEN the body's assignment operator runs — potentially freeing/reallocating a heap buffer — a completely wasted first construction. For const/reference members there's no 'wasted work' option at all: the compiler simply refuses to compile a const or reference member that isn't initialized in the list, because after the list phase completes there is no remaining legal way to give them a value.",
+  memory: "Skipping the initializer list for a class-type member (say, using a std::string member and assigning to it in the body instead of listing it) means the compiler first default-constructs an empty std::string (an allocation-free but non-trivial operation involving small-string-optimization setup), and THEN the body's assignment operator runs — potentially freeing/reallocating a heap buffer — a completely wasted first construction. For reference members and const members of built-in type there's no 'wasted work' option at all: the compiler refuses to compile a constructor that leaves them out of the list (unless the class gives them a default member initializer), because after the list phase completes there is no remaining legal way to give them a value. (A const member of a class type with its own default constructor, such as const std::string, may be left out -- it is simply default-constructed and stays empty forever.)",
   realWorld: "RAII wrapper classes (file handles, mutex locks, database connections) almost always take the resource handle as a constructor parameter and bind it directly in the initializer list, so the object can never exist in a 'partially constructed, resource not yet acquired' state that a body-based assignment would briefly allow — this is exactly why 'acquisition is initialization' works: the resource is tied to the object's construction, not to some later body statement.",
-  mistake: "Writing initializer-list entries in an order that doesn't match the class's member DECLARATION order (most compilers warn with -Wreorder) — the actual construction order is always the declaration order, regardless of how the initializer list is written, so if one member's initializer expression depends on another member's value (e.g. 'Car(int hp) : year_(engine_.getYear()), engine_(hp) {}'), the code can silently read an as-yet-uninitialized engine_ if engine_ is declared AFTER year_ in the class body, producing undefined behavior with no build error.",
+  mistake: "Writing initializer-list entries in an order that doesn't match the class's member DECLARATION order (GCC warns with -Wreorder and Clang with -Wreorder-ctor, both enabled by -Wall but not by default; MSVC's equivalent, C5038, is off by default) — the actual construction order is always the declaration order, regardless of how the initializer list is written, so if one member's initializer expression depends on another member's value (e.g. 'Car(int hp) : year_(engine_.getYear()), engine_(hp) {}'), the code can silently read an as-yet-uninitialized engine_ if engine_ is declared AFTER year_ in the class body, producing undefined behavior with no build error.",
   interviewQ: {
     q: "Why must const data members and reference data members be initialized in the constructor's member initializer list rather than the constructor body?",
     a: "By the time the constructor body begins executing, every base subobject and data member has already completed its initialization phase — const members and reference members are only ever writable during that one initialization moment. A const member cannot be the target of an assignment expression at all (that's what const means), and a reference must be bound to its referent at the moment it comes into existence and can never be re-seated afterward. The initializer list is the only syntactic position in the language where 'initialize a const/reference member' is legal; anything in the body is necessarily an assignment, which the compiler rejects outright for both cases."
   },
   advancedQ: {
     q: "If a class's member initializer list lists members in an order different from their declaration order in the class body, what actually determines construction order, and what's the concrete failure mode when this matters?",
-    a: "Construction order is ALWAYS the order members are declared in the class definition, completely independent of the order they appear in the initializer list — the initializer list's ordering is purely a textual convenience for the programmer and has zero effect on execution order (compilers like GCC/Clang emit a -Wreorder warning specifically because this mismatch is a common bug source, but it's legal code that compiles). The concrete failure mode: if member B is declared before member A in the class, but the initializer list writes 'A(...), B(f(A))' intending B to use A's just-initialized value, the real execution order constructs B first (reading A before A has been constructed at all -- an indeterminate value for a built-in type, undefined behavior for a class type) and only then constructs A — a use of A that was intended to be 'after A is ready' actually happens 'before A is ready', silently producing wrong values with no compiler error, only (if you're lucky) a reorder warning naming the mismatch."
+    a: "Construction order is ALWAYS the order members are declared in the class definition, completely independent of the order they appear in the initializer list — the initializer list's ordering is purely a textual convenience for the programmer and has zero effect on execution order (GCC's -Wreorder and Clang's -Wreorder-ctor, both part of -Wall, flag this mismatch because it is a common bug source, but it's legal code that compiles). The concrete failure mode: if member B is declared before member A in the class, but the initializer list writes 'A(...), B(f(A))' intending B to use A's just-initialized value, the real execution order constructs B first (reading A before A has been initialized at all -- undefined behavior whether A is a built-in type (an indeterminate value) or a class type (an object whose lifetime hasn't begun)) and only then constructs A — a use of A that was intended to be 'after A is ready' actually happens 'before A is ready', silently producing wrong values with no compiler error, only (if warnings are enabled) a reorder warning naming the mismatch -- GCC and Clang can additionally report 'used uninitialized' for simple cases."
   },
   traps: [
     "Writing the initializer list in a different order than member declaration order — actual execution order silently follows declaration order regardless, which breaks any initializer that depends on another member's value.",
-    "Forgetting to list a member at all — built-in-typed members (int, pointers, etc.) left out of the list are left completely uninitialized (garbage), not zero-initialized, unless the class itself uses default member initializers (e.g. 'int x_ = 0;' in the class body).",
+    "Forgetting to list a member at all — built-in-typed members (int, pointers, etc.) left out of the list are left completely uninitialized (garbage) in local and heap objects, not zero-initialized, unless the class itself uses default member initializers (e.g. 'int x_ = 0;' in the class body).",
     "Using the constructor body to assign to a class-type member that could have been directly initialized in the list — this silently pays for a default construction plus an assignment/copy instead of one direct construction, a real (if often small) performance cost that compounds at scale.",
     "Forgetting the 'explicit' keyword on a single-argument (or effectively single-argument, due to default arguments) constructor, which otherwise permits the compiler to use it for an implicit conversion the author never intended (e.g. passing a plain int where a class type is expected silently constructs a temporary object)."
   ]
@@ -18270,6 +18270,2002 @@ const GUIDED_LESSONS = {
    [
     "How do you force inlining when it truly matters?",
     "With a compiler-specific attribute such as __attribute__((always_inline)) for GCC and Clang, or __forceinline for MSVC."
+   ]
+  ]
+ },
+ "macros": {
+  "orientation": {
+   "what": "Function-like macros (#define NAME(x) …): blind text substitution done by the preprocessor, the three bug classes it causes, and what replaces macros in modern C++.",
+   "why": "Macros still turn up in logging, asserts and cross-platform code. 'Find the bug in this macro' is a classic interview question, and the same bugs appear in code review.",
+   "outcomes": [
+    "Expand a macro call by hand and spot the precedence bug",
+    "Explain why an argument like x++ can run more than once",
+    "Explain why a macro's local names can collide with the caller's",
+    "Pick the modern replacement: constexpr, inline, templates or enum class"
+   ],
+   "firstPass": "~15–25 min",
+   "laterPass": "~25–35 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: text in, text out",
+    "intro": "What happens to SQUARE(1 + 2) with #define SQUARE(x) x * x:",
+    "stages": [
+     {
+      "name": "Source",
+      "io": "SQUARE(1 + 2)",
+      "note": "What you typed looks like a function call."
+     },
+     {
+      "name": "Preprocessor",
+      "io": "1 + 2 * 1 + 2",
+      "note": "Each x is replaced by the argument's raw text: no parentheses, no evaluation, no types."
+     },
+     {
+      "name": "Compiler",
+      "io": "parses the result",
+      "note": "Normal precedence applies to the pasted text: 1 + (2 * 1) + 2 = 5, not 9."
+     },
+     {
+      "name": "Fix",
+      "io": "((x) * (x))",
+      "note": "Parenthesize every parameter and the whole body — or better, write a constexpr function."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "A function-like macro pastes the argument's text wherever the parameter appears; nothing is evaluated or type-checked.",
+     "That causes three bug classes: precedence (missing parentheses), repeated side effects (an argument used twice runs twice), and name collisions (a macro has no scope).",
+     "constexpr and inline functions, templates and enum class replace almost every macro; keep macros for conditional compilation, include guards, and assert-style code that needs __FILE__ and __LINE__."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A mail-merge that pastes whatever text you give it",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#define DOUBLE(x) x + x\n\nint r = 3 * DOUBLE(2);",
+    "q": "What is r?",
+    "options": [
+     [
+      "A",
+      "12"
+     ],
+     [
+      "B",
+      "8"
+     ],
+     [
+      "C",
+      "10"
+     ],
+     [
+      "D",
+      "It doesn't compile"
+     ]
+    ],
+    "reveal": [
+     "B — r is 8.",
+     "The preprocessor produces 3 * 2 + 2, and multiplication binds first: 6 + 2 = 8.",
+     "#define DOUBLE(x) ((x) + (x)) gives 12.",
+     "constexpr int twice(int x) { return x + x; } gives 12 without having to remember any parentheses."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Full example",
+    "title": "The example",
+    "intro": "All three bug classes, plus the constexpr template that fixes them:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: expanding each macro",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Why does #define SQUARE(x) x * x give the wrong answer for SQUARE(1 + 2)?",
+    "It expands to 1 + 2 * 1 + 2, which is 5. The fix is ((x) * (x)), which expands to ((1 + 2) * (1 + 2))."
+   ],
+   [
+    "What happens with MAX(x++, 10) when MAX uses a twice?",
+    "x++ is pasted twice, so it can run twice: once in the comparison and again in the chosen branch."
+   ],
+   [
+    "Name two jobs a macro is still the right tool for.",
+    "Conditional compilation (#ifdef _WIN32), include guards, and assert-style macros that capture __FILE__/__LINE__ and compile away when NDEBUG is defined."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Macros and the debugger",
+     "hint": "gone by compile time, unless you ask for them",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: where macros survive",
+     "hint": "X-macros, platform #ifdefs, assert",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "preprocessor",
+    "constexpr-basics",
+    "inline-functions",
+    "function-templates"
+   ]
+  },
+  "interview": {
+   "think": "Expand the macro by hand first, then count how many times each argument appears.",
+   "advancedTitle": "Advanced follow-up: macro hygiene"
+  },
+  "recall": [
+   [
+    "Does a macro respect namespaces or block scope?",
+    "No. It is visible from its #define until the end of the translation unit (or an #undef), whatever namespace or block it was written in."
+   ],
+   [
+    "Why is #define MAX_SIZE 100 worse than constexpr int max_size = 100;?",
+    "The macro has no type and no scope and isn't a named symbol in the debugger; the constexpr variable has all three."
+   ],
+   [
+    "How do you see what a macro really expands to?",
+    "Run only the preprocessor (g++ -E or clang++ -E) and read the output."
+   ]
+  ]
+ },
+ "function-pointers": {
+  "orientation": {
+   "what": "A function pointer holds the address of a function with an exact signature — the plain callback type C APIs use — and how it compares with lambdas and std::function.",
+   "why": "You need function pointers to call C APIs such as qsort, signal and pthread_create, and choosing between a function pointer, std::function and a template parameter is a common design and interview question.",
+   "outcomes": [
+    "Read and write function-pointer syntax",
+    "Explain why a capturing lambda can't convert to a function pointer",
+    "Pass state to a C callback through a void* context parameter",
+    "Choose between a function pointer, std::function and a template parameter"
+   ],
+   "firstPass": "~20–25 min",
+   "laterPass": "~25–35 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: three kinds of callable",
+    "intro": "The same 'call this later' idea at three levels of power:",
+    "stages": [
+     {
+      "name": "int (*fp)(int, int)",
+      "io": "an address",
+      "note": "A function pointer stores only a code address. No state; it is what C APIs accept."
+     },
+     {
+      "name": "[](int a){ … }",
+      "io": "no captures",
+      "note": "A lambda that captures nothing converts to a function pointer automatically."
+     },
+     {
+      "name": "[k](int a){ … }",
+      "io": "has state",
+      "note": "A capturing lambda is an object holding k. It can't become a plain address."
+     },
+     {
+      "name": "std::function<int(int)>",
+      "io": "type-erased",
+      "note": "Can hold any of the above, at the cost of an extra indirection and possibly a heap allocation."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "A function pointer's type is the function's signature: int (*fp)(int, int) points to a function taking two ints and returning int.",
+     "It stores only an address, so it can point to a free function, a static member function or a non-capturing lambda — never to captured state.",
+     "C callbacks carry state through a separate void* context argument; C++ code usually takes std::function, or a template parameter when speed matters."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A phone number on a sticky note",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "int add(int a, int b) { return a + b; }\n\nint main() {\n    int k = 10;\n    // (1)\n    int (*p1)(int, int) = add;\n    // (2)\n    int (*p2)(int, int) =\n        [](int a, int b) { return a * b; };\n    // (3)\n    int (*p3)(int, int) =\n        [k](int a, int b) { return a + k; };\n}",
+    "q": "Which lines compile?",
+    "options": [
+     [
+      "A",
+      "All three"
+     ],
+     [
+      "B",
+      "Only (1)"
+     ],
+     [
+      "C",
+      "(1) and (2)"
+     ],
+     [
+      "D",
+      "(1) and (3)"
+     ]
+    ],
+    "reveal": [
+     "C — (1) and (2) compile; (3) doesn't.",
+     "A function name converts to its address, and a lambda with no captures converts to a plain function pointer.",
+     "The lambda in (3) captures k, so it is an object with data; there is nowhere in a bare address to keep k.",
+     "GCC reports: cannot convert '…lambda…' to 'int (*)(int, int)'."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Full example",
+    "title": "The example",
+    "intro": "Function pointers, a C qsort callback, and lambdas with and without captures:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: what each callable really is",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What does int (*fp)(int, int); declare?",
+    "fp, a pointer to a function that takes two ints and returns int. Without the parentheses, int *fp(int, int); declares a function returning int*."
+   ],
+   [
+    "Which callables can a raw function pointer refer to?",
+    "Free functions, static member functions and non-capturing lambdas. Non-static member functions need a pointer-to-member type instead."
+   ],
+   [
+    "How do you give a C callback access to your state?",
+    "Register a plain function and pass your state through the API's void* user-data parameter, then cast it back inside the callback."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "One word versus a wrapper",
+     "hint": "what a function pointer and std::function hold",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: C callbacks and C++ handlers",
+     "hint": "qsort, pthread_create, event registries",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "lambdas",
+    "function-templates",
+    "extern-keyword"
+   ]
+  },
+  "interview": {
+   "think": "Ask where the lambda's captured state would have to live.",
+   "advancedTitle": "Advanced follow-up: std::function versus a function pointer on a hot path",
+   "followUp": "q049"
+  },
+  "recall": [
+   [
+    "Why can't a std::function be passed where a C API expects a function pointer?",
+    "It is a C++ class object with its own size and layout, not a bare code address, so it can't match the C parameter type."
+   ],
+   [
+    "What is the fastest way to accept 'any callable' in C++ code you control?",
+    "A template parameter (optionally constrained with a concept): the compiler sees the concrete type and can inline the call."
+   ],
+   [
+    "Why is return a - b; a bad qsort comparator for ints?",
+    "The subtraction can overflow, for example INT_MIN - 1, giving the wrong sign; (a > b) - (a < b) can't overflow."
+   ]
+  ]
+ },
+ "classes-objects": {
+  "orientation": {
+   "what": "The difference between a class (a type: a blueprint the compiler uses) and an object (a region of memory built from it), and what that means for size and memory.",
+   "why": "Everything in object-oriented C++ builds on this: what sizeof measures, what a copy duplicates, and which costs are per object and which are per class.",
+   "outcomes": [
+    "Explain what a class costs at run time and what an object costs",
+    "Predict sizeof for a simple class, including static members and member functions",
+    "Explain how one member function serves every object through this",
+    "Explain why an empty class has a nonzero size"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~20–25 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: per class versus per object",
+    "intro": "Where each part of class Point lives:",
+    "stages": [
+     {
+      "name": "Member functions",
+      "io": "once per program",
+      "note": "getX() is compiled once. Each call passes the object's address as the hidden this."
+     },
+     {
+      "name": "Static data members",
+      "io": "once per program",
+      "note": "Point::instanceCount is a single variable, not part of any object."
+     },
+     {
+      "name": "Non-static data members",
+      "io": "once per object",
+      "note": "Each Point has its own x_ and y_; sizeof(Point) counts only these (plus padding)."
+     },
+     {
+      "name": "vptr",
+      "io": "once per object, if polymorphic",
+      "note": "A class with virtual functions adds one hidden pointer per object on mainstream compilers."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "A class is a type: it tells the compiler the layout and the code, and takes no memory by itself.",
+     "Each object gets its own copy of the non-static data members; member functions and static members exist once, however many objects there are.",
+     "sizeof is a compile-time constant computed from the data members, their alignment and padding, and a vptr if the class is polymorphic."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A blueprint and the houses built from it",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "struct P {\n    int x, y;\n    void move(int dx) { x += dx; }\n};\n\nstruct Q {\n    int x, y;\n    static int count;\n    void a(); void b(); void c();\n};",
+    "q": "How do sizeof(P) and sizeof(Q) compare?",
+    "options": [
+     [
+      "A",
+      "Q is bigger because of the static member"
+     ],
+     [
+      "B",
+      "Q is bigger because it has more member functions"
+     ],
+     [
+      "C",
+      "They are the same"
+     ],
+     [
+      "D",
+      "P is bigger because move() is defined inline"
+     ]
+    ],
+    "reveal": [
+     "C — they are the same (8 bytes wherever int is 4 bytes).",
+     "Only non-static data members take space in an object; both have just x and y.",
+     "count lives once in the program, and member functions live once in the code.",
+     "Adding a virtual function would change this: it adds a vptr to every object."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "Three objects of one class, with a static member:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: what exists at run time",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Does defining a class allocate memory?",
+    "No. Only objects take memory; the class is a compile-time description plus the compiled code of its member functions."
+   ],
+   [
+    "How can one compiled getX() work for every object?",
+    "Every member function receives the object's address as the hidden this pointer, so the same code reads a different object each time."
+   ],
+   [
+    "Why can sizeof(T) be larger than the sum of its members?",
+    "The compiler inserts padding so every member is aligned; ordering members from largest to smallest often reduces it."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Objects in memory",
+     "hint": "three objects, one static, and padding",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: per-object cost at scale",
+     "hint": "100,000 particles and a cache budget",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "constructors",
+    "static-keyword",
+    "memory-alignment",
+    "vptr"
+   ]
+  },
+  "interview": {
+   "think": "For each part of the class, ask: one per object, or one per program?",
+   "advancedTitle": "Advanced follow-up: does the number of virtual functions change sizeof?"
+  },
+  "recall": [
+   [
+    "What is sizeof of an empty class, and why?",
+    "1 on GCC, Clang and MSVC (the standard only requires nonzero), so that two distinct objects never share an address."
+   ],
+   [
+    "Can an empty class take zero bytes?",
+    "Yes, as a base class (the empty base optimization), or as a C++20 [[no_unique_address]] member — which MSVC only honors as [[msvc::no_unique_address]]."
+   ],
+   [
+    "Adding one 8-byte member to a class with 10 million live objects costs how much?",
+    "About 80 MB, possibly more with padding: data members are paid for once per object."
+   ]
+  ]
+ },
+ "constructors": {
+  "orientation": {
+   "what": "How a constructor brings an object to life: the member initializer list, which initializes, and the constructor body, which can only assign.",
+   "why": "const members, reference members and members without a default constructor can only be set up in the initializer list, and getting the initialization order wrong reads uninitialized memory without any error.",
+   "outcomes": [
+    "Explain the two phases of a constructor",
+    "Know which members must be in the initializer list",
+    "Predict the real initialization order",
+    "Know when to mark a constructor explicit"
+   ],
+   "firstPass": "~20–25 min",
+   "laterPass": "~25–30 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: two phases",
+    "intro": "What runs when you write Car c(300, 2024);:",
+    "stages": [
+     {
+      "name": "Bases",
+      "io": "constructed first",
+      "note": "Base classes are initialized before any member."
+     },
+     {
+      "name": "Members, in declaration order",
+      "io": "initializer list",
+      "note": "Each member is initialized from the list, else from its default member initializer, else default-constructed (built-in types stay uninitialized)."
+     },
+     {
+      "name": "Constructor body",
+      "io": "assignment only",
+      "note": "Every member already exists here; = in the body assigns to it rather than initializing it."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "The initializer list initializes; the body assigns. Only the list can initialize const members, reference members, base classes and members with no default constructor.",
+     "Members are always initialized in the order they are declared in the class, whatever order the list is written in.",
+     "A member left out of the list uses its default member initializer (int x_ = 0;) if it has one; otherwise a built-in member is left uninitialized."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Filling in a form before it is laminated",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "struct S {\n    int a;\n    int b;\n    S() : b(5), a(b + 1) {}\n};\n\nS s;   // what is s.a?",
+    "q": "What is s.a?",
+    "options": [
+     [
+      "A",
+      "6"
+     ],
+     [
+      "B",
+      "5"
+     ],
+     [
+      "C",
+      "Undefined: it reads b before b is initialized"
+     ],
+     [
+      "D",
+      "It doesn't compile"
+     ]
+    ],
+    "reveal": [
+     "C — undefined behavior.",
+     "a is declared first, so a(b + 1) runs first — while b is still uninitialized.",
+     "The order written in the list is ignored; declaration order wins.",
+     "GCC (-Wreorder) and Clang (-Wreorder-ctor) warn about this under -Wall, and both also report b as used uninitialized."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "A constructor that needs its initializer list for three different reasons:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: constructing a Car",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Which members must be initialized in the initializer list?",
+    "Reference members, const members of built-in type, and members (or bases) without a default constructor — unless a default member initializer covers them."
+   ],
+   [
+    "In what order are members initialized?",
+    "In the order they are declared in the class, not the order they are written in the initializer list."
+   ],
+   [
+    "What does owner_ = other; in a constructor body do when owner_ is a reference member?",
+    "It compiles, but it doesn't rebind the reference: it assigns other's value to the object owner_ already refers to."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "The cost of assigning in the body",
+     "hint": "a wasted default construction",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: RAII constructors",
+     "hint": "acquire the resource in the initializer list",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "destructors",
+    "copy-constructor",
+    "exceptions-constructors",
+    "raii"
+   ]
+  },
+  "interview": {
+   "think": "Walk through the two phases: what exists before the body runs?",
+   "advancedTitle": "Advanced follow-up: initializer order versus declaration order",
+   "followUp": "q010"
+  },
+  "recall": [
+   [
+    "What does explicit on a one-argument constructor prevent?",
+    "Implicit conversions: without it, passing an int where the class is expected silently constructs a temporary object."
+   ],
+   [
+    "What value does an int member have if it isn't in the list and has no default member initializer?",
+    "None: it is uninitialized in local and heap objects, and reading it is undefined behavior."
+   ],
+   [
+    "Why prefer initializing a std::string member in the list rather than assigning it in the body?",
+    "Assigning default-constructs it first and then overwrites it; the list constructs it once, directly."
+   ]
+  ]
+ },
+ "destructors": {
+  "orientation": {
+   "what": "The destructor: the function that runs automatically when an object's lifetime ends, in a precisely defined order, to release what the object owns.",
+   "why": "Destructors are what make RAII work — deterministic cleanup on every exit path, including exceptions. Throwing from one, or forgetting virtual on a base class destructor, are classic production bugs.",
+   "outcomes": [
+    "Predict when destructors run and in what order",
+    "Explain why an exception must never escape a destructor",
+    "Explain when a base class needs a virtual destructor",
+    "Write a simple RAII wrapper"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~20–25 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: reverse order of construction",
+    "intro": "What happens when an object of class D : B is destroyed:",
+    "stages": [
+     {
+      "name": "~D() body",
+      "io": "runs first",
+      "note": "Your cleanup code runs while every member is still alive."
+     },
+     {
+      "name": "D's members",
+      "io": "reverse declaration order",
+      "note": "Each member's destructor runs, last-declared first."
+     },
+     {
+      "name": "~B()",
+      "io": "then the base",
+      "note": "Base class destructors run last, working up the hierarchy."
+     },
+     {
+      "name": "Storage",
+      "io": "released",
+      "note": "Stack space is reclaimed at scope exit; for new/delete, the memory is freed after the destructor."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "A destructor runs automatically when an object's lifetime ends: at the end of its scope, on delete, or during exception unwinding.",
+     "Objects are destroyed in reverse order of construction — locals in reverse declaration order, then within an object: body, members, bases.",
+     "Destructors are implicitly noexcept, so an exception escaping one calls std::terminate; a base class used polymorphically needs a virtual destructor."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A hotel checkout that always runs",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <iostream>\nstruct T {\n    const char* n;\n    ~T() { std::cout << n; }\n};\n\nint main() {\n    T a{\"A\"};\n    T b{\"B\"};\n    { T c{\"C\"}; }\n    std::cout << \"-\";\n}",
+    "q": "What does this print?",
+    "options": [
+     [
+      "A",
+      "ABC-"
+     ],
+     [
+      "B",
+      "C-BA"
+     ],
+     [
+      "C",
+      "C-AB"
+     ],
+     [
+      "D",
+      "-CBA"
+     ]
+    ],
+    "reveal": [
+     "B — it prints C-BA.",
+     "c is destroyed at the end of its inner block, before \"-\" is printed.",
+     "a and b are destroyed when main ends, in reverse order of construction: b first, then a.",
+     "This reverse order is what lets a later object safely depend on an earlier one during cleanup."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "A minimal RAII file handle:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: the destructor rules",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "When does a destructor run?",
+    "When the object's lifetime ends: at the end of its scope, when it is deleted, when its owner is destroyed, or during stack unwinding after an exception."
+   ],
+   [
+    "What happens if an exception escapes an ordinary destructor?",
+    "std::terminate is called, because destructors are implicitly noexcept — even if no other exception is in flight."
+   ],
+   [
+    "When does a base class need a virtual destructor?",
+    "When objects of derived classes may be deleted through a pointer to the base. Otherwise that delete is undefined behavior."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Destructor versus deallocation",
+     "hint": "releasing resources is not freeing the object",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: RAII and the missing virtual",
+     "hint": "deterministic cleanup and a bug that hides",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "raii",
+    "virtual-destructor",
+    "exceptions-destructors",
+    "copy-constructor"
+   ]
+  },
+  "interview": {
+   "think": "Say what the static type of the pointer is, and which destructor that selects.",
+   "advancedTitle": "Advanced follow-up: destructors and exceptions"
+  },
+  "recall": [
+   [
+    "In what order are members destroyed?",
+    "In reverse declaration order, after the destructor's body has run."
+   ],
+   [
+    "How do you let a destructor throw, if you really must?",
+    "Declare it noexcept(false); it will still call std::terminate if it throws during stack unwinding."
+   ],
+   [
+    "Which warnings catch deleting through a base with a non-virtual destructor?",
+    "GCC's -Wdelete-non-virtual-dtor and Clang's -Wdelete-non-abstract-non-virtual-dtor, both enabled by -Wall."
+   ]
+  ]
+ },
+ "copy-constructor": {
+  "orientation": {
+   "what": "The copy constructor, T(const T&): how a new object is made as an independent duplicate of an existing one, and why the compiler's default goes wrong for classes that own resources.",
+   "why": "The default member-wise copy duplicates a raw pointer, not the data behind it. Two objects then free the same memory — the classic double free.",
+   "outcomes": [
+    "Explain what the compiler-generated copy constructor does",
+    "Tell a shallow copy from a deep copy",
+    "Write a correct deep copy constructor",
+    "Know when a copy constructor runs"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~20–25 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: copying a pointer versus copying the data",
+    "intro": "Buffer b = a; for a class holding int* data:",
+    "stages": [
+     {
+      "name": "Default copy",
+      "io": "b.data = a.data",
+      "note": "Member-wise copy: both objects now point at the same array.",
+      "err": "free(): double free detected (glibc) when both destructors run"
+     },
+     {
+      "name": "Deep copy",
+      "io": "b.data = new int[n]",
+      "note": "Allocate separate storage and copy the values; the objects share nothing."
+     },
+     {
+      "name": "Destruction",
+      "io": "each frees its own",
+      "note": "With a deep copy, a's and b's destructors free different arrays."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "A copy constructor initializes a new object from an existing one, usually taking const T&.",
+     "The compiler-generated version copies each member; for a raw owning pointer that copies the address, not the data.",
+     "A class that owns a resource must define (or delete) its copy operations — which is where the Rule of 3 comes from."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A photocopy versus a second key to the same folder",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <cstddef>\nclass Buffer {\n    int* data; std::size_t size;\npublic:\n    explicit Buffer(std::size_t n) : data(new int[n]), size(n) {}\n    ~Buffer() { delete[] data; }\n};\n\nint main() {\n    Buffer a(4);\n    Buffer b = a;\n}",
+    "q": "What happens when main returns?",
+    "options": [
+     [
+      "A",
+      "Nothing unusual: a and b each free their own array"
+     ],
+     [
+      "B",
+      "Compile error: Buffer has no copy constructor"
+     ],
+     [
+      "C",
+      "Undefined behavior: the same array is deleted twice"
+     ],
+     [
+      "D",
+      "A memory leak, but no crash"
+     ]
+    ],
+    "reveal": [
+     "C — the same array is deleted twice.",
+     "The compiler generated a copy constructor that copied the pointer, so a.data and b.data are the same address.",
+     "b's destructor frees the array, then a's frees it again. With GCC and glibc this typically aborts with 'free(): double free detected'; AddressSanitizer reports 'attempting double-free'.",
+     "A deep copy constructor, or deleting the copy operations, fixes it."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "A deep copy constructor for a buffer:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: shallow versus deep",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What does the compiler-generated copy constructor do?",
+    "It copies each member using that member's own copy constructor — for a pointer, that copies the address."
+   ],
+   [
+    "What is a deep copy?",
+    "Allocating new storage and copying the underlying data, so the copy shares nothing with the original."
+   ],
+   [
+    "Name three situations that call the copy constructor.",
+    "T b = a; or T b(a); passing an object by value; and returning a named local by value when the copy isn't elided and no move constructor applies."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Member-wise is not always wrong",
+     "hint": "when the default copy is exactly right",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: the standard library already did this",
+     "hint": "vector and string copy deeply",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "copy-assignment",
+    "rule-of-3",
+    "move-constructor"
+   ]
+  },
+  "interview": {
+   "think": "Ask who owns the resource after the copy, and who will free it.",
+   "advancedTitle": "Advanced follow-up: before optimizing an expensive copy"
+  },
+  "recall": [
+   [
+    "What happens to the implicit move constructor when you declare a copy constructor?",
+    "It is no longer generated, so moves of that type fall back to the (possibly expensive) copy."
+   ],
+   [
+    "How do you make a class non-copyable?",
+    "Declare T(const T&) = delete; and T& operator=(const T&) = delete;."
+   ],
+   [
+    "Why does the copy constructor take its parameter by reference?",
+    "Taking it by value would itself need a copy, which would call the copy constructor again, forever — so the language rejects a T(T) copy constructor."
+   ]
+  ]
+ },
+ "copy-assignment": {
+  "orientation": {
+   "what": "The copy assignment operator, T& operator=(const T&): making an existing object a copy of another, which also means disposing of what it held before.",
+   "why": "Copy assignment is harder than copy construction: it must not leak the old resource, must survive self-assignment, and should leave the object intact if the copy fails.",
+   "outcomes": [
+    "Tell when assignment runs rather than the copy constructor",
+    "Explain the self-assignment problem",
+    "Implement copy assignment with copy-and-swap",
+    "Explain the strong exception-safety guarantee"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~20–25 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: construction versus assignment",
+    "intro": "The = sign means two different things:",
+    "stages": [
+     {
+      "name": "Buffer b = a;",
+      "io": "copy constructor",
+      "note": "b is being created, so there is nothing old to release."
+     },
+     {
+      "name": "c = a;",
+      "io": "copy assignment",
+      "note": "c already exists and owns an array; that must be released or reused."
+     },
+     {
+      "name": "x = x;",
+      "io": "self-assignment",
+      "note": "Source and target are the same object; freeing first would destroy the data you are about to copy."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Copy assignment replaces the contents of an object that already exists, so it must release the old resource without leaking it.",
+     "It must stay correct when the source is the object itself, which happens indirectly (a[i] = a[j] with i == j).",
+     "Copy-and-swap handles both: take the parameter by value (a finished copy), swap it with *this, and let the parameter's destructor free the old data."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Refilling a folder that already has papers in it",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "Buffer a(4);\nBuffer b = a;   // (1)\nBuffer c(8);\nc = a;          // (2)",
+    "q": "Which line calls the copy assignment operator?",
+    "options": [
+     [
+      "A",
+      "Both"
+     ],
+     [
+      "B",
+      "Only (1)"
+     ],
+     [
+      "C",
+      "Only (2)"
+     ],
+     [
+      "D",
+      "Neither: both call the copy constructor"
+     ]
+    ],
+    "reveal": [
+     "C — only (2).",
+     "(1) creates b, so it is initialization: the copy constructor runs, despite the = sign.",
+     "(2) changes c, which already exists, so operator= runs and has to deal with c's old 8-int array.",
+     "Rule of thumb: a declaration with = is construction; = on an existing object is assignment."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "A buffer whose copy assignment uses copy-and-swap:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: why copy-and-swap is safe",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Why is delete[] data; data = new int[n]; … a risky copy assignment?",
+    "If the source is *this, the data is freed before it is copied; and if new throws, data is left dangling."
+   ],
+   [
+    "How does copy-and-swap deal with self-assignment?",
+    "The by-value parameter is already a separate copy, so swapping with it is correct even when the argument was *this."
+   ],
+   [
+    "Where does the old data go in copy-and-swap?",
+    "Into the parameter, whose destructor frees it when the operator returns."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "What copy-and-swap costs",
+     "hint": "always one full copy",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: indirect self-assignment",
+     "hint": "a[i] = a[j] and aliasing references",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "move-assignment",
+    "rule-of-3",
+    "exception-safety"
+   ]
+  },
+  "interview": {
+   "think": "Say what happens to the old resource, then test your answer with x = x.",
+   "advancedTitle": "Advanced follow-up: the strong exception guarantee"
+  },
+  "recall": [
+   [
+    "What should operator= return, and why?",
+    "T&, a reference to *this, so assignments can chain like a = b = c, as they do for built-in types."
+   ],
+   [
+    "What guarantee does copy-and-swap give if the copy throws?",
+    "The strong guarantee: the exception happens before *this is touched, so the object is unchanged."
+   ],
+   [
+    "When might you not use copy-and-swap?",
+    "On a hot path where reusing existing capacity matters, such as assigning a small buffer into a larger one; you then handle self-assignment and exception safety yourself."
+   ]
+  ]
+ },
+ "move-constructor": {
+  "orientation": {
+   "what": "The move constructor, T(T&&): building a new object by taking over another object's resources instead of copying them.",
+   "why": "Moving turns an O(n) deep copy into a few pointer assignments, which is what makes returning containers by value and growing vectors cheap — but only if the moved-from object is left safe and the constructor is noexcept.",
+   "outcomes": [
+    "Tell which initializations call the move constructor",
+    "Write a move constructor that leaves the source safe to destroy",
+    "Explain what 'valid but unspecified' means",
+    "Explain why noexcept matters to std::vector"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~20–25 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: steal, then reset",
+    "intro": "Buffer b = std::move(a);:",
+    "stages": [
+     {
+      "name": "Steal",
+      "io": "b.data = a.data",
+      "note": "b takes a's pointer and size; no data is copied."
+     },
+     {
+      "name": "Reset",
+      "io": "a.data = nullptr",
+      "note": "a is left empty, so its destructor has nothing to free."
+     },
+     {
+      "name": "Destroy a later",
+      "io": "delete[] nullptr",
+      "note": "Still runs, and is a harmless no-op."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "A move constructor takes an rvalue reference (T&&) and transfers the source's resources instead of duplicating them.",
+     "The source must be left in a state its destructor (and assignment) can handle — usually empty. The standard library calls this 'valid but unspecified'.",
+     "Mark it noexcept: std::vector only moves elements during reallocation if moving can't throw (or the type can't be copied at all)."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Handing over the truck keys instead of reloading the boxes",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "Buffer make() { return Buffer(10); }\n\nBuffer a(10);\nBuffer b = a;             // (1)\nBuffer c = std::move(a);  // (2)\nBuffer d = make();        // (3)",
+    "q": "Which lines call the move constructor (C++17)?",
+    "options": [
+     [
+      "A",
+      "(2) and (3)"
+     ],
+     [
+      "B",
+      "Only (2)"
+     ],
+     [
+      "C",
+      "All three"
+     ],
+     [
+      "D",
+      "(1) and (2)"
+     ]
+    ],
+    "reveal": [
+     "B — only (2).",
+     "(1) copies: a is an lvalue.",
+     "(2) moves: std::move(a) turns a into an rvalue, so Buffer(Buffer&&) is chosen.",
+     "(3) neither copies nor moves: since C++17 a returned prvalue initializes d directly (guaranteed copy elision)."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "A move constructor that steals and resets:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: a move, and why noexcept matters",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What does std::move do by itself?",
+    "Nothing at run time: it is a cast to an rvalue reference. The move happens only if a move constructor or move assignment is then chosen."
+   ],
+   [
+    "Why must the moved-from source be reset?",
+    "Its destructor still runs; without the reset it would free the resource the new object now owns."
+   ],
+   [
+    "Why mark a move constructor noexcept?",
+    "std::vector uses move during reallocation only if it can't throw; otherwise it copies copyable types to keep its strong exception guarantee."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "The moved-from object",
+     "hint": "what state it is really in",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: returning big objects by value",
+     "hint": "moves plus copy elision",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "move-assignment",
+    "stdmove",
+    "value-categories",
+    "noexcept-move"
+   ]
+  },
+  "interview": {
+   "think": "Remember the source's destructor still runs.",
+   "advancedTitle": "Advanced follow-up: noexcept and std::vector"
+  },
+  "recall": [
+   [
+    "What can you safely do with a moved-from std::string?",
+    "Destroy it or assign a new value to it; any operation without preconditions (like size() or clear()) also works, but its value is unspecified."
+   ],
+   [
+    "Does a user-declared copy constructor or destructor affect the implicit move constructor?",
+    "Yes: either one stops the move constructor from being generated implicitly."
+   ],
+   [
+    "When is moving no cheaper than copying?",
+    "When the type owns no separate resource — small trivially-copyable structs, or short strings stored inline by small-string optimization."
+   ]
+  ]
+ },
+ "move-assignment": {
+  "orientation": {
+   "what": "The move assignment operator, T& operator=(T&&): making an existing object take over another's resources, while getting rid of what it owned before.",
+   "why": "Move assignment combines both hard parts — releasing the old resource and leaving the source safe — and generic code can hand it the same object on both sides.",
+   "outcomes": [
+    "Implement move assignment that doesn't leak",
+    "Handle x = std::move(x) safely",
+    "Explain the swap-based alternative",
+    "Explain the unified by-value assignment operator"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~20–25 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: release, steal, reset",
+    "intro": "b = std::move(a); when b already owns an array:",
+    "stages": [
+     {
+      "name": "Release",
+      "io": "delete[] b.data",
+      "note": "b's old array must go, or it leaks. (Swap-based versions hand it to a instead.)"
+     },
+     {
+      "name": "Steal",
+      "io": "b.data = a.data",
+      "note": "b takes a's pointer and size."
+     },
+     {
+      "name": "Reset",
+      "io": "a.data = nullptr",
+      "note": "a is left empty and safe to destroy or reassign."
+     },
+     {
+      "name": "Guard",
+      "io": "this != &other",
+      "note": "If a and b are the same object, skip all of it."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Move assignment works on an existing object, so besides stealing it must release (or hand off) the target's old resource.",
+     "It must not break on self-move (x = std::move(x)); a this != &other check, or a swap-based design, handles that.",
+     "A single operator=(T other) that swaps covers both copy and move assignment: the parameter is copy- or move-constructed depending on the argument."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Handing over keys to a garage that is already full",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "// Swap-based move assignment:\nBuffer& operator=(Buffer&& o) noexcept {\n    std::swap(data, o.data);\n    std::swap(size, o.size);\n    return *this;\n}\n\nBuffer a(4), b(8);\nb = std::move(a);",
+    "q": "Right after the assignment, who owns the 8-int array b used to hold?",
+    "options": [
+     [
+      "A",
+      "Nobody: it has leaked"
+     ],
+     [
+      "B",
+      "It was freed by the assignment"
+     ],
+     [
+      "C",
+      "a owns it, and frees it when a is destroyed"
+     ],
+     [
+      "D",
+      "Both a and b point at it"
+     ]
+    ],
+    "reveal": [
+     "C — a owns it now.",
+     "Swapping gives b a's array and a b's old array; nothing is freed yet.",
+     "When a is destroyed (or reassigned), its destructor frees that array, so nothing leaks.",
+     "The trade-off: the old resource lives a little longer than with release-then-steal."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "A move assignment with a self-move guard:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: release, steal, reset",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What does move assignment have to do that a move constructor doesn't?",
+    "Release (or hand off) the resource the target already owned."
+   ],
+   [
+    "What goes wrong in x = std::move(x) without a guard?",
+    "The release step frees x's own data, and the steal step then takes the freed pointer back."
+   ],
+   [
+    "Why should move assignment be noexcept?",
+    "It only swaps or reassigns pointers, and standard containers and algorithms choose faster paths when moves can't throw."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "One operator= for copy and move",
+     "hint": "the by-value parameter trick",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: reassigning big containers",
+     "hint": "vector = make_result() is O(1)",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "rule-of-5",
+    "stdmove",
+    "move-assign-deep"
+   ]
+  },
+  "interview": {
+   "think": "List what the target owned before the assignment and where it ends up.",
+   "advancedTitle": "Advanced follow-up: by-value assignment covers copy and move"
+  },
+  "recall": [
+   [
+    "After b = std::move(a), what state is a in?",
+    "Whatever the class defines — for this Buffer, empty (or, with the swap version, holding b's old data). For standard library types: valid but unspecified."
+   ],
+   [
+    "What is the cost of a unified operator=(T other)?",
+    "One extra move to construct the parameter, and it can't reuse the target's existing capacity."
+   ],
+   [
+    "Does declaring a move assignment operator affect the copy operations?",
+    "Yes: the implicit copy constructor and copy assignment become deleted, so define or default them if you need copies."
+   ]
+  ]
+ },
+ "rule-of-0": {
+  "orientation": {
+   "what": "The Rule of Zero: build classes from members that already manage themselves (string, vector, unique_ptr) so that you write none of the five special member functions.",
+   "why": "Every hand-written destructor, copy or move operation is a place for bugs. Compose from well-tested types and the compiler-generated ones are correct automatically.",
+   "outcomes": [
+    "Explain the Rule of Zero and how it relates to the Rule of 5",
+    "Predict which operations a composed class supports",
+    "Explain why an empty destructor can remove move operations",
+    "Know where resource management should live instead"
+   ],
+   "firstPass": "~10–15 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: the compiler delegates to the members",
+    "intro": "What the implicit special members of Person do:",
+    "stages": [
+     {
+      "name": "std::string name",
+      "io": "copies and moves itself",
+      "note": "Correct deep copy, cheap move."
+     },
+     {
+      "name": "std::vector<Address>",
+      "io": "copies and moves itself",
+      "note": "Copies each element; moves by stealing the buffer."
+     },
+     {
+      "name": "std::unique_ptr<Photo>",
+      "io": "moves only",
+      "note": "Can't be copied, so Person's implicit copy is deleted too."
+     },
+     {
+      "name": "Person",
+      "io": "= its members",
+      "note": "Movable but not copyable — exactly what its members allow, with no code written."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Compose a class from members that manage their own resources, and write no destructor, copy or move operations at all.",
+     "The implicit special members call each member's own, so they are correct by construction — and a member that can't be copied makes the class non-copyable, which is also correct.",
+     "Resource management belongs in a few small wrapper types (unique_ptr, vector, or your own RAII wrapper), written once."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Furniture that packs itself for a move",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "struct Person {\n    std::string name;\n    std::unique_ptr<int> id;\n};\n\nPerson a{\"Ann\", std::make_unique<int>(7)};\nPerson b = a;             // (1)\nPerson c = std::move(a);  // (2)",
+    "q": "Which lines compile?",
+    "options": [
+     [
+      "A",
+      "Both"
+     ],
+     [
+      "B",
+      "Only (1)"
+     ],
+     [
+      "C",
+      "Only (2)"
+     ],
+     [
+      "D",
+      "Neither: Person needs a hand-written move constructor"
+     ]
+    ],
+    "reveal": [
+     "C — only (2).",
+     "Person's implicit copy constructor is deleted because unique_ptr can't be copied, so (1) fails.",
+     "The implicit move constructor moves name and id, so (2) compiles.",
+     "If you want copies, decide what copying id means (deep-copy the int? share it with shared_ptr?) — the compiler rightly won't guess."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "A Rule-of-Zero class:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: why nothing needs writing",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What is the Rule of Zero?",
+    "Write none of the five special member functions; build the class from members that already copy, move and clean up correctly."
+   ],
+   [
+    "When does a class have to leave Rule-of-Zero territory?",
+    "When it directly owns a resource no existing type manages — and even then, the better move is usually a small RAII wrapper for that resource."
+   ],
+   [
+    "Why is adding ~Person() {} harmful?",
+    "A user-declared destructor stops the implicit move operations being generated. Person would then be neither movable nor copyable, because unique_ptr also blocks the copy."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Where the resource code lives instead",
+     "hint": "a few wrappers, written once",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: a hand-written destructor as a code smell",
+     "hint": "what reviewers check",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "rule-of-3",
+    "rule-of-5",
+    "raii",
+    "unique-ptr"
+   ]
+  },
+  "interview": {
+   "think": "Start from the members: what does each one already do when copied, moved and destroyed?",
+   "advancedTitle": "Advanced follow-up: the empty destructor that changes behavior",
+   "followUp": "q008"
+  },
+  "recall": [
+   [
+    "If you need logging in a destructor, how do you keep moves?",
+    "Default them explicitly: T(T&&) = default; T& operator=(T&&) = default; (and the copies too, if you want them)."
+   ],
+   [
+    "Which warnings flag the deprecated implicit copy of a class with a user-declared destructor?",
+    "GCC's -Wdeprecated-copy-dtor and Clang's -Wdeprecated-copy-with-dtor — neither is enabled by -Wall or -Wextra."
+   ],
+   [
+    "Does Rule of Zero mean never managing resources?",
+    "No: it means managing each kind of resource in one dedicated wrapper type, instead of in every class that uses it."
+   ]
+  ]
+ },
+ "rule-of-3": {
+  "orientation": {
+   "what": "The Rule of Three: if a class needs a custom destructor, copy constructor or copy assignment, it almost certainly needs all three.",
+   "why": "All three exist for the same reason — the class owns a resource. Writing one and trusting the defaults for the others gives you double frees and leaks.",
+   "outcomes": [
+    "Explain why the three functions come as a set",
+    "Spot the double free and leak in a class with only a destructor",
+    "Write all three correctly, allocating before freeing",
+    "Explain how the Rule of 5 extends it"
+   ],
+   "firstPass": "~10–15 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: one fact, three consequences",
+    "intro": "RawBuffer owns a heap array. That single fact means:",
+    "stages": [
+     {
+      "name": "Destructor",
+      "io": "delete[] data",
+      "note": "Needed so the array is freed."
+     },
+     {
+      "name": "Copy constructor",
+      "io": "deep copy",
+      "note": "Needed because the default copies the pointer, and two destructors would free one array."
+     },
+     {
+      "name": "Copy assignment",
+      "io": "free old, deep copy",
+      "note": "Needed because the default copies the pointer and leaks the target's old array."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Needing any one of destructor, copy constructor or copy assignment signals that the class owns a resource.",
+     "That same resource breaks the compiler's defaults for the other two, so define all three together (or delete the copies).",
+     "C++11 adds move constructor and move assignment, making it the Rule of 5; the Rule of 0 avoids the question entirely."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A fragile product needs special shipping, packing and replacement",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "class RawBuffer {\n    int* data; std::size_t size;\npublic:\n    explicit RawBuffer(std::size_t n) : data(new int[n]), size(n) {}\n    ~RawBuffer() { delete[] data; }\n    RawBuffer(const RawBuffer& o);   // deep copy, defined correctly\n    // no copy assignment written\n};\n\nRawBuffer a(4), b(8);\nb = a;",
+    "q": "What happens at b = a;?",
+    "options": [
+     [
+      "A",
+      "The deep copy constructor runs"
+     ],
+     [
+      "B",
+      "The implicit copy assignment copies the pointer: b's 8-int array leaks, and a and b now share one array"
+     ],
+     [
+      "C",
+      "Compile error: no operator= declared"
+     ],
+     [
+      "D",
+      "Nothing: assignment is deleted automatically"
+     ]
+    ],
+    "reveal": [
+     "B — shallow assignment.",
+     "b already exists, so this is assignment, not construction; the deep copy constructor isn't used.",
+     "The implicit operator= copies data and size, leaking b's old array.",
+     "When a and b are destroyed, the shared array is freed twice. Writing the copy constructor alone didn't fix the class — it needed all three."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "A pre-C++11 Rule-of-Three buffer:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: applying the rule",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Which three functions does the Rule of Three cover?",
+    "The destructor, the copy constructor and the copy assignment operator."
+   ],
+   [
+    "Why allocate the new array before deleting the old one in copy assignment?",
+    "If new throws, the object still holds its old, valid data; deleting first would leave a dangling pointer."
+   ],
+   [
+    "Is the Rule of Five a different rule?",
+    "No: it is the same idea, extended in C++11 to cover the move constructor and move assignment."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Before move semantics",
+     "hint": "every transfer was a copy",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: modernizing Rule-of-Three classes",
+     "hint": "adding moves to old code",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "rule-of-5",
+    "rule-of-0",
+    "copy-assignment"
+   ]
+  },
+  "interview": {
+   "think": "Name the resource first; then say what each default does with it.",
+   "advancedTitle": "Advanced follow-up: adding moves to an existing Rule-of-Three class"
+  },
+  "recall": [
+   [
+    "What is the most common Rule-of-Three bug?",
+    "A class with a destructor that frees a resource but compiler-generated copy operations, which copy the handle and double-free it."
+   ],
+   [
+    "What is the modern alternative to writing all three?",
+    "Hold the resource in a type that manages it (vector, unique_ptr) and write none of them — the Rule of Zero."
+   ],
+   [
+    "What new state must a Rule-of-Three class handle once you add moves?",
+    "The moved-from state (for example a null pointer and size 0), which every other member function must now cope with."
+   ]
+  ]
+ },
+ "rule-of-5": {
+  "orientation": {
+   "what": "The Rule of Five: a class that manages a resource should define (or explicitly default or delete) all five special members — destructor, copy constructor, copy assignment, move constructor, move assignment.",
+   "why": "The five interact: declaring some suppresses others, and a missing noexcept quietly turns moves back into copies. Getting the set right is what makes a resource-owning type both safe and fast.",
+   "outcomes": [
+    "Write all five for a resource-owning class",
+    "Explain which declarations suppress which implicit members",
+    "Explain why the move operations should be noexcept",
+    "Know when to use = default and = delete instead"
+   ],
+   "firstPass": "~20–25 min",
+   "laterPass": "~25–30 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: the five, and what each does with the resource",
+    "intro": "For a Buffer owning a heap array:",
+    "stages": [
+     {
+      "name": "~Buffer()",
+      "io": "free",
+      "note": "Releases the array."
+     },
+     {
+      "name": "Buffer(const Buffer&)",
+      "io": "duplicate",
+      "note": "Allocates a new array and copies the values."
+     },
+     {
+      "name": "operator=(const Buffer&)",
+      "io": "replace with a duplicate",
+      "note": "Copies first, then frees the old array; safe on self-assignment."
+     },
+     {
+      "name": "Buffer(Buffer&&) noexcept",
+      "io": "steal",
+      "note": "Takes the pointer and leaves the source empty."
+     },
+     {
+      "name": "operator=(Buffer&&) noexcept",
+      "io": "release and steal",
+      "note": "Frees the old array, takes the source's, and guards against self-move."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "If a class needs one of the five special members, it almost always needs to decide all five: define, = default, or = delete each one.",
+     "Declaring a destructor or a copy operation stops the implicit move operations; declaring a move operation deletes the implicit copies.",
+     "Mark the move operations noexcept, or std::vector will copy copyable elements instead of moving them when it reallocates."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Keys to a company car",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <iostream>\n#include <vector>\nstruct Buf {\n    Buf() = default;\n    Buf(const Buf&) { std::cout << \"copy \"; }\n    Buf(Buf&&)      { std::cout << \"move \"; }   // not noexcept\n};\n\nint main() {\n    std::vector<Buf> v;\n    v.reserve(1);\n    v.emplace_back();\n    v.emplace_back();   // forces a reallocation\n}",
+    "q": "What does this print?",
+    "options": [
+     [
+      "A",
+      "move "
+     ],
+     [
+      "B",
+      "copy "
+     ],
+     [
+      "C",
+      "Nothing"
+     ],
+     [
+      "D",
+      "move copy "
+     ]
+    ],
+    "reveal": [
+     "B — it prints \"copy \".",
+     "The second emplace_back needs a bigger buffer, so the existing element must be relocated; the new element is constructed in place and prints nothing.",
+     "Because Buf's move constructor might throw, the vector copies instead, to keep its strong exception guarantee.",
+     "Mark the move constructor noexcept and it prints \"move \" instead. (Verified with GCC 13 and Clang 18 using libstdc++.)"
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "A buffer with all five special members:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: the five at work",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What are the five special members covered by the rule?",
+    "Destructor, copy constructor, copy assignment operator, move constructor and move assignment operator."
+   ],
+   [
+    "What does declaring only a destructor do to moves?",
+    "The implicit move constructor and move assignment are not generated, so rvalues are copied instead (the implicit copies still exist, but are deprecated)."
+   ],
+   [
+    "What does a moved-from Buffer look like here?",
+    "data is nullptr and size is 0: valid, empty and safe to destroy or assign to."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Copy versus move cost",
+     "hint": "two allocations versus a few field writes",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: the standard library's resource types",
+     "hint": "vector, string, unique_ptr, fstream",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "rule-of-0",
+    "noexcept-move",
+    "rule-of-5-deep",
+    "unique-ptr"
+   ]
+  },
+  "interview": {
+   "think": "Go through the five in order, and say what each one does with the resource.",
+   "advancedTitle": "Advanced follow-up: noexcept and vector reallocation",
+   "followUp": "q024"
+  },
+  "recall": [
+   [
+    "How do you get the compiler's versions back after declaring a destructor?",
+    "Explicitly default them: Buffer(Buffer&&) = default; and so on for each one you want."
+   ],
+   [
+    "What does = delete on the copy operations express?",
+    "That the type is move-only, like unique_ptr: copying is a compile error rather than a silent bug."
+   ],
+   [
+    "Does a vector of a move-only type still move when the move constructor can throw?",
+    "Yes: with no copy constructor available it moves anyway, and gives up the strong exception guarantee."
    ]
   ]
  }
