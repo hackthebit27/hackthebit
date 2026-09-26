@@ -963,6 +963,18 @@ details.gl-more > .prose{padding:0 0 16px 22px;}
 .gl-precise-h{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--text-faint);margin-bottom:6px;}
 .gl-precise p{font-size:13.2px;line-height:1.62;color:var(--text-muted);}
 .gl-precise p:last-child{margin-bottom:0;}
+.sh-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+.gl-practice{padding:4px 0 16px;}
+.gl-practice + .gl-practice{border-top:1px dashed var(--border);padding-top:14px;}
+.gl-practice > .gl-q{margin-top:0;}
+details.gl-inline-more{margin-top:8px;}
+details.gl-inline-more > summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--accent);}
+.module-ctx{display:flex;flex-direction:column;gap:12px;}
+.mc-row{display:flex;justify-content:space-between;align-items:center;gap:10px 16px;flex-wrap:wrap;}
+.mc-next{padding-top:12px;border-top:1px solid var(--border);}
+.mc-k{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--text-faint);}
+.mc-t{font-size:14.5px;font-weight:600;color:var(--text);display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;}
+.mc-pos{font-size:12.5px;font-weight:500;color:var(--text-muted);}
 </style>
 </head>
 <body>
@@ -1434,7 +1446,7 @@ DEEP_CONTENT['pointers'] = {
   def:"A pointer is a variable whose value is a memory address — it stores *where* an object lives, not the object itself.",
   why:"You need pointers whenever a piece of code must refer to an object it doesn't own a copy of: passing large objects around without copying, building linked structures (trees, lists, graphs), talking to hardware/OS APIs that hand you raw addresses, and implementing polymorphism (a `Base*` can point at any `Derived`).",
   analogy:"A pointer is like a house's street address written on a sticky note. The note isn't the house — you can copy the note, throw it away, or write a wrong address on it, and none of that touches the house itself. If the house is demolished (the object is destroyed) but you still hold the note, the note is now dangling.",
-  code:`void demo() {\n    int x = 42;\n    int* p = &x;      // p holds the address of x\n    *p = 100;          // dereference: write through the pointer\n    std::cout << x;    // prints 100 — same memory, two names\n\n    int* q = nullptr;  // points at nothing (modern C++: never use NULL/0)\n    int** pp = &p;     // pointer to pointer — holds the address of p itself\n}`,
+  code:`#include <iostream>\n\nvoid demo() {\n    int x = 42;\n    int* p = &x;      // p holds the address of x\n    *p = 100;          // dereference: write through the pointer\n    std::cout << x;    // prints 100 — same memory, two names\n\n    int* q = nullptr;  // points at nothing (modern C++: never use NULL/0)\n    int** pp = &p;     // pointer to pointer — holds the address of p itself\n}`,
   steps:[
     "`int x = 42;` — 4 bytes are reserved on the stack, initialized to 42.",
     "`int* p = &x;` — `p` gets its own storage (8 bytes on a 64-bit system) holding x's address, e.g. 0x7ffee23a.",
@@ -1446,14 +1458,14 @@ DEEP_CONTENT['pointers'] = {
   mistake:"Returning the address of a local variable: `int* f(){ int x=5; return &x; }`. `x` is destroyed when `f` returns, so the caller receives a dangling pointer — reading through it is undefined behavior, even though it often 'seems to work' in a debug build.",
   interviewQ:{q:"What is the difference between a pointer and a reference?", a:"A reference is an alias — it must be bound at declaration, can never be null, and can never be re-seated to refer to a different object. A pointer is an independent object that stores an address — it can be null, reassigned, and support pointer arithmetic. References use reference semantics with value-like syntax; pointers require explicit dereferencing (`*`, `->`)."},
   advancedQ:{q:"Why does `const int* p` mean something different from `int* const p`, and how do you read either at a glance?", a:"Read C declarators right-to-left from the name. `const int* p` — p is a pointer to a const int: you can't modify `*p`, but you can reassign p to point elsewhere. `int* const p` — p is a const pointer to int: p can't be reseated, but `*p` is mutable. `const int* const p` locks both. This matters in API design: a function taking `const T*` promises not to modify the pointee."},
-  traps:["Confusing pointer *reassignment* with pointer *arithmetic* (`p++` moves by `sizeof(T)` bytes, not 1 byte).","Assuming `sizeof(pointer)` depends on the pointee type — it doesn't; all object pointers are the platform's address width.","Forgetting that a `void*` cannot be dereferenced without a cast.","Comparing pointers into unrelated objects with `<`/`>` — the result is unspecified in C++ (UB in C); use `std::less<T*>` when you need a consistent total order."]
+  traps:["Confusing pointer *reassignment* with pointer *arithmetic* (`p++` moves by `sizeof(T)` bytes, not 1 byte).","Assuming `sizeof(pointer)` depends on the pointee type — on mainstream platforms (x86-64, AArch64) every object pointer is 8 bytes, though the standard does not guarantee it, and pointers to members are often larger.","Forgetting that a `void*` cannot be dereferenced without a cast.","Comparing pointers into unrelated objects with `<`/`>` — the result is unspecified in C++ (UB in C); use `std::less<T*>` when you need a consistent total order."]
 };
 
 DEEP_CONTENT['references'] = {
   def:"A reference is an alias for an existing object — a second name bound to it at creation that can never be rebound.",
   why:"References give you pass-by-address efficiency with pass-by-value syntax: no null checks, no dereference operators, and the compiler statically guarantees the alias always refers to something (barring dangling references, which are a lifetime bug, not a language hole).",
   analogy:"If a pointer is a sticky note with an address on it, a reference is a nickname. 'Bob' and 'Robert' are two names for the same person — you can't make 'Bob' start referring to someone else later; it's permanently bound at the moment you introduce it.",
-  code:`void increment(int& n) { n++; }   // n is an alias for the caller's variable\n\nvoid demo() {\n    int a = 5;\n    increment(a);\n    std::cout << a;   // 6 — modified in place, no pointer syntax needed\n}\n\nconst std::string& greet(const std::string& name) {\n    static std::string cache;   // static storage: outlives every call\n    cache = "Hello, " + name;   // refreshed on each call (an initializer would run only once)\n    return cache;               // safe to return by reference: never dangles\n}`,
+  code:`#include <iostream>\n#include <string>\n\nvoid increment(int& n) { n++; }   // n is an alias for the caller's variable\n\nvoid demo() {\n    int a = 5;\n    increment(a);\n    std::cout << a;   // 6 — modified in place, no pointer syntax needed\n}\n\nconst std::string& greet(const std::string& name) {\n    static std::string cache;   // static storage: outlives every call\n    cache = "Hello, " + name;   // refreshed on each call (an initializer would run only once)\n    return cache;               // safe to return by reference: never dangles\n}`,
   steps:[
     "`int& n` inside the parameter list means: bind n directly to the caller's storage — no copy is made, no new memory for n's own value.",
     "Internally, most compilers implement a reference exactly like a pointer (an address is passed), but the language forbids you from ever seeing that address or rebinding it.",
@@ -1490,16 +1502,16 @@ DEEP_CONTENT['stack-vs-heap'] = {
   def:"The stack is a fixed-size, LIFO region of memory that holds function call frames and automatic-storage-duration variables; the heap is a much larger, unordered region for dynamically-sized, dynamically-lived allocations.",
   why:"Understanding which storage class an object uses tells you its lifetime, its allocation/deallocation cost, and whether you're responsible for freeing it — three of the most common sources of C++ bugs trace directly back to mixing these up.",
   analogy:"The stack is like a stack of trays in a cafeteria: you can only add or remove from the top, and it's blazing fast because there's no bookkeeping — the last tray placed is the first one you take back off. The heap is like a warehouse with a foreman (the allocator): you ask for a specific amount of space, the foreman finds you a free slot, hands you a claim ticket (the pointer), and you must explicitly return it later or it stays reserved forever.",
-  code:`void f() {\n    int a = 10;                 // stack: freed automatically when f() returns\n    int* b = new int(10);       // heap: lives until you 'delete b;'\n    std::vector<int> v(1000);   // the vector *object* (ptr+size+cap) is on the\n                                 // stack; the 1000 ints it manages live on the heap\n}   // 'a' and the vector's stack-part are destroyed here; 'b' LEAKS`,
+  code:`#include <vector>\n\nvoid f() {\n    int a = 10;                 // stack: freed automatically when f() returns\n    int* b = new int(10);       // heap: lives until you 'delete b;'\n    std::vector<int> v(1000);   // the vector *object* (ptr+size+cap) is on the\n                                 // stack; the 1000 ints it manages live on the heap\n}   // 'a' and the vector's stack-part are destroyed here; 'b' LEAKS`,
   steps:[
     "On entering `f()`, the stack pointer moves down (or up, architecture-dependent) to reserve space for `a`, `b`, and `v`'s bookkeeping fields — this is a single pointer-arithmetic instruction, essentially free.",
     "`new int(10)` asks the heap allocator for 4 bytes; the allocator walks its free-list/arena structures, which costs real cycles and can involve a syscall (`sbrk`/`mmap`) if no free block is big enough.",
     "`std::vector<int> v(1000)` allocates its 4000-byte buffer on the heap internally, but the vector's own control block (pointer + size + capacity, ~24 bytes) sits on the stack.",
-    "When `f()` returns, the stack frame is popped in one instruction — `a`, `v`'s control block, and `b` (the pointer *variable*, not the memory it points to) all vanish instantly. The heap-allocated `int` from `new` is never freed: that's a leak."
+    "When `f()` returns, `v`'s destructor runs first and frees its 4000-byte heap buffer; then the stack frame is popped — `a`, `v`'s control block, and `b` (the pointer *variable*, not the memory it points to) are gone. Only the `int` from `new` is never freed: that's the leak."
   ],
   memory:"```\nHigh addresses\n+-------------------+\n|   stack (grows ↓) |  f()'s frame: a, b, v{ptr,size,cap}\n|        ...        |\n|        ...        |\n|   heap (grows ↑)  |  the 1000 ints v owns; the int from new\n+-------------------+\nLow addresses\n```\nStack allocation/deallocation is O(1) pointer movement; heap allocation involves allocator metadata, potential locking (thread safety), and fragmentation over time.",
   realWorld:"Recursive algorithms that go too deep overflow the stack (finite size, often 1–8MB). Large or size-unknown-at-compile-time data (a growing buffer, an image, a network payload) has to live on the heap. Every `std::string`/`std::vector` is a small stack object that owns a heap buffer once it outgrows small-object/short-string optimization.",
-  mistake:"Returning a pointer/reference to a stack-local object once the function returns — the stack memory is immediately reusable by the next function call, so the data isn't just 'maybe still there', it will be overwritten in practice.",
+  mistake:"Returning a pointer/reference to a stack-local object once the function returns — reading through it is undefined behavior: the frame is reused by the next call, so the value may still look intact, may be overwritten, or the optimizer may assume the access never happens.",
   interviewQ:{q:"Why is stack allocation faster than heap allocation?", a:"Stack allocation is just moving the stack pointer by a known compile-time offset — no bookkeeping, no searching for free space, no thread synchronization. Heap allocation must consult allocator metadata to find a suitably-sized free block, potentially merge/split blocks, and (in a multithreaded program) synchronize access to the shared heap — all real, measurable overhead."},
   advancedQ:{q:"Given a `std::vector<int>` on the stack with capacity 1000, exactly which bytes live where, and what happens on `std::move`?", a:"The vector's control block (typically a pointer to the buffer, a size, and a capacity — ~24 bytes) is on the stack; the 1000 `int`s (4000 bytes) are one contiguous heap allocation the vector owns. `std::move`-ing the vector copies just those 24 stack bytes (pointer + size + capacity) into the destination and nulls out the source's pointer — the 4000-byte heap buffer is never touched or copied, which is exactly why moving a vector is O(1) regardless of its size."},
   traps:["Assuming all objects declared inside a function are 'on the stack' — a `std::string`/`std::vector`/`std::map` variable's *handle* is on the stack, but its payload is usually on the heap.","Deep recursion silently overflowing the stack with no exception thrown — a stack overflow is UB / a hard crash (SIGSEGV), not a catchable `std::exception`.","Believing heap memory is zero-initialized by default — `new int` and `malloc` both return uninitialized (or unspecified) memory unless you explicitly value-initialize (`new int()`) or use `calloc`."]
@@ -1669,22 +1681,22 @@ DEEP_CONTENT['value-categories'] = {
 };
 
 DEEP_CONTENT['stdmove'] = {
-  def:"`std::move` is a function template that unconditionally casts its argument to an rvalue reference (`static_cast<T&&>(arg)`) — it performs no actual move; it's purely a way to say 'you have permission to treat this as disposable.'",
+  def:"`std::move` is a function template that unconditionally casts its argument to an rvalue reference (`static_cast<std::remove_reference_t<T>&&>(arg)`) — it performs no actual move; it's purely a way to say 'you have permission to treat this as disposable.'",
   why:"Without a way to explicitly say 'I'm done with this lvalue, feel free to steal its guts,' every named variable would always look like an lvalue to the overload resolution machinery, and move constructors would only ever fire for anonymous temporaries — `std::move` is the tool that lets you opt named objects into move semantics deliberately.",
   analogy:"`std::move(x)` is like putting a 'FREE — TAKE ME' sign on a box you're about to throw out anyway. The sign doesn't move the box anywhere by itself — it just tells whoever walks by (the next constructor/assignment that consumes the expression) that they're allowed to take its contents instead of asking permission for a careful copy.",
-  code:`void fill() {\n    std::vector<std::string> v;\n    std::string s = "a fairly long string that would need a heap allocation";\n\n    v.push_back(s);              // COPIES s — s is an lvalue here\n    v.push_back(std::move(s));   // MOVES s's buffer into the vector — s is now valid but unspecified (usually "")\n}\n\n// Practical idiom: sink parameters\nclass Person {\n    std::string name;\npublic:\n    explicit Person(std::string n) : name(std::move(n)) {}  // move into member\n};`,
+  code:`#include <string>\n#include <utility>\n#include <vector>\n\nvoid fill() {\n    std::vector<std::string> v;\n    std::string s = "a fairly long string that would need a heap allocation";\n\n    v.push_back(s);              // COPIES s — s is an lvalue here\n    v.push_back(std::move(s));   // MOVES s's buffer into the vector — s is now valid but unspecified (usually "")\n}\n\n// Practical idiom: sink parameters\nclass Person {\n    std::string name;\npublic:\n    explicit Person(std::string n) : name(std::move(n)) {}  // move into member\n};`,
   steps:[
     "`std::move(s)` compiles to `static_cast<std::string&&>(s)` — zero instructions emitted for the cast itself; it's purely a type-system operation.",
     "`push_back` has two overloads: `push_back(const T&)` and `push_back(T&&)`. The xvalue expression `std::move(s)` binds to the `T&&` overload via overload resolution rules.",
     "Inside that overload, the vector uses placement-new with `std::string`'s move constructor to construct the new element, which just copies `s`'s internal pointer/size/capacity fields (a handful of bytes) and nulls out `s`'s own pointer.",
-    "`s` is now in a 'moved-from' state — for `std::string` specifically, this is guaranteed to be a valid, destructible, assignable string (implementation-defined content, commonly but not guaranteed to be empty)."
+    "`s` is now in a 'moved-from' state — for `std::string` specifically, this is guaranteed to be a valid, destructible, assignable string (unspecified content, commonly but not guaranteed to be empty)."
   ],
   memory:"No new memory operations happen because of `std::move` itself. Whatever memory savings occur come entirely from the move constructor/assignment that the cast enables — e.g. avoiding a full heap buffer copy for a `std::string`/`std::vector`, replaced by copying a small fixed-size control structure.",
   realWorld:"'Sink' constructor parameters (take by value, then `std::move` into the member) are the standard idiom for functions that will end up owning their argument either way, letting the *caller* decide whether a copy or move happens at the call site. `std::swap`'s classic implementation is built from three `std::move`s.",
   mistake:"`return std::move(localVar);` in a function returning `localVar` by value — this can prevent NRVO, making the code slower or equal, never faster, than simply `return localVar;`. `std::move` on a return statement is a common 'looks smart, is actually a pessimization' anti-pattern.",
   interviewQ:{q:"Does std::move guarantee that a move will happen?", a:"No. It only makes the expression eligible to bind to an rvalue-reference overload. Whether an actual 'move' happens depends entirely on whether the target type has a move constructor/assignment defined, and whether overload resolution actually picks that overload. For a type with no move constructor (or a deleted one), `std::move`-ing it and assigning/constructing from it just falls back to the copy constructor — completely legal, just not actually a move."},
   advancedQ:{q:"Why is it a bug to use an object after std::move-ing it without reassigning it first (in most real code), even though the standard permits it?", a:"The standard only guarantees the moved-from object is left in a *valid but unspecified state* — valid meaning its invariants hold and it's safely destructible/assignable, but unspecified meaning you cannot rely on any particular value being there. Code that reads a moved-from object's contents (beyond reassigning it or destroying it) is therefore relying on implementation-specific behavior, which breaks the moment you swap standard library implementations or even standard library *versions*. The convention experienced C++ engineers follow is: after moving from an object, only assign to it or let it be destroyed — never read from it."},
-  traps:["`std::move` on a `const` variable silently degrades to a copy (binds to `const T&&`, which usually just matches the copy constructor).","`return std::move(x);` defeating NRVO.","Using a moved-from object's value afterward, relying on unspecified behavior.","Moving from an object still needed later in the same expression's evaluation (order-of-evaluation between move-from and use can be undefined for some expression forms)."]
+  traps:["`std::move` on a `const` variable silently degrades to a copy (binds to `const T&&`, which usually just matches the copy constructor).","`return std::move(x);` defeating NRVO.","Using a moved-from object's value afterward, relying on unspecified behavior.","Moving from an object still needed later in the same expression's evaluation (e.g. `f(std::move(v), v.size())` with f taking v by value: the order in which arguments are evaluated is unspecified, so `v.size()` may see the moved-from vector)."]
 };
 
 DEEP_CONTENT['move-ctor-deep'] = {
@@ -1727,16 +1739,16 @@ DEEP_CONTENT['vector'] = {
   def:"`std::vector<T>` is a dynamically-resizable array: a contiguous heap buffer plus a size and capacity, which automatically reallocates (typically doubling capacity) when it needs to grow past its current capacity.",
   why:"Contiguous storage means excellent cache locality and O(1) random access — it's the default 'just use this' container for sequential data, and understanding its reallocation behavior is essential for writing performant C++ and for a huge fraction of interview questions.",
   analogy:"A vector is like renting a parking lot that doubles in size every time it fills up: when a new car arrives and there's no space, the attendant doesn't try to squeeze in — they rent a bigger lot elsewhere, move every existing car over, and then park the new one. That 'move all the cars' step is the O(n) reallocation cost, but because the lot doubles each time, this expensive step happens exponentially less often as the lot grows.",
-  code:`void demo() {\n    std::vector<int> v;\n    v.reserve(4);              // pre-allocate capacity, size still 0\n    for (int i = 0; i < 4; i++) v.push_back(i);   // no reallocation - fits in capacity\n    v.push_back(4);            // size(5) > capacity(4) -> REALLOCATES: new buffer\n                               // (commonly 2x = capacity 8), all 5 elements moved/copied\n\n    int* p = &v[0];\n    v.push_back(5);\n    // *p is now DANGLING if reallocation happened - v's buffer address changed\n}`,
+  code:`#include <vector>\n\nvoid demo() {\n    std::vector<int> v;\n    v.reserve(4);              // pre-allocate capacity, size still 0\n    for (int i = 0; i < 4; i++) v.push_back(i);   // no reallocation - fits in capacity\n    v.push_back(4);            // size(5) > capacity(4) -> REALLOCATES: new buffer\n                               // (commonly 2x = capacity 8): the 4 existing elements are moved/copied, then 4 is added\n\n    int* p = &v[0];\n    v.push_back(5);\n    // capacity is 8 now, so THIS push_back does not reallocate and p stays valid --\n    // but whenever size() == capacity(), push_back reallocates and p would dangle\n}`,
   steps:[
     "`reserve(4)` allocates one 4-int heap buffer upfront; size stays 0 until elements are actually pushed.",
     "Pushing elements 0-3 fits within capacity — each `push_back` is O(1): just construct the new element at `data[size]` and increment size.",
-    "Pushing element 4 exceeds capacity 4. The vector allocates a NEW, larger buffer (commonly ~2x, so capacity 8), move-constructs (if the element type has a noexcept move constructor) or copy-constructs each of the 5 existing elements into the new buffer, destroys the old elements, and frees the old buffer.",
-    "Any pointer, reference, or iterator into the old buffer (like `p` above) is now dangling — this single behavior is the source of a huge fraction of real-world vector bugs."
+    "Pushing element 4 exceeds capacity 4. The vector allocates a NEW, larger buffer (commonly ~2x, so capacity 8), move-constructs (if the element type has a noexcept move constructor) or copy-constructs each of the 4 existing elements into the new buffer, constructs the new element, destroys the old elements, and frees the old buffer.",
+    "Any pointer, reference, or iterator taken before this reallocation now dangles (`p` in the example is taken afterwards, which is why it stays valid until the next reallocation) — this single behavior is the source of a huge fraction of real-world vector bugs."
   ],
   memory:"```\nvector<int> v (size=5, cap=8):\n  stack:  [ ptr | size=5 | cap=8 ]\n  heap:   [0][1][2][3][4][ ][ ][ ]   <- one contiguous block, 3 slots unused\n```\nGrowth is typically geometric (doubling, or ~1.5x on some implementations) specifically so the *amortized* cost of `push_back` stays O(1) even though any individual push can be O(n) — the exponentially-decreasing frequency of reallocation offsets the linearly-increasing cost of each one.",
   realWorld:"The default choice for 'a list of things' in virtually all C++ code — game entity lists, batch data pipelines, matrix backing storage, you name it. `reserve()` upfront is a standard performance technique when the final size is known or estimable, since it avoids repeated reallocation entirely.",
-  mistake:"Holding a raw pointer or iterator across a `push_back`/`insert`/`erase` call and continuing to use it — any operation that can change capacity invalidates *all* existing iterators/pointers/references into the vector, not just ones 'near' the change.",
+  mistake:"Holding a raw pointer or iterator across a `push_back`/`insert`/`erase` call and continuing to use it — a `push_back`/`insert` that reallocates invalidates *all* iterators, pointers and references into the vector, not just ones 'near' the change; without reallocation, `insert` still invalidates everything at or after the insertion point, and `erase` invalidates everything at or after the erased position.",
   interviewQ:{q:"Why does std::vector typically grow by doubling rather than, say, adding a fixed amount each time?", a:"Doubling gives amortized O(1) push_back: the total cost of all reallocations up to n elements sums to O(n) (a geometric series: n + n/2 + n/4 + ... converges to 2n), so the *average* cost per push_back stays constant. A fixed increment (growing by, say, 10 each time) would cause O(n) reallocations total, each copying an increasing amount of data, giving O(n²) total cost for n pushes — dramatically worse at scale."},
   advancedQ:{q:"When does push_back use the move constructor during reallocation versus the copy constructor, and why does that matter?", a:"During reallocation, `std::vector` uses `std::move_if_noexcept` internally: it moves existing elements into the new buffer only if the element type's move constructor is `noexcept` (or has no copy constructor at all); otherwise it falls back to copying. This is because reallocation must provide the strong exception guarantee — if an exception is thrown partway through moving elements to the new buffer, the vector needs to be able to safely abandon the new buffer and keep the old one intact, which is only possible if 'moving' can't itself fail midway. This is precisely why marking your move constructors `noexcept` isn't just a style nicety — it directly determines whether `std::vector` can actually use them."},
   traps:["Using pointers/iterators after any operation that can trigger reallocation.","Calling `v.reserve()` in a loop condition instead of once beforehand (defeats the purpose).","Confusing `size()` (elements actually stored) with `capacity()` (allocated slots) — `v.resize()` changes size and may construct/destroy elements; `v.reserve()` only changes capacity.","`std::vector<bool>` is a notorious special case: it's bit-packed and does NOT satisfy the normal container/reference semantics (`v[i]` doesn't return a real `bool&`) — a well-known interview trap."]
@@ -1959,18 +1971,18 @@ DEEP_CONTENT['variables'] = {
     "Storage duration (automatic/static/dynamic/thread-local) determines WHEN storage is allocated and freed; scope determines WHERE in the source the name is visible; these are independent -- a `static` local variable has block SCOPE but program-length static STORAGE DURATION.",
     "Linkage (none/internal/external) determines whether the same name in a different translation unit refers to the same entity -- this is a third, again independent, axis that trips up engineers who conflate 'static' as one single concept when it actually means different things in different contexts (block-scope static vs. namespace-scope static)."
   ],
-  memory:"Automatic variables live on the stack (a pointer bump on entry/exit of the enclosing scope); static-duration variables live in a fixed data/BSS segment sized at compile time and are already `at their address` before main() runs; dynamic-duration objects live wherever the allocator (heap) placed them.",
+  memory:"Automatic variables usually live in the function's stack frame (reserved once at function entry, not per block) or only in registers; static-duration variables live in data/BSS sections laid out at link time, so their storage exists before main() runs; dynamic-duration objects live wherever the allocator (heap) placed them.",
   realWorld:"Understanding which storage duration a variable has is the single most common thing that determines whether a piece of code has a lifetime bug -- e.g. capturing a reference to a local variable in a lambda that outlives the function, or forgetting that a function-local `static` persists (and is shared) across every call.",
   mistake:"Assuming `static` always means \"one shared instance\" without distinguishing block-scope static (one instance shared across calls to that function) from namespace-scope static (internal linkage, i.e. private to this translation unit) -- the keyword means genuinely different things depending on where it's written.",
   interviewQ:{q:"What are the four storage durations in C++ and how do they differ?", a:"Automatic (tied to the enclosing block's scope, allocated/freed on the stack), static (exists for the entire program's lifetime, initialized once), dynamic (explicitly created via new and freed via delete, lifetime fully manual or smart-pointer-managed), and thread_local (one distinct instance of the variable per thread, initialized on that thread's first use)."},
-  advancedQ:{q:"Why can a function-local `static` variable's initialization be a genuine thread-safety concern before C++11, and how does C++11 fix it?", a:"Before C++11 the standard didn't mandate synchronization for a function-local static's first-time initialization, so two threads calling the function for the first time simultaneously could race to construct it, potentially double-constructing or reading a partially-constructed object. C++11 explicitly mandates the compiler generate the necessary synchronization (often via a hidden guard variable and an atomic check), making 'Meyer's Singleton' style lazy statics genuinely thread-safe without any manual locking."},
+  advancedQ:{q:"Why can a function-local `static` variable's initialization be a genuine thread-safety concern before C++11, and how does C++11 fix it?", a:"Before C++11 the standard didn't mandate synchronization for a function-local static's first-time initialization, so two threads calling the function for the first time simultaneously could race to construct it, potentially double-constructing or reading a partially-constructed object. C++11 explicitly mandates the compiler generate the necessary synchronization (often via a hidden guard variable and an atomic check), making 'Meyers singleton' style lazy statics genuinely thread-safe without any manual locking."},
   traps:["Treating 'static' as one concept when it has different meanings at namespace scope (internal linkage) vs. block scope (persistent storage) vs. class scope (per-class-not-per-instance data).","Assuming automatic variables are zero-initialized -- built-in-typed automatic variables are NOT zero-initialized by default; reading one before assignment is undefined behavior."]
 };
 DEEP_CONTENT['scope'] = {
   def:"Scope is the region of program TEXT (source code) in which a name is visible and can be referred to -- a purely compile-time, lexical concept, distinct from an object's lifetime (when its storage actually exists at runtime).",
   why:"Without scoping rules, every name in a program would have to be globally unique, and any local helper variable in one function could accidentally collide with one in another -- scope is what lets `int i` mean something different (and safely coexist) in a hundred different for-loops across a codebase.",
   analogy:"Scope is like which rooms in a building a piece of paper is allowed to be read in, not how long the paper physically exists. A name's scope ends when you leave the room (block), which is not necessarily the same moment its underlying storage is destroyed (though for automatic variables, in practice, it usually lines up).",
-  code:`int x = 1;                 // file/namespace scope\nvoid f(){\n    int x = 2;              // block scope, SHADOWS the outer x\n    {\n        int x = 3;          // nested block scope, shadows again\n        std::cout << x;      // prints 3\n    }\n    std::cout << x;          // prints 2 -- inner x's scope has ended\n    std::cout << ::x;        // prints 1 -- :: names the file-scope x\n}`,
+  code:`#include <iostream>\n\nint x = 1;                 // file/namespace scope\nvoid f(){\n    int x = 2;              // block scope, SHADOWS the outer x\n    {\n        int x = 3;          // nested block scope, shadows again\n        std::cout << x;      // prints 3\n    }\n    std::cout << x;          // prints 2 -- inner x's scope has ended\n    std::cout << ::x;        // prints 1 -- :: names the file-scope x\n}`,
   steps:[
     "The compiler resolves a name by searching outward from the innermost enclosing scope to outer scopes, stopping at the first match -- this is why an inner declaration SHADOWS (hides, does not delete) an outer one with the same name for the remainder of that inner scope.",
     "Scope is resolved entirely at compile time based on lexical (textual) nesting of blocks/namespaces/classes -- it has nothing to do with the order functions are CALLED at runtime, only where declarations appear in the source.",
@@ -1978,7 +1990,7 @@ DEEP_CONTENT['scope'] = {
   ],
   memory:"Scope itself has no runtime memory representation -- it is purely a compile-time bookkeeping concept the compiler uses to resolve names to specific declarations; conflating it with lifetime is the most common source of confusion.",
   realWorld:"Deliberately-scoped blocks (`{ ... }` with no other control structure) are a real, useful idiom for shortening a resource's lifetime inside a longer function -- e.g. wrapping a lock_guard in its own block so the mutex is released as soon as the protected section ends, rather than only at the end of the whole function.",
-  mistake:"Confusing scope with lifetime -- believing that because a name is 'out of scope', its storage has necessarily been destroyed; for most local variables this is true, but the two concepts are independently defined and can diverge (e.g. a reference or pointer to something can remain in a DIFFERENT scope after the original name goes out of scope).",
+  mistake:"Confusing scope with lifetime -- believing that because a name is 'out of scope', its storage has necessarily been destroyed; for most local variables this is true, but the two concepts are independently defined and can diverge (e.g. a function-local static goes out of scope at the end of its block but lives until the program ends, and a new-allocated object outlives every name that ever pointed to it).",
   interviewQ:{q:"What is variable shadowing and why can it be dangerous?", a:"Shadowing is declaring a name in an inner scope identical to one in an outer scope, making the outer name inaccessible (without explicit qualification) for the remainder of the inner scope. It's dangerous because code that appears to reference one variable can silently reference a different one after a seemingly unrelated change introduces a new inner declaration with the same name, and most compilers only warn about this with a specific flag (like -Wshadow) that isn't always enabled."},
   advancedQ:{q:"Why does deliberately introducing an extra `{ }` block around a lock_guard matter for correctness/performance, given that scope and lifetime are supposedly separate concepts?", a:"For an automatic-storage RAII object specifically, its destructor runs at the end of its OWN scope, so shrinking that scope to just the critical section (rather than the whole enclosing function) directly shortens how long the lock is held -- this is the one common case where scope and lifetime genuinely coincide and matter together: a smaller lexical scope for the lock_guard means a smaller CRITICAL SECTION and less lock contention with other threads."},
   traps:["Assuming `-Wshadow`-style warnings are on by default -- they usually are not, and shadowing bugs can silently compile without a hint.","Using a scope block purely as an organizational comment without realizing it has a REAL effect: shrinking any RAII object's lifetime declared inside it."]
@@ -1987,7 +1999,7 @@ DEEP_CONTENT['object-lifetime'] = {
   def:"An object's lifetime begins when its constructor completes (or, for a type with a trivial constructor, when storage is obtained) and ends when its destructor starts running (or, again, when storage is released for a trivial type). Using an object outside its lifetime is undefined behavior.",
   why:"Lifetime is the precise, standard-defined concept that makes RAII, move semantics, and most memory-safety reasoning possible at all -- 'is this pointer/reference still valid' is really always the question 'is the pointee still within its lifetime', and every dangling-pointer/use-after-free bug is a lifetime violation by definition.",
   analogy:"Lifetime is like an actor's time on stage during a specific scene -- from their entrance cue (constructor complete) to their exit cue (destructor begins). A prop left where the actor USED to stand doesn't mean the actor is still there; a pointer to a destroyed object is exactly that leftover prop.",
-  code:`struct Widget { Widget(){ std::cout<<"ctor\\n"; } ~Widget(){ std::cout<<"dtor\\n"; } };\n\nint main() {\n    Widget* p;\n    {\n        Widget w;     // lifetime begins: ctor runs\n        p = &w;\n    }                 // lifetime ends: dtor runs, scope exits\n    // *p here is undefined behavior -- w's lifetime has ended, p is dangling\n}`,
+  code:`#include <iostream>\n\nstruct Widget { Widget(){ std::cout<<"ctor\\n"; } ~Widget(){ std::cout<<"dtor\\n"; } };\n\nint main() {\n    Widget* p;\n    {\n        Widget w;     // lifetime begins: ctor runs\n        p = &w;\n    }                 // lifetime ends: dtor runs, scope exits\n    // *p here is undefined behavior -- w's lifetime has ended, p is dangling\n}`,
   steps:[
     "Construction completing is the precise moment an object's lifetime begins -- for a class with a constructor that itself throws partway through, the object's lifetime NEVER begins (this is why a throwing constructor does not trigger the object's own destructor, only already-constructed sub-objects' destructors).",
     "Destruction beginning is the precise moment lifetime ends -- code running INSIDE the destructor body is technically operating on an object whose lifetime, by the strictest reading, is already ending, which is why calling a virtual function from a destructor does NOT dispatch to a more-derived override (that override's lifetime, for the derived part, has already ended).",
@@ -2006,12 +2018,12 @@ DEEP_CONTENT['storage-duration'] = {
   analogy:"Storage duration is like the LEASE TERM on an apartment (how long you've committed to pay for the space), independent of when you're actually home (scope/usage) or whether the walls are painted (the object's actual state/lifetime events within that lease).",
   code:`int g;                       // static: exists for whole program\nvoid f(){\n    static int s;            // static: exists for whole program, initialized once\n    int a;                   // automatic: exists only during this call\n    int* d = new int;        // dynamic: exists until explicit delete\n    thread_local int t;      // thread_local: one instance per thread\n    delete d;\n}`,
   steps:[
-    "Static-duration objects at namespace scope are constructed before main() begins (order across translation units is famously UNSPECIFIED, the 'static initialization order fiasco') and destroyed after main() returns, in reverse order of construction.",
+    "Static-duration objects at namespace scope are, in practice, constructed before main() begins (the standard lets dynamic initialization be deferred until first use) (order across translation units is famously UNSPECIFIED, the 'static initialization order fiasco') and destroyed after main() returns, in reverse order of construction.",
     "Automatic-duration objects are constructed when their declaration is reached during execution and destroyed when their enclosing scope ends -- this is the storage duration RAII depends on, since it ties directly to a predictable, language-guaranteed cleanup point.",
     "Dynamic-duration objects have NO automatic cleanup at all -- the programmer (or a smart pointer wrapping the raw allocation) is fully responsible for calling delete exactly once; thread_local sits alongside these three as its own category with per-thread initialization semantics."
   ],
   memory:"Static-duration objects typically live in a fixed data/BSS segment whose size and layout are determined at compile/link time; automatic objects live on the call stack; dynamic objects live in the heap, wherever the allocator placed them; thread_local objects are typically stored in a special per-thread memory area managed by the runtime.",
-  realWorld:"The 'static initialization order fiasco' (unspecified construction order for static-duration objects across different translation units) is a real, still-relevant production bug class -- the standard idiom to avoid it is wrapping such objects in a function returning a function-local static (Meyer's Singleton pattern), which defers construction to first USE rather than program startup.",
+  realWorld:"The 'static initialization order fiasco' (unspecified construction order for static-duration objects across different translation units) is a real, still-relevant production bug class -- the standard idiom to avoid it is wrapping such objects in a function returning a function-local static (the Meyers singleton pattern), which defers construction to first USE rather than program startup.",
   mistake:"Relying on the relative construction order of two independent namespace-scope static objects defined in DIFFERENT .cpp files -- the standard does not guarantee any particular order between translation units, only within a single one (top to bottom).",
   interviewQ:{q:"What is the 'static initialization order fiasco' and how do you avoid it?", a:"It's the bug where one namespace-scope static object's constructor depends on another static object (in a different translation unit) already being constructed, but the standard does not guarantee inter-translation-unit static initialization order -- so depending on link order/compiler, the dependency might not be ready yet, reading a not-yet-constructed object. The standard fix is to replace the namespace-scope static with a function returning a function-local static reference (`T& get(){ static T instance; return instance; }`), since function-local statics are guaranteed to initialize on first USE, which naturally defers construction until any dependency has already been used (and thus already constructed) too."},
   advancedQ:{q:"Why is thread_local storage duration necessary -- what problem does it solve that a plain static (shared across all threads) does not?", a:"A plain static is one instance shared by every thread, requiring explicit synchronization for any concurrent access; thread_local gives each thread its own independent instance with no sharing at all, which is exactly right for genuinely per-thread state (like a thread-local random number generator seed, or a per-thread error/status code) where sharing would be both unnecessary and would require needless synchronization overhead to make safe."},
@@ -2796,10 +2808,10 @@ DEEP_CONTENT['join-detach'] = {
 };
 
 DEEP_CONTENT['race-conditions'] = {
-  def:"A data race occurs when two or more threads access the SAME memory location concurrently, at least one access is a WRITE, and there is no synchronization establishing an ordering between those accesses — the C++ standard defines this as UNDEFINED BEHAVIOR, not merely 'unpredictable output.'",
+  def:"A data race occurs when two or more threads access the SAME memory location concurrently, at least one access is a WRITE, at least one is not atomic, and there is no synchronization establishing an ordering between those accesses — the C++ standard defines this as UNDEFINED BEHAVIOR, not merely 'unpredictable output.'",
   why:"Race conditions are the single most common and most dangerous category of concurrency bug: they often 'work' in testing (especially on lightly-loaded machines or debug builds) and then fail unpredictably in production under real contention, and because the behavior is formally undefined, the compiler is free to optimize in ways that make the bug even weirder (reordering, caching a value in a register indefinitely, eliminating a 'redundant' read entirely).",
   analogy:"Picture two people editing the same shared spreadsheet cell simultaneously with no lock on who goes first: Person A reads '5', plans to write '6'; at the same instant Person B also reads '5', plans to write '6'. Both write '6' — but the 'correct' answer, if each increment had been respected in some order, would have been '7'. One of the two increments is silently lost, and neither person did anything individually wrong — the problem is the complete absence of coordination.",
-  code:`// Thread A                         Shared State                    Thread B\n// ---------                        int counter = 0;                ---------\n// read counter (0)                                                  read counter (0)\n// compute counter+1 (1)                                             compute counter+1 (1)\n// write counter = 1                                                 write counter = 1\n//\n// Two increments happened, but counter ends up 1, not 2 - one increment was LOST.\n\nvoid demo() {\n    int counter = 0;\n    auto worker = [&](){ for (int i=0;i<100000;i++) counter++; };  // counter++ is READ-MODIFY-WRITE, NOT atomic\n    std::thread t1(worker), t2(worker);\n    t1.join(); t2.join();\n    std::cout << counter;   // almost certainly LESS than 200000, and the exact value varies run to run\n}\n\n// WHAT CAN GO WRONG: lost updates (shown above), torn reads/writes on multi-word\n// data, and - because it's UB - the compiler may even cache 'counter' in a register\n// across loop iterations in one thread and never observe the other thread's writes at all.\n//\n// HOW SYNC FIXES IT: wrap the read-modify-write in a std::mutex, or replace the plain\n// int with std::atomic<int> (see 'atomics-basics') so the increment is a single\n// indivisible operation with defined ordering guarantees.\n//\n// WHAT THE FIX GUARANTEES: with a mutex, only one thread's read-modify-write sequence\n// can execute at a time (mutual exclusion), so no increment is ever lost; with\n// std::atomic, the increment is guaranteed indivisible at the hardware level.`,
+  code:`#include <iostream>\n#include <thread>\n\n// Thread A                         Shared State                    Thread B\n// ---------                        int counter = 0;                ---------\n// read counter (0)                                                  read counter (0)\n// compute counter+1 (1)                                             compute counter+1 (1)\n// write counter = 1                                                 write counter = 1\n//\n// Two increments happened, but counter ends up 1, not 2 - one increment was LOST.\n\nvoid demo() {\n    int counter = 0;\n    auto worker = [&](){ for (int i=0;i<100000;i++) counter++; };  // counter++ is READ-MODIFY-WRITE, NOT atomic\n    std::thread t1(worker), t2(worker);\n    t1.join(); t2.join();\n    std::cout << counter;   // at -O0 usually LESS than 200000 and different every run; at -O2 the\n                            // compiler may fold the loop into one add and print 200000 -- still a data race\n}\n\n// WHAT CAN GO WRONG: lost updates (shown above), torn reads/writes on multi-word\n// data, and - because it's UB - the compiler may even cache 'counter' in a register\n// across loop iterations in one thread and never observe the other thread's writes at all.\n//\n// HOW SYNC FIXES IT: wrap the read-modify-write in a std::mutex, or replace the plain\n// int with std::atomic<int> (see 'atomics-basics') so the increment is a single\n// indivisible operation with defined ordering guarantees.\n//\n// WHAT THE FIX GUARANTEES: with a mutex, only one thread's read-modify-write sequence\n// can execute at a time (mutual exclusion), so no increment is ever lost; with\n// std::atomic, the increment is guaranteed indivisible at the hardware level.`,
   steps:[
     "`counter++` is NOT one atomic CPU operation for a plain `int` — it decomposes into (at minimum) a READ of the current value, a computation of value+1, and a WRITE of the new value back — three separate steps that can be interleaved with another thread's three steps in any order.",
     "When two threads' read-modify-write sequences interleave (both read the same starting value before either writes back), one thread's write silently overwrites the other's — this is the 'lost update' pattern, and it's the most common concrete manifestation of a race condition.",
@@ -6377,7 +6389,7 @@ DEEP_CONTENT['preprocessor'] = {
  memory: "The preprocessor has no concept of memory layout at all -- it produces text, not code. But its output directly determines what the compiler sees, which means macro bugs (like the missing-parens SQUARE_BAD) manifest as either silently wrong computed values baked into the generated machine code, or as bizarre compiler errors pointing at expanded code the original author never wrote (debuggable with the -E flag to dump the fully preprocessed translation unit).",
  realWorld: "Cross-platform codebases use conditional compilation heavily: #ifdef _WIN32 / #elif defined(__linux__) / #elif defined(__APPLE__) blocks select platform-specific includes and implementations at preprocess time so only one branch's code is ever compiled per platform, avoiding both compile errors from missing platform headers and runtime branching overhead.",
  mistake: "Writing a function-like macro without parenthesizing every parameter occurrence and the overall expansion, which silently changes the meaning of arithmetic expressions passed as arguments depending on operator precedence -- this is such a common and dangerous bug class that most style guides (Google C++ Style Guide included) ban function-like macros almost entirely in favor of constexpr functions or templates, which are real, type-checked C++ and don't have this hazard.",
- interviewQ: {q: "What's wrong with this macro, and what's a better modern C++ alternative?\n#define MIN(a, b) a < b ? a : b", a: "Two separate bugs. First, missing parentheses: MIN(a, b) expands to literally 'a < b ? a : b' with no grouping, so int x = 5 + MIN(1, 2); becomes 5 + 1 < 2 ? 1 : 2, which parses as (5 + 1) < 2 ? 1 : 2 due to operator precedence -- not what anyone intended; every occurrence of a and b, and the whole expansion, needs parens: #define MIN(a, b) ((a) < (b) ? (a) : (b)). Second, even fixed, macros re-evaluate their arguments every time they appear in the expansion -- MIN(f(), g()) calls f() and/or g() twice, which is wrong and potentially expensive or incorrect if f()/g() have side effects. The modern fix is a constexpr template function: template<typename T> constexpr T Min(T a, T b) { return a < b ? a : b; } -- it evaluates each argument exactly once, is fully type-checked (no accidental mixing of unrelated types), respects scope and namespaces, is debuggable in a debugger (macros vanish before the compiler and debug info can see them), and can still be constant-folded at compile time when arguments are compile-time constants."},
+ interviewQ: {q: "What's wrong with this macro, and what's a better modern C++ alternative?\n#define MIN(a, b) a < b ? a : b", a: "Two separate bugs. First, missing parentheses: MIN(a, b) expands to literally 'a < b ? a : b' with no grouping, so int x = 5 + MIN(1, 2); becomes 5 + 1 < 2 ? 1 : 2, which parses as (5 + 1) < 2 ? 1 : 2 due to operator precedence -- not what anyone intended; every occurrence of a and b, and the whole expansion, needs parens: #define MIN(a, b) ((a) < (b) ? (a) : (b)). Second, even fixed, macros re-evaluate their arguments every time they appear in the expansion -- MIN(f(), g()) calls f() and/or g() twice, which is wrong and potentially expensive or incorrect if f()/g() have side effects. The modern fix is a constexpr template function: template<typename T> constexpr T Min(T a, T b) { return a < b ? a : b; } -- it evaluates each argument exactly once, is fully type-checked (no accidental mixing of unrelated types), respects scope and namespaces, is debuggable in a debugger (a macro has no function to step into, and its definition is only recorded in debug info when you compile with -g3), and can still be constant-folded at compile time when arguments are compile-time constants."},
  advancedQ: {q: "Why can't a macro be used to safely implement something like a generic 'for each element, call this function' utility the way a template can, even ignoring the double-evaluation problem?", a: "Because macros operate purely on tokens with no knowledge of C++ scoping, types, or overload resolution. A macro like #define FOR_EACH(container, fn) for (auto& _e : container) fn(_e) works only by accident of consistent naming, has zero type checking (fn could be anything, and if it's the wrong signature you get a raw compiler error inside the macro's expansion, blamed on a line number in your call site, not the macro definition, making debugging painful), cannot participate in overload resolution or template argument deduction the way a real generic function can, may collide with a variable also named _e in the caller's scope (macro hygiene failure -- the expansion is spliced verbatim into the caller's lexical scope, unlike a template function's parameters which get their own local scope), and cannot be specialized, partially specialized, or SFINAE'd. A template function or a lambda passed to std::for_each participates fully in the type system, gets proper name lookup and scoping, produces error messages that point at the actual call site with real type information, and the compiler can inline it just as aggressively as a macro would 'inline' by textual substitution -- with none of the hygiene or type-safety hazards."},
  traps: [
   "Believing #define creates a typed, scoped constant -- it does not respect namespaces, classes, or block scope; a macro named CLASS defined in one header can silently break unrelated code in any file that includes it, anywhere later in the translation unit.",
@@ -6389,7 +6401,7 @@ DEEP_CONTENT['preprocessor'] = {
 };
 
 DEEP_CONTENT['translation-units'] = {
- def: "A translation unit (TU) is the actual unit of compilation: one .cpp source file after the preprocessor has fully expanded every #include, macro, and conditional-compilation directive into it -- meaning a TU typically contains far more code than the .cpp file's own text, since every header it (transitively) includes is spliced in. The compiler compiles one TU at a time, completely independently of every other TU; it has no visibility into any other TU's local (internal-linkage) entities. The One Definition Rule (ODR) is the language rule governing how these independently-compiled TUs are allowed to relate once the linker merges them: any entity with external linkage (a non-static function, a non-static/non-inline global variable, a class type) must be defined identically in every TU that defines it, and non-inline, non-template entities with external linkage must be defined in exactly one TU total.",
+ def: "A translation unit (TU) is the actual unit of compilation: one .cpp source file after the preprocessor has fully expanded every #include, macro, and conditional-compilation directive into it -- meaning a TU typically contains far more code than the .cpp file's own text, since every header it (transitively) includes is spliced in. The compiler compiles one TU at a time, completely independently of every other TU; it has no visibility into any other TU at all -- neither its definitions nor its internal-linkage entities. The One Definition Rule (ODR) is the language rule governing how these independently-compiled TUs are allowed to relate once the linker merges them: any entity with external linkage (a non-static function, a non-static/non-inline global variable, a class type) must be defined identically in every TU that defines it, and non-inline, non-template entities with external linkage must be defined in exactly one TU total.",
  why: "ODR violations are one of the nastiest classes of C++ bugs because they are frequently NOT diagnosed at compile time or even link time -- the compiler only sees one TU at a time and can't detect that another TU defined the same class differently, and the linker often only checks that a symbol exists, not that every definition is byte-for-byte identical. The result is undefined behavior that can silently corrupt data, crash intermittently, or 'work' depending on link order -- exactly the kind of bug senior engineers are expected to recognize the signature of (works differently in different build configurations, especially when combining code built with different compiler flags or different versions of a header).",
  analogy: "Imagine two departments in a company independently writing an internal manual titled 'Standard Invoice Format' (same title, i.e. same external name), but department A's manual says an invoice has fields [ID, Amount, Date] while department B's says [ID, Date, Amount] -- same name, different layout. Anyone who receives an invoice built by department A but interprets it using department B's manual reads Date where Amount should be. That's an ODR violation: the linker matches invoices (symbols) purely by name, not by verifying every department used byte-identical field layouts.",
  code: "// widget.h  -- included by BOTH main.cpp and helper.cpp\n#pragma once\nstruct Widget {\n  int id;\n#ifdef EXTRA_FIELD\n  double weight; // only present when EXTRA_FIELD is defined for this TU!\n#endif\n};\n\n// main.cpp -- compiled WITHOUT -DEXTRA_FIELD\n#include \"widget.h\"\nWidget makeWidget() { return Widget{42}; }\n\n// helper.cpp -- compiled WITH -DEXTRA_FIELD (e.g. a stray build-flag mismatch)\n#include \"widget.h\"\n#include <iostream>\nvoid printWidget(const Widget& w) {\n  // sizeof(Widget) here INCLUDES the weight field -- different layout\n  // than the Widget main.cpp's compiler generated. This is a silent\n  // ODR violation: undefined behavior, not a compile or link error.\n  std::cout << w.id << \"\\n\";\n}\n",
@@ -6418,7 +6430,7 @@ DEEP_CONTENT['header-files'] = {
  def: "A header file (.h/.hpp) exists to share declarations -- function prototypes, class definitions, template definitions, extern variable declarations -- across multiple .cpp files without duplicating them by hand. Because a header can be #included by many .cpp files, and even multiple times transitively by nested includes within one .cpp file, headers need include guards (#ifndef HEADER_X_H / #define HEADER_X_H / ... / #endif, or the near-universal but non-standard #pragma once) to make re-inclusion within the same translation unit a no-op rather than a redefinition error. The declaration-vs-definition split -- declare in the header, define in exactly one .cpp -- exists specifically to keep the amount of code the compiler has to re-parse for every TU that includes the header as small as possible, which directly controls compile time at scale.",
  why: "In any codebase beyond toy size, compile time becomes a first-class engineering concern, and header discipline is the single biggest lever a senior engineer has over it: every line in a header is reparsed by the compiler once per translation unit that (transitively) includes it, so a heavy header included by 500 .cpp files multiplies its parse cost 500x, whereas a lean header with just declarations, plus one .cpp with the actual definitions, is parsed heavily only once. This is the entire justification for the pImpl idiom, forward declarations, and minimizing transitive #include chains -- all standard senior-level techniques for taming multi-hour full rebuilds in large C++ projects.",
  analogy: "A header is like a restaurant's public menu, and the .cpp is the kitchen's actual recipe book. Every customer (translation unit) that wants to order needs to see the menu (declarations: names, what each dish is called, what it takes as input) but does not need, and should not be handed, the full recipe book (definitions/implementation) just to place an order -- if you handed every customer the entire recipe book, they'd waste time reading pages of implementation detail they don't need (compile time), and if two different photocopies of the recipe book disagreed (an ODR violation via divergent header definitions), the kitchen could turn out inconsistent dishes.",
- code: "// bank_account.h -- the 'menu': declarations only, kept minimal\n#pragma once\n#include <string>\n\nclass BankAccount {\npublic:\n  explicit BankAccount(std::string owner);\n  void deposit(double amount);\n  bool withdraw(double amount);\n  double balance() const;\nprivate:\n  std::string owner_;\n  double balance_ = 0.0;\n};\n\n// bank_account.cpp -- the 'recipe book': full implementation, compiled ONCE\n#include \"bank_account.h\"\n\nBankAccount::BankAccount(std::string owner) : owner_(std::move(owner)) {}\n\nvoid BankAccount::deposit(double amount) { balance_ += amount; }\n\nbool BankAccount::withdraw(double amount) {\n  if (amount > balance_) return false;\n  balance_ -= amount;\n  return true;\n}\n\ndouble BankAccount::balance() const { return balance_; }\n\n// consumer.cpp -- only ever sees the lean header, never the implementation details\n#include \"bank_account.h\"\nvoid useAccount() {\n  BankAccount acc(\"Alice\");\n  acc.deposit(100.0);\n}\n",
+ code: "// bank_account.h -- the 'menu': declarations only, kept minimal\n#pragma once\n#include <string>\n\nclass BankAccount {\npublic:\n  explicit BankAccount(std::string owner);\n  void deposit(double amount);\n  bool withdraw(double amount);\n  double balance() const;\nprivate:\n  std::string owner_;\n  double balance_ = 0.0;\n};\n\n// bank_account.cpp -- the 'recipe book': full implementation, compiled ONCE\n#include \"bank_account.h\"\n#include <utility>  // std::move\n\nBankAccount::BankAccount(std::string owner) : owner_(std::move(owner)) {}\n\nvoid BankAccount::deposit(double amount) { balance_ += amount; }\n\nbool BankAccount::withdraw(double amount) {\n  if (amount > balance_) return false;\n  balance_ -= amount;\n  return true;\n}\n\ndouble BankAccount::balance() const { return balance_; }\n\n// consumer.cpp -- only ever sees the lean header, never the implementation details\n#include \"bank_account.h\"\nvoid useAccount() {\n  BankAccount acc(\"Alice\");\n  acc.deposit(100.0);\n}\n",
  steps: [
   "consumer.cpp's preprocessor splices in bank_account.h -- the compiler now knows BankAccount's public interface and its data-member layout (needed for sizeof and stack allocation) but has NOT seen the bodies of deposit/withdraw/balance.",
   "consumer.cpp compiles successfully: calling acc.deposit(100.0) only requires the declaration void deposit(double); the compiler emits a call to the mangled symbol for BankAccount::deposit(double) and trusts the linker to resolve it.",
@@ -6442,7 +6454,7 @@ DEEP_CONTENT['header-files'] = {
 };
 
 DEEP_CONTENT['linking'] = {
- def: "Linking is the phase where the linker takes a set of object files and libraries, each with its own symbol table of defined and undefined (referenced-but-not-defined-here) symbols, and resolves every undefined reference to a matching definition, then assigns final addresses to everything (relocation). It fails in exactly two characteristic ways: 'undefined reference' (some TU referenced a symbol -- a function, a global -- that no object file or library being linked actually defines, or defines under a differently-mangled name), and 'multiple definition' (two or more object files define the same external-linkage symbol, violating the One Definition Rule at link time in a way the linker can actually detect, unlike most ODR violations). Across shared libraries specifically, linking gets another dimension: symbol visibility (which symbols a .so exports at all) and versioning, plus the fact that resolution can happen partly at load/run time rather than purely at static link time.",
+ def: "Linking is the phase where the linker takes a set of object files and libraries, each with its own symbol table of defined and undefined (referenced-but-not-defined-here) symbols, and resolves every undefined reference to a matching definition, then assigns final addresses to everything (relocation). Its two characteristic failures are: 'undefined reference' (some TU referenced a symbol -- a function, a global -- that no object file or library being linked actually defines, or defines under a differently-mangled name), and 'multiple definition' (two or more object files define the same external-linkage symbol, violating the One Definition Rule at link time in a way the linker can actually detect, unlike most ODR violations). Across shared libraries specifically, linking gets another dimension: symbol visibility (which symbols a .so exports at all) and versioning, plus the fact that resolution can happen partly at load/run time rather than purely at static link time.",
  why: "Linker errors are one of the most common sources of confusion for engineers who haven't internalized the separate-compilation model, and diagnosing them fast is a real, testable senior skill: 'undefined reference' vs 'multiple definition' point to opposite root causes (missing definition/wrong build target vs duplicate definition/ODR violation), and across shared libraries specifically, symbol visibility bugs (accidentally exporting or failing to export a symbol) and ODR violations across two versions of the same library linked into one process are recurring, hard-to-diagnose production incidents at any company shipping C++ services or plugins.",
  analogy: "Think of the linker as a wedding planner reconciling a guest list (undefined references: 'we invited someone named the best-man, who is that?') against RSVPs (definitions: 'John Smith confirmed as best-man'). 'Undefined reference' is inviting a role nobody RSVP'd for. 'Multiple definition' is two different people both RSVPing as THE best-man for the same wedding -- the planner has no way to seat both in that one designated chair and refuses to proceed until it's disambiguated. Shared libraries are like having the invitations printed by a different company (the dynamic loader) that shows up on the wedding day itself, still resolving a few remaining guest-role assignments at the literal last minute (load-time symbol resolution) instead of when the invitations were originally printed (static link time).",
  code: "// logger.cpp (compiled into liblogger.so)\n#include <cstdio>\nvoid log_message(const char* msg) { std::printf(\"[LOG] %s\\n\", msg); }\n\n// app.cpp (the main executable, links against liblogger.so)\nvoid log_message(const char* msg); // matches liblogger's C++-mangled symbol\nint main() {\n  log_message(\"starting up\");\n  return 0;\n}\n// Build:\n// g++ -shared -fPIC logger.cpp -o liblogger.so\n// g++ app.cpp -L. -llogger -o app -Wl,-rpath,.\n// If liblogger.so instead defined: extern \"C\" void log_message(const char*)\n// (C linkage, unmangled) while app.cpp declared it WITHOUT extern \"C\"\n// (C++ linkage, mangled to something like _Z11log_messagePKc), the LINKER\n// would fail with 'undefined reference to log_message(char const*)' even\n// though a function with that literal name genuinely exists in the .so --\n// the mangled names simply don't match.\n",
@@ -6451,7 +6463,7 @@ DEEP_CONTENT['linking'] = {
   "liblogger.so is built separately; if its log_message is declared extern C, its symbol table exports the plain, unmangled name log_message instead of the C++-mangled name.",
   "At static link time, the linker scans app.o's undefined symbols and tries to satisfy _Z11log_messagePKc against every library on the link line -- if liblogger.so only exports the unmangled log_message, there's no exact match, so the linker reports 'undefined reference,' even though a function that a human would call 'the same function' clearly exists.",
   "Fixing the mismatch (making both sides agree on extern C, or both agree on plain C++ linkage) makes the mangled names line up, and the static link now records that app depends on liblogger.so and needs log_message resolved from it at load time (for a dynamically linked shared library, the actual address isn't baked in at link time -- only a note to resolve it later).",
-  "At process startup, the dynamic loader (ld.so on Linux) loads liblogger.so into the process's address space and performs the final symbol resolution and relocation -- patching app's call instruction to log_message with the real runtime address, which can differ from run to run due to address space layout randomization (ASLR).",
+  "At process startup, the dynamic loader (ld.so on Linux) loads liblogger.so into the process's address space and performs the final symbol resolution and relocation -- filling in app's GOT entry for log_message with the real runtime address (the call itself goes through a PLT stub, so the code is not patched -- verified: main calls _Z11log_messagePKc@plt), which can differ from run to run due to address space layout randomization (ASLR).",
   "If two different versions of liblogger.so, both defining log_message differently, are ever loaded into the same process (e.g. one linked directly, one pulled in transitively by a different dependency), the dynamic loader's symbol resolution typically picks whichever definition it encounters first in load order -- an ODR violation across shared libraries that produces silent, load-order-dependent behavior rather than a build error."
  ],
  memory: "Every object file and shared library carries a symbol table: for each external-linkage entity, its (mangled) name, whether it's defined here or just referenced, and for shared libraries, its visibility (default/hidden, controllable via __attribute__((visibility(\"hidden\"))) or -fvisibility=hidden). A statically linked binary bakes resolved addresses in at build time via relocation; a dynamically linked one leaves a table of stubs (the Procedure Linkage Table / Global Offset Table on ELF systems) that the dynamic loader patches with real addresses when the shared library is mapped into the process at startup (or lazily, on first call, for lazy binding) -- which is why a missing shared library at runtime (not build time) produces an error only when the program is actually run, not when it was linked.",
@@ -6463,7 +6475,7 @@ DEEP_CONTENT['linking'] = {
   "Confusing a compile error (a type or syntax problem, reported per-TU by the compiler) with a link error (a cross-TU symbol resolution problem, reported by the linker) and looking for the bug in the wrong phase.",
   "Assuming a clean build with dynamically linked dependencies guarantees runtime correctness -- a missing or ABI-incompatible shared library is only discovered when the program actually runs and the dynamic loader tries to resolve it (or worse, silently resolves it wrong via an ODR violation across libraries).",
   "Not knowing that giving library-internal symbols default (exported) visibility bloats the shared library's exported symbol table, slows down dynamic symbol resolution, and increases the risk of ODR collisions with other libraries in the same process -- hidden visibility by default plus explicit exports is the standard mitigation.",
-  "Forgetting that C++ name mangling means a function's exact signature (including const-ness, reference vs pointer, namespace, and template arguments) is part of its linker-visible identity -- a seemingly trivial signature change is a linker-breaking change for every dependent binary until they're all recompiled against the new declaration.",
+  "Forgetting that C++ name mangling means a function's exact signature (including the const-ness of pointed-to or referred-to types, reference vs pointer, namespace, and template arguments -- but not top-level const on a by-value parameter, which is ignored) is part of its linker-visible identity -- a seemingly trivial signature change is a linker-breaking change for every dependent binary until they're all recompiled against the new declaration.",
   "Treating extern \"C\" as purely a C-compatibility syntax detail rather than understanding it specifically disables C++ name mangling for that declaration, which is the actual mechanism making C and C++ object files link-compatible."
  ]
 };
@@ -8861,7 +8873,7 @@ const QUESTION_BANK = [
  followups:['What is a translation unit?','Why can the same header be safely included in multiple .cpp files but not define a non-inline function in it?'],
  related:['compilation-process','translation-units','linking']},
 {id:'q002',cat:'fundamentals',diff:'Medium',q:'What is the One Definition Rule (ODR) and how is it commonly violated?',
- simple:'ODR says an entity (function, variable, class) must have exactly one definition across the whole program (inline functions/templates are the sanctioned exception, provided every definition is identical).',
+ simple:'ODR says a non-inline function or variable must have exactly one definition in the whole program, while classes, inline functions/variables and templates may be defined in several translation units provided every definition is identical.',
  deep:'Violating ODR is often NOT a compile or even a link error — it can silently produce undefined behavior, because different translation units may each get a locally-valid but mutually-inconsistent view of a type or function, and the linker has no way to detect that two "identical-looking" symbol definitions actually differ. A classic real-world case: two .cpp files each including a header with a non-inline function definition (rather than just a declaration) — this usually does trigger a "multiple definition" link error. A scarier case: two headers define a struct with the same name but different layouts (e.g. compiled under different macro flags), included into different translation units of the same program — this compiles and links fine but corrupts memory at runtime.',
  wrong:'"ODR violations always fail to link" — many do, but the genuinely dangerous ones compile and link successfully and cause silent UB instead.',
  trap:'Defining a non-inline, non-template function or a non-const global variable in a header file included by multiple .cpp files.',
@@ -8885,7 +8897,7 @@ const QUESTION_BANK = [
  related:['linking','abi-basics','function-overloading']},
 {id:'q005',cat:'fundamentals',diff:'Medium',q:'What is the difference between static and dynamic storage duration, and how does `static` change a local variable\'s behavior?',
  simple:'Storage duration determines when an object is created and destroyed. A `static` local variable inside a function is constructed once (the first time execution reaches its declaration) and persists for the entire program, unlike a normal local variable which is created and destroyed every function call.',
- deep:'`static` local initialization is guaranteed thread-safe and lazy since C++11 (this is exactly the mechanism behind Meyer\'s Singleton). A `static` at namespace scope, by contrast, has internal linkage — it\'s only visible within its own translation unit, exactly like a C-style "file-local" global (modern C++ often prefers an unnamed namespace for the same effect).',
+ deep:'`static` local initialization is guaranteed thread-safe and lazy since C++11 (this is exactly the mechanism behind the Meyers singleton). A `static` at namespace scope, by contrast, has internal linkage — it\'s only visible within its own translation unit, exactly like a C-style "file-local" global (modern C++ often prefers an unnamed namespace for the same effect).',
  code:'void counter() {\n    static int calls = 0;   // initialized ONCE, ever\n    calls++;\n    std::cout << calls;\n}\n// counter(); counter(); counter(); -> prints 1, 2, 3',
  wrong:'"static just means global" — a static local is still scoped to the function (only accessible by name inside it) even though its lifetime is program-long; it\'s not accessible from outside the function at all.',
  trap:'Assuming a static local variable is re-initialized every call, or forgetting that static local initialization order across DIFFERENT functions/translation units is only defined relative to first use, not link order.',
@@ -12791,6 +12803,7 @@ function captureViewUI(el){
   return {
     open: Array.from(el.querySelectorAll('details[id][open]')).map(d=>d.id),
     revealed: Array.from(el.querySelectorAll('[data-reveal-box].revealed, .prediction-challenge.revealed')).map(x=>x.id).filter(Boolean),
+    shown: Array.from(el.querySelectorAll('[data-keep-shown]:not([hidden])')).map(x=>x.id).filter(Boolean),
     notes: Array.from(el.querySelectorAll('textarea[data-note-for]'))
       .filter(t=>t.value !== ((getTopicProgress(t.getAttribute('data-note-for'))||{}).notes||''))
       .map(t=>[t.getAttribute('data-note-for'), t.value])
@@ -12799,6 +12812,7 @@ function captureViewUI(el){
 function restoreViewUI(el, ui){
   ui.open.forEach(id=>{ const d = document.getElementById(id); if(d && d.tagName==='DETAILS') d.open = true; });
   ui.revealed.forEach(id=>{ const b = document.getElementById(id); if(b) b.classList.add('revealed'); });
+  (ui.shown||[]).forEach(id=>{ const b = document.getElementById(id); if(b) b.hidden = false; });
   ui.notes.forEach(([k,v])=>{ const t = el.querySelector('textarea[data-note-for="'+k+'"]'); if(t) t.value = v; });
 }
 function render(){
@@ -13333,6 +13347,8 @@ function breadcrumbHTML(id){
   const t = TOPICS[id];
   const phase = PHASE_DEFS.find(p=>p.id===t.phase);
   return '<div class="breadcrumb">'+
+    '<span class="crumb" data-nav="roadmap">Roadmap</span>'+
+    '<span class="sep">&rsaquo;</span>'+
     '<span class="crumb" data-nav="roadmap">Month '+t.month+'</span>'+
     '<span class="sep">&rsaquo;</span>'+
     '<span class="crumb" data-nav="topics" data-params=\''+JSON.stringify({phase:t.phase})+'\'>'+escapeHtml(phase?phase.title:t.phaseTitle)+'</span>'+
@@ -13454,8 +13470,13 @@ function renderInterviewCheckpoint(id, relatedQs){
      deepDive:    { intro, items:[{id,title,hint, text|list|field|fields|shell|after|jump}],
                     nextTopics:[ids], nextTopicsLabel },
      interview:   { think, advancedTitle, advancedHint },
-     recall:      [ 'You should now be able to ..' items ]   // device-local self-check only
+     recall:      [[question, answer] | {pilot:i, a:answer}, ..]   // 2-4 recall questions (learning check, not mastery)
+     canNow:      [ 'You should now be able to ..' items ]   // device-local self-check; defaults to orientation.outcomes
    }
+   Derived automatically from canonical data (never copied): prerequisites and
+   what-comes-next (TOPICS / TOPIC_ORDER), practice (OUTPUT_QUESTIONS whose
+   related[] names the topic), debugging (DEBUG_BUGS), the interview follow-up
+   (QUESTION_BANK related[]) and the module context footer (PHASE_DEFS).
    Core block types (each topic picks the ones that fit it):
      flow        {id,toc,title,intro,stages:[{name,io,note,err,artifact}]}  pipeline / timeline / lifetime trace
      idea        {id,toc,title,points:[..],precise:'<DEEP_CONTENT field>'}
@@ -13465,6 +13486,7 @@ function renderInterviewCheckpoint(id, relatedQs){
      field-code  {id,toc,title,intro,field}         a DEEP_CONTENT code field
      field-steps {id,toc,title,field}               a DEEP_CONTENT step list
      prose       {id,toc,title,text}
+     pilot-predict {id,toc,title}                 the topic's TOPIC_LEARNING_PILOT prediction, by reference
    Any DEEP_CONTENT field the lesson does not place explicitly is still
    rendered at the end of the deep dive, so nothing authored is dropped.
    ============================================================ */
@@ -13723,12 +13745,2361 @@ const GUIDED_LESSONS = {
    "advancedHint": "how LTO changes this model"
   },
   "recall": [
+   [
+    "Which stage turns #include into pasted text?",
+    "The preprocessor."
+   ],
+   [
+    "An error says undefined reference. Which stage failed?",
+    "The linker: something needs a symbol that no object file or library provides."
+   ],
+   [
+    "What does -c stop after?",
+    "After assembling: it produces an object file and skips linking."
+   ]
+  ],
+  "canNow": [
    "Explain the compilation pipeline",
    "Distinguish compile errors from linker errors",
    "Explain declaration vs definition",
    "Read a basic undefined-reference error",
    "Explain what an object file represents",
    "Explain the basic purpose of linking"
+  ]
+ },
+ "preprocessor": {
+  "orientation": {
+   "what": "The text-editing step that runs before the compiler: it handles every line that starts with #, and it knows nothing about C++.",
+   "why": "Macros, includes and conditional compilation sit behind many confusing C++ errors. Knowing that the preprocessor only substitutes text explains why macros ignore scope, can evaluate an argument twice, and why modern C++ replaces most of them.",
+   "outcomes": [
+    "Explain what #include, #define, #if/#ifdef and #pragma each do",
+    "Predict how a function-like macro expands, including its precedence bugs",
+    "Explain why constexpr functions, inline functions and templates are safer than macros",
+    "Use -E to see what the compiler actually receives"
+   ],
+   "firstPass": "~20–25 min",
+   "laterPass": "~20–30 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model first",
+    "intro": "Before compiling, the preprocessor makes one pass over the text. Each directive is one kind of text edit:",
+    "stages": [
+     {
+      "name": "#include \"file\"",
+      "io": "paste",
+      "note": "Replaces the line with the whole contents of the named file, and of whatever that file includes."
+     },
+     {
+      "name": "#define NAME text",
+      "io": "find and replace",
+      "note": "Every later NAME token is replaced by the text. Function-like macros paste their arguments in as raw tokens."
+     },
+     {
+      "name": "#if / #ifdef / #else",
+      "io": "keep or delete",
+      "note": "Keeps one branch of the text and deletes the others, based on macros such as those passed with -DNAME."
+     },
+     {
+      "name": "#pragma",
+      "io": "note to the compiler",
+      "note": "A compiler-specific instruction. #pragma once, for example, stops a header being pasted twice into the same file."
+     },
+     {
+      "name": "One translation unit",
+      "io": "output (.ii)",
+      "note": "Plain C++ with no #include, #define or #if lines left. This is all the compiler ever sees.",
+      "artifact": true
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "The preprocessor edits text. It does not understand types, scope or namespaces.",
+     "A macro is a find-and-replace rule, not a variable or a function: #define MAX 100 has no type.",
+     "Because arguments are pasted as raw text, function-like macros need parentheses everywhere, and an argument can be evaluated more than once."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Find-and-replace in a legal document",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#define SQUARE(x) x * x\n\nint a = SQUARE(1 + 2);",
+    "q": "What value does a get?",
+    "options": [
+     [
+      "A",
+      "9"
+     ],
+     [
+      "B",
+      "5"
+     ],
+     [
+      "C",
+      "7"
+     ],
+     [
+      "D",
+      "It does not compile"
+     ]
+    ],
+    "reveal": [
+     "B — a is 5.",
+     "The preprocessor pastes the argument text 1 + 2 wherever x appears, giving 1 + 2 * 1 + 2.",
+     "Multiplication binds tighter than addition, so that is 1 + 2 + 2 = 5, not 9.",
+     "#define SQUARE(x) ((x) * (x)) fixes the precedence, but the argument is still evaluated twice. A constexpr function has neither problem."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Full example",
+    "title": "The full example",
+    "intro": "The same bug next to the fixed macro, plus conditional compilation. Build it once as is and once with -DDEBUG_BUILD.",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: what the preprocessor does to that file",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What does #include actually do?",
+    "It replaces the #include line with the complete text of the named file before the compiler runs. The compiler never sees the #include line itself."
+   ],
+   [
+    "Why does #define MAX 100 not create a typed constant?",
+    "It only registers a text replacement: every later MAX token becomes 100 before compilation, with no type, scope or namespace. constexpr int MAX = 100; is a real, typed constant."
+   ],
+   [
+    "How do you see what the compiler really receives after macros expand?",
+    "Run the compiler with -E (for example g++ -E file.cpp) to print the preprocessed translation unit."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "What the compiler sees after preprocessing",
+     "hint": "why macro errors point at code you never wrote",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-why",
+     "title": "Why modern C++ replaces most macros",
+     "hint": "constexpr, inline functions, templates, scoped enums",
+     "fields": [
+      "why"
+     ]
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: platform-specific builds",
+     "hint": "#ifdef _WIN32 / __linux__ / __APPLE__",
+     "fields": [
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "header-files",
+    "translation-units",
+    "inline-functions"
+   ]
+  },
+  "interview": {
+   "think": "Find both bugs before you reveal: one is about precedence, the other about how often the arguments are evaluated.",
+   "advancedTitle": "Advanced follow-up: macros versus templates"
+  },
+  "recall": [
+   [
+    "Why does SQUARE(1 + 2) give 5 with the unparenthesised macro?",
+    "The argument text is pasted as is, producing 1 + 2 * 1 + 2, and * binds tighter than +."
+   ],
+   [
+    "Why is MAX(x++, y) dangerous even with every parameter parenthesised?",
+    "The expansion contains x++ more than once, so x can be incremented twice (with x = 5 and y = 1, x ends up 7). A function evaluates each argument exactly once."
+   ],
+   [
+    "What does #pragma once solve, and what doesn't it?",
+    "It stops a header being pasted twice into the same translation unit. It does nothing when different translation units see different macro settings."
+   ]
+  ]
+ },
+ "translation-units": {
+  "orientation": {
+   "what": "The unit the compiler actually works on — one .cpp file plus everything it includes — and the One Definition Rule that says how separately compiled files must agree.",
+   "why": "Most 'multiple definition' linker errors, and some of the nastiest silent bugs in large codebases, come from misunderstanding translation units and the ODR.",
+   "outcomes": [
+    "Explain what a translation unit is and why the compiler sees only one at a time",
+    "State the One Definition Rule in plain words",
+    "Explain why a non-inline function defined in a header causes 'multiple definition'",
+    "Recognise an ODR violation that compiles and links cleanly"
+   ],
+   "firstPass": "~20–30 min",
+   "laterPass": "~25–35 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: one file in, one object out",
+    "intro": "Each .cpp file is built in isolation. Only the linker ever sees them together.",
+    "stages": [
+     {
+      "name": "main.cpp",
+      "io": "+ widget.h",
+      "note": "Your source file and every header it includes.",
+      "artifact": true
+     },
+     {
+      "name": "Translation unit",
+      "io": "main.ii",
+      "note": "The preprocessed result. The compiler works on this alone and cannot see any other .cpp file."
+     },
+     {
+      "name": "Object file",
+      "io": "main.o",
+      "note": "Code plus symbols. Every other .cpp file becomes its own object file the same way.",
+      "artifact": true
+     },
+     {
+      "name": "Linker",
+      "io": "all .o files",
+      "note": "The first and only step that sees everything. It can catch two definitions of one function, but it never checks that two files agreed on what a class looks like."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "The compiler sees one translation unit at a time: one .cpp file after every #include has been pasted in.",
+     "The One Definition Rule: a non-inline function or variable must be defined exactly once in the whole program. Classes, inline functions and templates may be defined in several translation units, but every definition must be identical.",
+     "Break the first half and the linker usually reports 'multiple definition'. Break the second half and you often get no error at all, just undefined behavior."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Two departments, one form name, different layouts",
+    "field": "analogy"
+   },
+   {
+    "type": "example",
+    "id": "gl-tiny",
+    "toc": "Tiny example",
+    "title": "Smallest possible example",
+    "intro": "A header that defines a function body, included by two .cpp files:",
+    "code": "// util.h\nint twice(int x) { return 2 * x; }   // a definition in a header\n\n// a.cpp\n#include \"util.h\"\nint a() { return twice(1); }\n\n// b.cpp\n#include \"util.h\"\nint main() { return twice(2); }",
+    "terms": [
+     [
+      "Two translation units",
+      "a.cpp and b.cpp each get their own copy of twice() pasted in."
+     ],
+     [
+      "Each compiles",
+      "Inside its own translation unit, twice() is defined exactly once, so the compiler is happy."
+     ],
+     [
+      "The link fails",
+      "The linker finds twice(int) defined in both a.o and b.o."
+     ],
+     [
+      "The fix",
+      "Mark it inline, or keep only the declaration in the header and define the body in one .cpp file."
+     ]
+    ],
+    "shell": "$ g++ a.cpp b.cpp -o app\n/usr/bin/ld: ...b.cpp:(.text+0x0): multiple definition of `twice(int)';\n    ...a.cpp:(.text+0x0): first defined here\n\n# with  inline int twice(int x) { ... }  in util.h:\n$ g++ a.cpp b.cpp -o app      # links"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "// widget.h\nstruct Widget {\n  int id;\n#ifdef EXTRA_FIELD\n  double weight;\n#endif\n};\n\n// main.cpp   is compiled normally.\n// helper.cpp is compiled with -DEXTRA_FIELD.\n// Both include widget.h and pass Widget objects to each other.",
+    "q": "What happens when you build, link and run this?",
+    "options": [
+     [
+      "A",
+      "A compile error in helper.cpp"
+     ],
+     [
+      "B",
+      "A link error: multiple definition of Widget"
+     ],
+     [
+      "C",
+      "It builds cleanly, but the program has undefined behavior"
+     ],
+     [
+      "D",
+      "It works: both files include the same header"
+     ]
+    ],
+    "reveal": [
+     "C — it builds cleanly, and the program has undefined behavior.",
+     "Each translation unit compiles on its own, so each compiler is happy with the Widget it saw.",
+     "A class produces no linker symbol, so the linker has nothing to compare and cannot notice the two layouts differ.",
+     "At run time, code built for a 4-byte Widget and code built for a larger one share objects. That is an ODR violation: no diagnostic is required, and anything can happen."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Full example",
+    "title": "The full example",
+    "intro": "The complete version of that scenario, with what each file's compiler believes:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: how it slips through",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What is a translation unit?",
+    "One .cpp file after preprocessing: its own text plus the text of every header it includes, directly or indirectly. The compiler processes one at a time."
+   ],
+   [
+    "Why does a normal function defined in a header break once two .cpp files include it?",
+    "Each translation unit compiles its own definition, so both object files provide the same symbol and the linker reports 'multiple definition'."
+   ],
+   [
+    "Why can an ODR violation build without any error?",
+    "The compiler sees one translation unit at a time and the linker only matches symbol names. Nothing compares two definitions of the same class, so different definitions go unnoticed."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-link",
+     "title": "Linkage: what the linker can and cannot see",
+     "hint": "external vs internal linkage",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: how ODR violations happen",
+     "hint": "build-flag mismatches, debug/release mixes, two library versions",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "header-files",
+    "linking",
+    "inline-functions"
+   ]
+  },
+  "interview": {
+   "think": "Answer in two parts: what a translation unit is, then what happens at link time when three .cpp files include a header with a function body.",
+   "advancedTitle": "Advanced follow-up: why templates in headers don't break the ODR"
+  },
+  "recall": [
+   [
+    "Why does inline fix a function defined in a header?",
+    "inline allows the function to be defined in every translation unit that uses it, as long as the definitions are identical; the linker keeps one copy instead of reporting a duplicate."
+   ],
+   [
+    "Do include guards prevent ODR violations?",
+    "No. They stop a header being pasted twice into one translation unit; they do nothing when two translation units see the header differently."
+   ],
+   [
+    "Why do templates live in headers?",
+    "A template's body must be visible wherever it is instantiated, and the ODR explicitly allows identical definitions of it in many translation units."
+   ]
+  ]
+ },
+ "header-files": {
+  "orientation": {
+   "what": "How code is split into headers (what other files need to know) and .cpp files (how it works), and how include guards stop a header being pasted twice.",
+   "why": "Header discipline decides whether a small change rebuilds one file or the whole project, and many linker and ODR problems start in a header.",
+   "outcomes": [
+    "Explain what belongs in a header and what belongs in a .cpp file",
+    "Explain what an include guard or #pragma once protects against, and what it doesn't",
+    "Explain why editing a header triggers wider rebuilds than editing a .cpp file",
+    "Describe the pImpl idiom and the trade-off it makes"
+   ],
+   "firstPass": "~20–25 min",
+   "laterPass": "~25–35 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: the menu and the kitchen",
+    "intro": "One header, many readers, one implementation:",
+    "stages": [
+     {
+      "name": "bank_account.h",
+      "io": "declarations",
+      "note": "What other files need to know: the class layout and its member function signatures. Pasted into every file that includes it.",
+      "artifact": true
+     },
+     {
+      "name": "consumer.cpp, report.cpp, …",
+      "io": "#include",
+      "note": "Each includes the header, so each can create and call BankAccount without seeing how it works."
+     },
+     {
+      "name": "bank_account.cpp",
+      "io": "definitions",
+      "note": "The only place the member function bodies are compiled."
+     },
+     {
+      "name": "Linker",
+      "io": "joins them",
+      "note": "Connects every call in the consumers to that one set of definitions."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "A header shares declarations; a .cpp file holds definitions. Declare in the header, define once in a .cpp file.",
+     "Every line of a header is recompiled in every file that includes it, so heavy headers slow the whole build and edits to them trigger wide rebuilds.",
+     "An include guard (or #pragma once) stops the same header being pasted twice into one translation unit. It does not coordinate different translation units."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "The restaurant menu and the recipe book",
+    "field": "analogy"
+   },
+   {
+    "type": "example",
+    "id": "gl-tiny",
+    "toc": "Tiny example",
+    "title": "Smallest possible example",
+    "intro": "Without a guard, including a header twice (often indirectly, through another header) defines the struct twice:",
+    "code": "// point.h  (no include guard)\nstruct Point { int x, y; };\n\n// main.cpp\n#include \"point.h\"\n#include \"point.h\"   // usually arrives indirectly, via another header\nint main() { Point p{1, 2}; return p.x; }",
+    "terms": [
+     [
+      "The problem",
+      "The second #include pastes struct Point again, and a class may not be defined twice in one translation unit."
+     ],
+     [
+      "The fix",
+      "Put #pragma once at the top of point.h, or wrap it in #ifndef POINT_H / #define POINT_H / #endif."
+     ],
+     [
+      "What the guard does",
+      "The second inclusion becomes empty text, so the compiler sees Point once."
+     ]
+    ],
+    "shell": "$ g++ main.cpp\npoint.h:1:8: error: redefinition of 'struct Point'\n\n# after adding  #pragma once  to point.h:\n$ g++ main.cpp        # compiles"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "// bank_account.h is included by 400 .cpp files.\n// Change A: edit the body of BankAccount::withdraw in bank_account.cpp.\n// Change B: add a private data member to BankAccount in bank_account.h.",
+    "q": "How many .cpp files does an incremental build recompile for each change?",
+    "options": [
+     [
+      "A",
+      "A: 1, B: 1"
+     ],
+     [
+      "B",
+      "A: 400, B: 1"
+     ],
+     [
+      "C",
+      "A: 1, B: 401 (all 400 consumers plus bank_account.cpp)"
+     ],
+     [
+      "D",
+      "A: 401, B: 401"
+     ]
+    ],
+    "reveal": [
+     "C — change A recompiles 1 file; change B recompiles 401.",
+     "The body of withdraw lives only in bank_account.cpp, so only that file is rebuilt, then the program is re-linked.",
+     "A new data member changes the class layout in the header, so every file that includes the header must be recompiled: each one's idea of sizeof(BankAccount) is now out of date.",
+     "This is why headers are kept lean, and why the pImpl idiom exists."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Full example",
+    "title": "The full example",
+    "intro": "A class split the usual way: the header is the interface, the .cpp file the implementation.",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: compiling and linking the split",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What goes in a header, and what goes in a .cpp file?",
+    "Headers hold what other files need: class definitions, function declarations, inline functions and templates. Ordinary function bodies and variable definitions go in exactly one .cpp file."
+   ],
+   [
+    "What does #pragma once protect against?",
+    "The same header being pasted twice into one translation unit, which would redefine its classes."
+   ],
+   [
+    "Why does editing a header rebuild more than editing a .cpp file?",
+    "Every file that includes the header was compiled with its old text, so all of them must be recompiled; a .cpp edit only rebuilds that one file."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-abi",
+     "title": "What a header means for the binary (ABI)",
+     "hint": "layout changes and binary compatibility",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: build times and pImpl",
+     "hint": "why large projects obsess over headers",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "linking",
+    "translation-units"
+   ]
+  },
+  "interview": {
+   "think": "Give two separate reasons: one about the linker, one about build time.",
+   "advancedTitle": "Advanced follow-up: the pImpl idiom"
+  },
+  "recall": [
+   [
+    "Why does a header with a normal function body break the build once two .cpp files include it?",
+    "Each .cpp file compiles its own copy of the function, and the linker finds two definitions of the same symbol."
+   ],
+   [
+    "What does pImpl cost, and what does it buy?",
+    "It costs an extra heap allocation and a pointer indirection per object. It buys a header that doesn't change when private members change, so consumers don't recompile and the ABI stays stable."
+   ],
+   [
+    "Why are template definitions usually in headers?",
+    "The compiler needs the template's body wherever it is instantiated, in every translation unit that uses it."
+   ]
+  ]
+ },
+ "linking": {
+  "orientation": {
+   "what": "The last build step: combining object files and libraries, and matching every symbol a file uses to that symbol's definition.",
+   "why": "Linker errors look cryptic until you know the two that matter — undefined reference and multiple definition — and what each one says about your build.",
+   "outcomes": [
+    "Explain what a symbol is and what the linker does with it",
+    "Diagnose 'undefined reference' versus 'multiple definition'",
+    "Explain why extern \"C\" and name mangling matter for linking",
+    "Explain what changes when a library is shared (.so) instead of static"
+   ],
+   "firstPass": "~20–30 min",
+   "laterPass": "~30–40 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: needs and provides",
+    "intro": "Every object file carries two lists. The linker's job is to match them.",
+    "stages": [
+     {
+      "name": "app.o",
+      "io": "needs: log_message",
+      "note": "Calls a function it only has a declaration for, so the symbol is recorded as undefined.",
+      "artifact": true
+     },
+     {
+      "name": "logger.o / liblogger.so",
+      "io": "provides: log_message",
+      "note": "Contains the compiled body, so the symbol is recorded as defined.",
+      "artifact": true
+     },
+     {
+      "name": "Linker",
+      "io": "match by name",
+      "note": "Matches each needed symbol to a provided one. Names are compared exactly, after C++ name mangling.",
+      "err": "undefined reference to `log_message(char const*)'"
+     },
+     {
+      "name": "Program",
+      "io": "app",
+      "note": "For a shared library, the final address is filled in by the dynamic loader when the program starts.",
+      "artifact": true
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Each object file lists the symbols it defines and the symbols it still needs from elsewhere.",
+     "The linker matches them by exact (mangled) name. Nothing provides a needed symbol: 'undefined reference'. Two files provide the same one: 'multiple definition'.",
+     "With a shared library, part of this matching happens again when the program starts, done by the dynamic loader."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A wedding planner matching invitations to RSVPs",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "// mathlib.c   (compiled as C with gcc)\nint add(int a, int b) { return a + b; }\n\n// main.cpp    (compiled as C++ with g++)\nint add(int a, int b);        // no extern \"C\"\nint main() { return add(2, 3); }",
+    "q": "You compile each file with its own compiler and link the two object files. What happens?",
+    "options": [
+     [
+      "A",
+      "It links, and the program returns 5"
+     ],
+     [
+      "B",
+      "A compile error in main.cpp"
+     ],
+     [
+      "C",
+      "A link error: undefined reference to add(int, int)"
+     ],
+     [
+      "D",
+      "It links, but crashes at run time"
+     ]
+    ],
+    "reveal": [
+     "C — undefined reference to add(int, int).",
+     "The C compiler does not mangle names, so mathlib.o provides the plain symbol add.",
+     "The C++ compiler mangles the declaration, so main.o needs _Z3addii.",
+     "The names differ, so the linker cannot match them. Declaring extern \"C\" int add(int, int); in main.cpp makes C++ look for the plain name, and the program returns 5."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Full example",
+    "title": "The full example",
+    "intro": "The same idea with a shared library: build commands, and what goes wrong when the two sides disagree on linkage.",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: from undefined symbol to running program",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What is a symbol, from the linker's point of view?",
+    "A name in an object file's symbol table, marked either as defined here or as needed from elsewhere. Functions and global variables with external linkage become symbols."
+   ],
+   [
+    "Which error means the definition is missing: 'undefined reference' or 'multiple definition'?",
+    "'Undefined reference': something needs a symbol that nothing provides. 'Multiple definition' is the opposite: two object files provide the same symbol."
+   ],
+   [
+    "Why can a program that linked fine still fail to start?",
+    "A shared library is loaded when the program starts. If the dynamic loader can't find it then, the program fails even though the link succeeded."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-plt",
+     "title": "Symbol tables, PLT/GOT and lazy binding",
+     "hint": "how shared-library calls get their addresses",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: plugins and ABI mismatches",
+     "hint": "why load-time linking causes real incidents",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "abi-basics",
+    "translation-units"
+   ]
+  },
+  "interview": {
+   "think": "Name the root cause of each error and at least two concrete ways it happens.",
+   "advancedTitle": "Advanced follow-up: two versions of a class in one process"
+  },
+  "recall": [
+   [
+    "Why does a C function need extern \"C\" when you declare it in C++?",
+    "C++ mangles names; extern \"C\" makes the declaration use the plain C name that the C object file actually provides."
+   ],
+   [
+    "Does top-level const on a by-value parameter change the symbol?",
+    "No. f(const int) and f(int) are the same function and mangle to the same name; const on a pointed-to type (const int* vs int*) does change it."
+   ],
+   [
+    "What does -fvisibility=hidden protect against?",
+    "It keeps a shared library's internal symbols out of its exported table, so they can't collide with other libraries' symbols in the same process."
+   ]
+  ]
+ },
+ "stack-vs-heap": {
+  "orientation": {
+   "fromPilot": true,
+   "what": "Where your objects live: the stack holds local variables that disappear automatically; the heap holds objects you create with new and must release yourself.",
+   "firstPass": "~20–25 min",
+   "laterPass": "~20–30 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Memory diagram",
+    "title": "Memory diagram",
+    "intro": "What exists while f() from the example below is running:",
+    "stages": [
+     {
+      "name": "Stack frame of f()",
+      "io": "automatic",
+      "note": "a (an int), b (a pointer variable) and v's small control block: pointer, size and capacity. Reserved when f() starts."
+     },
+     {
+      "name": "Heap",
+      "io": "dynamic",
+      "note": "The int created by new, and the 1000-int buffer that v manages. Each stays until something frees it.",
+      "artifact": true
+     },
+     {
+      "name": "When f() returns",
+      "io": "cleanup",
+      "note": "v's destructor frees its buffer, then the frame is released. Nothing frees the int from new, so it leaks."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Local variables live on the stack: reserving and releasing them is almost free, and it happens automatically when the function returns.",
+     "Objects created with new live on the heap until something deletes them. Allocation costs more, and forgetting to release one is a leak.",
+     "A std::vector or std::string is a small object on the stack that owns a buffer on the heap."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Cafeteria trays and a warehouse foreman",
+    "field": "analogy"
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "One function, three kinds of storage:",
+    "field": "code"
+   },
+   {
+    "type": "pilot-predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Lifetime trace: what happens, line by line",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "In std::vector<int> v(1000);, what is on the stack and what is on the heap?",
+    "The vector object (pointer, size, capacity) is on the stack; the 1000 ints are one heap buffer that the vector owns and frees in its destructor."
+   ],
+   [
+    "Who frees memory created with new?",
+    "You do: it lives until delete (or a smart pointer that owns it) releases it. Nothing happens when the pointer variable itself goes away."
+   ],
+   [
+    "Why is very deep recursion a stack risk?",
+    "Each call adds a frame to a stack of limited size (often 1–8 MB), so recursion that goes too deep overflows it and the program crashes."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Memory layout and allocator costs",
+     "hint": "where each region sits and why the heap costs more",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: stack overflows and large data",
+     "hint": "recursion depth, big buffers, small-object optimisation",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "object-lifetime",
+    "storage-duration",
+    "unique-ptr"
+   ]
+  },
+  "interview": {
+   "think": "Explain it by what each one has to do at the moment of allocation.",
+   "advancedTitle": "Advanced follow-up: which bytes of a vector live where"
+  },
+  "recall": [
+   {
+    "pilot": 0,
+    "a": "On the stack (or only in a register), and it is released automatically when its function returns."
+   },
+   {
+    "pilot": 1,
+    "a": "The allocator has to find a suitable free block, update its bookkeeping and, with several threads, synchronise; a stack allocation only adjusts the stack pointer."
+   },
+   {
+    "pilot": 2,
+    "a": "The returned pointer dangles: reading through it is undefined behavior, and the value may look right, be garbage, or be optimised away."
+   }
+  ]
+ },
+ "variables": {
+  "orientation": {
+   "what": "What a variable really is — a name bound to typed storage — and the different ways C++ lets you initialize one.",
+   "why": "Initialization syntax decides whether a value is zero, indeterminate or rejected as narrowing, and where a variable is declared decides how long it lives. Both come up constantly in code review and interviews.",
+   "outcomes": [
+    "Separate a variable's name, its storage duration and its linkage",
+    "Tell apart copy, direct, list and value initialization",
+    "Explain what brace initialization rejects, and why",
+    "Explain why reading an uninitialized local is a bug"
+   ],
+   "firstPass": "~20–25 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: four independent questions",
+    "intro": "Every variable declaration answers four separate questions:",
+    "stages": [
+     {
+      "name": "Where can the name be used?",
+      "io": "scope",
+      "note": "The block, function or namespace the name is visible in."
+     },
+     {
+      "name": "How long does it live?",
+      "io": "storage duration",
+      "note": "Automatic, static, thread-local or dynamic — decided by where and how it is declared."
+     },
+     {
+      "name": "Who else can see it?",
+      "io": "linkage",
+      "note": "Whether the same name in another .cpp file refers to the same variable."
+     },
+     {
+      "name": "What value does it start with?",
+      "io": "initialization",
+      "note": "Decided by the initializer syntax you use, shown below."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "A variable is a name for typed storage. The name exists only for the compiler; the storage holds the value at run time.",
+     "The same int x; means different things depending on where it is written: inside a function it is automatic and indeterminate; at namespace scope it is static and zero-initialized.",
+     "How you write the initializer matters: int x{}; is 0, braces reject narrowing conversions, and for containers braces list the elements."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A hotel room number, not the room",
+    "field": "analogy"
+   },
+   {
+    "type": "example",
+    "id": "gl-tiny",
+    "toc": "Initialization forms",
+    "title": "Initialization forms",
+    "intro": "The same int initialized six ways, plus the classic vector surprise:",
+    "code": "#include <vector>\n\nvoid demo() {\n    int a;           // default-initialized: indeterminate; reading it is UB\n    int b = 5;       // copy-initialization\n    int c(5);        // direct-initialization\n    int d{5};        // direct-list-initialization: narrowing is not allowed\n    int e{};         // value-initialization: 0\n    auto f{5};       // int (since C++17)\n\n    double big = 3.9;\n    int g = big;     // compiles: silently truncates to 3\n    // int h{big};   // narrowing: ill-formed. Clang rejects it;\n                     // GCC 13 only warns by default (-Werror=narrowing to reject)\n\n    std::vector<int> v1(3, 7);   // three elements: 7 7 7\n    std::vector<int> v2{3, 7};   // two elements: 3 7\n}",
+    "terms": [
+     [
+      "Braces {}",
+      "A good default: {} value-initializes to zero, and braces refuse narrowing conversions."
+     ],
+     [
+      "= and ()",
+      "Allow narrowing: int g = 3.9 silently becomes 3."
+     ],
+     [
+      "The exception",
+      "For containers, braces prefer the initializer_list constructor, which is why v1 and v2 differ."
+     ]
+    ]
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "std::vector<int> v1(3, 7);\nstd::vector<int> v2{3, 7};\nstd::cout << v1.size() << ' ' << v2.size();",
+    "q": "What does this print?",
+    "options": [
+     [
+      "A",
+      "3 3"
+     ],
+     [
+      "B",
+      "2 2"
+     ],
+     [
+      "C",
+      "3 2"
+     ],
+     [
+      "D",
+      "2 3"
+     ]
+    ],
+    "reveal": [
+     "C — it prints 3 2.",
+     "Parentheses call the (count, value) constructor: three elements, each 7.",
+     "Braces prefer the std::initializer_list constructor when one exists, so v2 holds the two values 3 and 7.",
+     "This is where braces surprise people: for containers, {} lists the elements."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Storage example",
+    "title": "Storage durations in one file",
+    "intro": "Where each variable is declared decides how long it lives and who can see it:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: name, storage and linkage",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What value does a local int x; have before you assign to it?",
+    "An indeterminate one: reading it is undefined behavior. int x{}; or int x = 0; gives it a defined value."
+   ],
+   [
+    "Why prefer int d{5}; over int d = 5;?",
+    "Both give 5, but braces also reject narrowing conversions such as initializing an int from a double, catching the bug at compile time."
+   ],
+   [
+    "What is the difference between int x; at namespace scope and inside a function?",
+    "At namespace scope it has static storage duration and is zero-initialized; inside a function it is automatic and left indeterminate."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Where variables live in memory",
+     "hint": "stack frames, registers, data and BSS",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "Why it matters in real code",
+     "hint": "lifetime bugs and shared function-local statics",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "scope",
+    "storage-duration",
+    "object-lifetime"
+   ]
+  },
+  "interview": {
+   "think": "List all four, and for each say when its storage is created and destroyed.",
+   "advancedTitle": "Advanced follow-up: thread-safe function-local statics"
+  },
+  "recall": [
+   [
+    "Which initialization syntax refuses narrowing?",
+    "List (brace) initialization: int x{3.9}; is ill-formed, while int x = 3.9; truncates silently."
+   ],
+   [
+    "What does static mean on a local variable, and at namespace scope?",
+    "On a local: one instance that persists across calls. At namespace scope: internal linkage, private to that .cpp file."
+   ],
+   [
+    "Why does std::vector<int>{3, 7} have two elements?",
+    "Braces select the initializer_list constructor, so 3 and 7 are element values, not a count and a value."
+   ]
+  ]
+ },
+ "scope": {
+  "orientation": {
+   "what": "Where in the source a name can be used — a compile-time idea that is separate from how long the object behind the name lives.",
+   "why": "Scope explains shadowing bugs, why a small extra { } block can release a lock earlier, and why 'out of scope' does not always mean 'destroyed'.",
+   "outcomes": [
+    "Explain how the compiler decides which declaration a name refers to",
+    "Recognise shadowing and why it is risky",
+    "Explain the difference between scope and lifetime",
+    "Use a block to shorten how long an RAII object lives"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: nested boxes",
+    "intro": "Scopes nest. The compiler looks for a name from the innermost box outward and stops at the first match:",
+    "stages": [
+     {
+      "name": "Namespace (file) scope",
+      "io": "int x = 1",
+      "note": "Visible everywhere below it in the file."
+     },
+     {
+      "name": "Function block",
+      "io": "int x = 2",
+      "note": "Shadows the outer x inside f()."
+     },
+     {
+      "name": "Inner block",
+      "io": "int x = 3",
+      "note": "Shadows again, but only until its closing brace."
+     },
+     {
+      "name": "Qualified name",
+      "io": "::x",
+      "note": "Skips the search and names the namespace-scope x directly."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Scope is about text: the region of source where a name can be used. The compiler resolves it; nothing exists at run time.",
+     "An inner declaration with the same name hides (shadows) the outer one until the inner block ends.",
+     "Scope is not lifetime. For ordinary locals they end together, which is what RAII relies on, but a static local outlives its scope."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Rooms a note may be read in",
+    "field": "analogy"
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "Three variables named x, and which one each line uses:",
+    "field": "code"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <iostream>\n\nint main() {\n    int total = 0;\n    for (int i = 0; i < 3; ++i) {\n        int total = i;     // new variable, shadows the outer total\n        total += 10;\n    }\n    std::cout << total;\n}",
+    "q": "What does this print?",
+    "options": [
+     [
+      "A",
+      "0"
+     ],
+     [
+      "B",
+      "12"
+     ],
+     [
+      "C",
+      "30"
+     ],
+     [
+      "D",
+      "It does not compile"
+     ]
+    ],
+    "reveal": [
+     "A — it prints 0.",
+     "int total = i; inside the loop declares a new variable that shadows the outer total.",
+     "Every += 10 updates the inner total, which is destroyed at the end of each iteration.",
+     "The outer total is never touched. GCC and Clang warn about this only with -Wshadow, which -Wall and -Wextra do not turn on."
+    ]
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: how names are resolved",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "When the compiler sees a name, which declaration does it pick?",
+    "It searches from the innermost enclosing scope outward and uses the first declaration it finds."
+   ],
+   [
+    "Can a variable be out of scope but still alive?",
+    "Yes. A function-local static is out of scope outside its block, but lives until the program ends."
+   ],
+   [
+    "Why can adding { } around a lock_guard matter?",
+    "The lock_guard is destroyed at the closing brace, so the mutex is released earlier and the critical section is shorter."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Scope has no run-time cost",
+     "hint": "it exists only for the compiler",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: scoped blocks around locks",
+     "hint": "shortening critical sections",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "object-lifetime",
+    "storage-duration",
+    "lock-guard"
+   ]
+  },
+  "interview": {
+   "think": "Define it, then give a concrete way it causes a bug.",
+   "advancedTitle": "Advanced follow-up: scope, lifetime and lock_guard"
+  },
+  "recall": [
+   [
+    "What is shadowing?",
+    "Declaring a name in an inner scope that hides the same name from an outer scope until the inner scope ends."
+   ],
+   [
+    "Which compiler flag warns about shadowing?",
+    "-Wshadow in GCC and Clang. It is not enabled by -Wall or -Wextra."
+   ],
+   [
+    "For an ordinary local variable, when does its lifetime end?",
+    "At the end of its scope: its destructor runs at the closing brace."
+   ]
+  ]
+ },
+ "object-lifetime": {
+  "orientation": {
+   "what": "The exact window in which an object exists: from the end of its construction to the start of its destruction.",
+   "why": "Every dangling pointer, use-after-free and 'virtual call from a destructor' surprise is a question about lifetime, and the rules for it are precise.",
+   "outcomes": [
+    "State exactly when an object's lifetime begins and ends",
+    "Explain why using an object outside its lifetime is undefined behavior, even if its bytes are still there",
+    "Explain what happens when a constructor throws",
+    "Explain why a virtual call in a destructor doesn't reach the derived class"
+   ],
+   "firstPass": "~20–25 min",
+   "laterPass": "~20–30 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Lifetime diagram",
+    "title": "Mental model: an object's timeline",
+    "intro": "For an object w declared in a block:",
+    "stages": [
+     {
+      "name": "Storage obtained",
+      "io": "stack slot",
+      "note": "Memory exists, but there is no object in it yet.",
+      "artifact": true
+     },
+     {
+      "name": "Constructor runs",
+      "io": "Widget()",
+      "note": "If it throws here, the object never comes to life, and its own destructor never runs."
+     },
+     {
+      "name": "Lifetime",
+      "io": "usable",
+      "note": "From the end of the constructor until the destructor starts. Only here may the object be used."
+     },
+     {
+      "name": "Destructor runs",
+      "io": "~Widget()",
+      "note": "Lifetime has ended. Members are then destroyed in reverse order of construction."
+     },
+     {
+      "name": "Storage released",
+      "io": "slot reused",
+      "note": "Any pointer or reference still aimed here now dangles.",
+      "artifact": true
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "An object's lifetime starts when its constructor finishes and ends when its destructor starts.",
+     "Outside that window, using the object is undefined behavior, even if the memory still holds the old bytes.",
+     "A pointer or reference does not keep an object alive: when the object dies, they dangle."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "An actor's time on stage",
+    "field": "analogy"
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "A pointer that outlives the object it points to:",
+    "field": "code"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <iostream>\nstruct Noisy {\n    const char* n;\n    Noisy(const char* s) : n(s) { std::cout << \"+\" << n << ' '; }\n    ~Noisy() { std::cout << \"-\" << n << ' '; }\n};\nint main() {\n    Noisy a(\"a\");\n    {\n        Noisy b(\"b\");\n        Noisy c(\"c\");\n    }\n    Noisy d(\"d\");\n}",
+    "q": "What does this print?",
+    "options": [
+     [
+      "A",
+      "+a +b +c -b -c +d -d -a"
+     ],
+     [
+      "B",
+      "+a +b +c -c -b +d -d -a"
+     ],
+     [
+      "C",
+      "+a +b +c +d -d -c -b -a"
+     ],
+     [
+      "D",
+      "+a +b +c -c -b +d -a -d"
+     ]
+    ],
+    "reveal": [
+     "B — +a +b +c -c -b +d -d -a",
+     "b and c end at the inner closing brace, destroyed in reverse order of construction: c, then b.",
+     "d is constructed only after that block has ended.",
+     "At the end of main the remaining objects are destroyed in reverse order: d, then a."
+    ]
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Lifetime rules, step by step",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "When exactly does an object's lifetime begin and end?",
+    "It begins when its constructor completes and ends when its destructor starts. For types with trivial construction or destruction, when storage is obtained or released."
+   ],
+   [
+    "If a constructor throws, does the object's destructor run?",
+    "No: its lifetime never began. Bases and members that were already fully constructed are destroyed."
+   ],
+   [
+    "Why is reading through a pointer to a destroyed object UB even if the bytes look right?",
+    "Lifetime is a language rule, not a memory state. The compiler may assume dead objects are never used and optimise on that basis."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Lifetime versus storage",
+     "hint": "why the memory still being there does not help",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "Where lifetime questions show up",
+     "hint": "use-after-free, dangling references, destructors",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "storage-duration",
+    "raii",
+    "references"
+   ]
+  },
+  "interview": {
+   "think": "Explain it through the order in which constructors and destructors run.",
+   "advancedTitle": "Advanced follow-up: a constructor that throws"
+  },
+  "recall": [
+   [
+    "Which destructors run when a constructor throws halfway?",
+    "Those of the bases and members that were already fully constructed, in reverse order — not the object's own destructor."
+   ],
+   [
+    "Why doesn't a virtual call in a base destructor reach the derived override?",
+    "By then the derived part has already been destroyed, so the call dispatches to the base class's own version."
+   ],
+   [
+    "Does a pointer keep the object it points to alive?",
+    "No. Raw pointers and references never extend lifetime; the one exception is a reference bound directly to a temporary."
+   ]
+  ]
+ },
+ "storage-duration": {
+  "orientation": {
+   "what": "How long an object's storage exists — automatic, static, thread-local or dynamic — decided by where and how the object is declared.",
+   "why": "Storage duration tells you when constructors and destructors run, which explains initialization-order bugs, persistent function-local state and memory leaks.",
+   "outcomes": [
+    "Name the four storage durations and when each one's storage is created and destroyed",
+    "Predict when constructors and destructors run for each",
+    "Explain the static initialization order fiasco and its standard fix",
+    "Explain what thread_local gives each thread"
+   ],
+   "firstPass": "~20–25 min",
+   "laterPass": "~20–25 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: four lease terms",
+    "intro": "Every object has exactly one of four storage durations:",
+    "stages": [
+     {
+      "name": "Automatic",
+      "io": "int a;",
+      "note": "Local variables. Created when the declaration is reached, destroyed at the end of the block."
+     },
+     {
+      "name": "Static",
+      "io": "int g;   static int s;",
+      "note": "Namespace-scope and static variables. One instance for the whole run of the program."
+     },
+     {
+      "name": "Thread-local",
+      "io": "thread_local int t;",
+      "note": "One instance per thread, living as long as that thread."
+     },
+     {
+      "name": "Dynamic",
+      "io": "new int",
+      "note": "Created by new, destroyed only by delete (or by a smart pointer that owns it)."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Storage duration answers 'how long does the storage exist', which is separate from scope ('where can I use the name').",
+     "Automatic objects clean themselves up at the end of their block; that predictability is what RAII builds on.",
+     "Static objects live for the whole program, but the order in which namespace-scope statics in different .cpp files are initialized is unspecified."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "The lease term on an apartment",
+    "field": "analogy"
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "One variable of each kind:",
+    "field": "code"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <iostream>\n\nint next_id() {\n    static int counter = 0;   // initialized once\n    return ++counter;\n}\n\nint main() {\n    next_id();\n    next_id();\n    std::cout << next_id();\n}",
+    "q": "What does this print?",
+    "options": [
+     [
+      "A",
+      "1"
+     ],
+     [
+      "B",
+      "2"
+     ],
+     [
+      "C",
+      "3"
+     ],
+     [
+      "D",
+      "0"
+     ]
+    ],
+    "reveal": [
+     "C — it prints 3.",
+     "counter has static storage duration: it is initialized to 0 once, the first time control reaches its declaration.",
+     "It keeps its value between calls, so the three calls return 1, 2 and 3.",
+     "Without static, counter would be a fresh automatic variable on every call and the program would print 1."
+    ]
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "When each kind is created and destroyed",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "When is a function-local static initialized?",
+    "Once, the first time control passes through its declaration. Since C++11 that initialization is thread-safe."
+   ],
+   [
+    "Why is relying on the order of statics in two different .cpp files a bug?",
+    "The standard does not specify their relative initialization order, so one may be used before it has been constructed."
+   ],
+   [
+    "What does thread_local give you?",
+    "A separate instance of the variable for each thread, so threads don't share it and need no locking for it."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Where each kind lives in memory",
+     "hint": "data/BSS, stack, heap, per-thread storage",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: the static initialization order fiasco",
+     "hint": "and the Meyers singleton fix",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "object-lifetime",
+    "static-keyword",
+    "extern-keyword"
+   ]
+  },
+  "interview": {
+   "think": "Describe the failure first, then the fix, and why the fix works.",
+   "advancedTitle": "Advanced follow-up: why thread_local exists"
+  },
+  "recall": [
+   [
+    "What is the standard fix for the static initialization order fiasco?",
+    "Replace the namespace-scope static with a function returning a reference to a function-local static, so it is constructed on first use."
+   ],
+   [
+    "In what order are the namespace-scope statics of one .cpp file initialized and destroyed?",
+    "Initialized in the order they appear in that file; destroyed in reverse order after main returns."
+   ],
+   [
+    "Which storage duration has no automatic cleanup?",
+    "Dynamic: objects created with new live until delete, or until a smart pointer that owns them releases them."
+   ]
+  ]
+ },
+ "references": {
+  "orientation": {
+   "fromPilot": true,
+   "what": "A second name for an existing object: bound once, never rebound, and used with ordinary value syntax.",
+   "firstPass": "~15–20 min",
+   "laterPass": "~20–25 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: two names, one object",
+    "intro": "What each line creates:",
+    "stages": [
+     {
+      "name": "int a = 5;",
+      "io": "object",
+      "note": "The object: one int in memory.",
+      "artifact": true
+     },
+     {
+      "name": "int& r = a;",
+      "io": "alias",
+      "note": "r is another name for the same int. There is no separate value to copy or keep in sync."
+     },
+     {
+      "name": "r = 7;",
+      "io": "writes a",
+      "note": "Assigning through a reference never rebinds it; it assigns to the object, so a is now 7."
+     },
+     {
+      "name": "By contrast: int* p = &a;",
+      "io": "pointer",
+      "note": "p is its own object holding an address. It can be null, and it can later point somewhere else."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "A reference is an alias: another name for an object that already exists.",
+     "It must be initialized when declared and can never be made to refer to something else; assignment writes to the referred-to object.",
+     "Passing by const T& avoids a copy while promising not to modify the argument."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Bob and Robert: two names, one person",
+    "field": "analogy"
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "Pass-by-reference, and a reference that is safe to return because it refers to a static:",
+    "field": "code"
+   },
+   {
+    "type": "pilot-predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: what a reference parameter does",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Can a reference be made to refer to a different object after it is created?",
+    "No. r = other; copies other's value into the object r already refers to."
+   ],
+   [
+    "What happens if you return a reference to a local variable?",
+    "The local is destroyed when the function returns, so the reference dangles and using it is undefined behavior."
+   ],
+   [
+    "Why can a const std::string& parameter accept a temporary such as f(std::string(\"hi\"))?",
+    "A const lvalue reference may bind to a temporary; the temporary lives until the end of the full expression that contains the call."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "What a reference costs at run time",
+     "hint": "usually implemented as a pointer",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "Where references show up",
+     "hint": "const T& parameters, range-based for",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "pointers",
+    "value-categories",
+    "const-correctness"
+   ]
+  },
+  "interview": {
+   "think": "Answer for legal code first, then say how the only 'null reference' can arise.",
+   "advancedTitle": "Advanced follow-up: lifetime extension"
+  },
+  "recall": [
+   {
+    "pilot": 0,
+    "a": "A pointer can be null and can be reseated to point elsewhere; a reference must be bound when it is created and always refers to the same object."
+   },
+   {
+    "pilot": 1,
+    "a": "It has no state of its own — it is only a name for an object — so there must be an object to name at the moment it is created."
+   },
+   {
+    "pilot": 2,
+    "a": "When the argument may be expensive to copy and the function only reads it. Small, cheap types such as int are better passed by value."
+   }
+  ]
+ },
+ "pointers": {
+  "orientation": {
+   "what": "A variable that holds the address of another object — separate from that object, able to be null, and able to point somewhere else later.",
+   "why": "Pointers underpin arrays, dynamic memory, polymorphism and every C API, and most memory bugs — dangling, wild and null pointers — are pointer bugs.",
+   "outcomes": [
+    "Explain the difference between a pointer and the object it points to",
+    "Read & (address-of) and * (dereference) correctly",
+    "Explain const int* versus int* const",
+    "Recognise dangling, wild and null pointers"
+   ],
+   "firstPass": "~20–30 min",
+   "laterPass": "~20–30 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Memory diagram",
+    "title": "Memory diagram",
+    "intro": "Two objects, two addresses:",
+    "stages": [
+     {
+      "name": "x",
+      "io": "int, e.g. at 0x…230",
+      "note": "The object. It holds 42, and later 100.",
+      "artifact": true
+     },
+     {
+      "name": "p",
+      "io": "int*, e.g. at 0x…238",
+      "note": "A separate object whose value is x's address. On 64-bit platforms it is 8 bytes."
+     },
+     {
+      "name": "*p",
+      "io": "follow the address",
+      "note": "Dereferencing reaches x itself, so *p = 100 changes x."
+     },
+     {
+      "name": "nullptr",
+      "io": "points nowhere",
+      "note": "A pointer holding no object's address. Dereferencing it is undefined behavior."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "A pointer is an object whose value is the address of another object.",
+     "&x gives the address of x; *p follows the address stored in p to the object it points to.",
+     "The pointer and the object have separate lifetimes: if the object dies first, the pointer dangles."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A street address on a sticky note",
+    "field": "analogy"
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "Address-of, dereference, null and pointer-to-pointer:",
+    "field": "code"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <iostream>\n\nint main() {\n    int a = 1, b = 2;\n    int* p = &a;\n    int* q = p;\n    q = &b;\n    *q = 20;\n    *p = 10;\n    std::cout << a << ' ' << b;\n}",
+    "q": "What does this print?",
+    "options": [
+     [
+      "A",
+      "10 20"
+     ],
+     [
+      "B",
+      "1 20"
+     ],
+     [
+      "C",
+      "10 2"
+     ],
+     [
+      "D",
+      "20 10"
+     ]
+    ],
+    "reveal": [
+     "A — it prints 10 20.",
+     "q = p copies the address, so for a moment both point at a.",
+     "q = &b changes only q; p still points at a.",
+     "So *q = 20 writes b, and *p = 10 writes a."
+    ]
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: what each line does in memory",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What is the difference between p and *p?",
+    "p is the pointer itself (an address); *p is the object at that address."
+   ],
+   [
+    "What does const int* p forbid, and what does int* const p forbid?",
+    "const int* p: you cannot modify *p through p, but p can point elsewhere. int* const p: p cannot be reseated, but *p can be modified."
+   ],
+   [
+    "What is a dangling pointer?",
+    "A pointer to an object whose lifetime has ended — for example, the address of a local variable after its function has returned."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Pointers in memory",
+     "hint": "two objects, two addresses, two lifetimes",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "Where pointers are unavoidable",
+     "hint": "linked structures, polymorphism, C APIs",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "references",
+    "const-correctness",
+    "unique-ptr"
+   ]
+  },
+  "interview": {
+   "think": "Compare them on four points: null, rebinding, initialization and syntax.",
+   "advancedTitle": "Advanced follow-up: reading const in declarations"
+  },
+  "recall": [
+   [
+    "What does p++ do to an int* p?",
+    "It advances the address by sizeof(int), to the next int, not by one byte."
+   ],
+   [
+    "Why must a void* be cast before it is dereferenced?",
+    "It carries no type, so the compiler doesn't know how to read or write the object at that address."
+   ],
+   [
+    "What is the difference between a dangling and a wild pointer?",
+    "A dangling pointer once pointed to a live object that has since died; a wild pointer was never initialized to a valid address."
+   ]
+  ]
+ },
+ "stdmove": {
+  "orientation": {
+   "fromPilot": true,
+   "what": "A cast that marks an object as safe to move from. It moves nothing itself; the move constructor or move assignment it enables does the work.",
+   "firstPass": "~20–30 min",
+   "laterPass": "~20–30 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: permission, not action",
+    "intro": "What happens in v.push_back(std::move(s)):",
+    "stages": [
+     {
+      "name": "s",
+      "io": "lvalue",
+      "note": "A named string. Passed as is, it can only bind to const T&, so it would be copied.",
+      "artifact": true
+     },
+     {
+      "name": "std::move(s)",
+      "io": "cast to T&&",
+      "note": "No code runs. The expression becomes an rvalue (an xvalue), which can bind to T&&."
+     },
+     {
+      "name": "push_back(T&&)",
+      "io": "overload chosen",
+      "note": "Overload resolution now picks the rvalue-reference version."
+     },
+     {
+      "name": "Move constructor",
+      "io": "steals the buffer",
+      "note": "Copies the pointer, size and capacity, and leaves s valid but unspecified (usually empty)."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "std::move is a cast to an rvalue reference; by itself it generates no code.",
+     "A real move happens only if the destination has a move constructor or move assignment, and overload resolution picks it.",
+     "After moving from an object, only assign to it or let it be destroyed: its value is unspecified."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A 'free — take me' sign on a box",
+    "field": "analogy"
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "Copying versus moving into a vector, and the sink-parameter idiom:",
+    "field": "code"
+   },
+   {
+    "type": "pilot-predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: from cast to move constructor",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Does std::move(x) move anything?",
+    "No. It only casts x to an rvalue reference so that a move constructor or move assignment can be chosen."
+   ],
+   [
+    "What happens if you std::move a const std::string into another string?",
+    "It is copied: the move constructor takes a non-const std::string&&, which a const string cannot bind to, so the copy constructor is chosen."
+   ],
+   [
+    "Why is return std::move(local); usually a mistake?",
+    "It prevents copy elision (NRVO); return local; already moves or elides automatically."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "What happens in memory",
+     "hint": "std::move itself costs nothing",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: sink parameters and swap",
+     "hint": "take by value, then move",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "move-constructor",
+    "perfect-forwarding",
+    "value-categories"
+   ]
+  },
+  "interview": {
+   "think": "Separate what std::move does from what the move constructor does.",
+   "advancedTitle": "Advanced follow-up: using a moved-from object"
+  },
+  "recall": [
+   {
+    "pilot": 0,
+    "a": "An rvalue reference to its argument (std::remove_reference_t<T>&&). It is a cast, not an action."
+   },
+   {
+    "pilot": 1,
+    "a": "The moved-from object is still valid, so using it is not undefined behavior; but its value is unspecified, so code that relies on it is fragile. Assign to it or let it be destroyed."
+   },
+   {
+    "pilot": 2,
+    "a": "Move semantics: rvalue references, move constructors and move assignment."
+   }
+  ]
+ },
+ "vector": {
+  "orientation": {
+   "what": "The default C++ container: a contiguous, growable array that owns its elements on the heap.",
+   "why": "Knowing when a vector reallocates explains its performance, its amortised O(1) push_back, and its most common bug: pointers and iterators that silently dangle.",
+   "outcomes": [
+    "Explain size versus capacity, and what reserve does",
+    "Explain why push_back is amortised O(1)",
+    "Predict when pointers, references and iterators are invalidated",
+    "Use vector by default, and know when something else fits better"
+   ],
+   "firstPass": "~20–30 min",
+   "laterPass": "~25–35 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Structure",
+    "title": "Container structure",
+    "intro": "A vector is a small handle plus one heap buffer:",
+    "stages": [
+     {
+      "name": "Handle",
+      "io": "on the stack",
+      "note": "Pointer to the buffer, size (elements in use) and capacity (slots allocated).",
+      "artifact": true
+     },
+     {
+      "name": "Buffer",
+      "io": "on the heap",
+      "note": "One contiguous block, which makes iteration fast and indexing O(1).",
+      "artifact": true
+     },
+     {
+      "name": "push_back with spare capacity",
+      "io": "O(1)",
+      "note": "Constructs the new element in the next free slot."
+     },
+     {
+      "name": "push_back when full",
+      "io": "reallocates: O(n)",
+      "note": "Allocates a bigger buffer (libstdc++ doubles it), moves or copies every element across and frees the old one. Every pointer, reference and iterator into the old buffer now dangles."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "size() is how many elements are stored; capacity() is how many fit before the vector must reallocate.",
+     "Capacity grows geometrically, so push_back is O(1) amortised, even though an individual push can be O(n).",
+     "A reallocation invalidates every pointer, reference and iterator into the vector."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A parking lot that doubles when full",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "std::vector<int> v;\nv.reserve(3);\nv.push_back(1); v.push_back(2); v.push_back(3);\nint& first = v[0];\nv.push_back(4);\nstd::cout << first;",
+    "q": "Is reading first after the last push_back safe?",
+    "options": [
+     [
+      "A",
+      "Yes, it prints 1"
+     ],
+     [
+      "B",
+      "Yes: reserve(3) keeps the buffer in place"
+     ],
+     [
+      "C",
+      "No: the vector is full, so push_back reallocates and first dangles"
+     ],
+     [
+      "D",
+      "It is a compile error"
+     ]
+    ],
+    "reveal": [
+     "C — first dangles, and reading it is undefined behavior.",
+     "reserve(3) guarantees a capacity of at least 3; libstdc++ allocates exactly 3, so after three push_backs the vector is full.",
+     "push_back(4) needs a fourth slot, so the vector allocates a new buffer, moves the elements and frees the old one.",
+     "first still refers into the freed buffer. Reserving 4 up front, or taking the reference after the last push_back, avoids the problem."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Full example",
+    "title": "The full example",
+    "intro": "reserve, growth and invalidation in one function:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: a reallocation",
+    "field": "steps"
+   },
+   {
+    "type": "prose",
+    "id": "gl-when",
+    "toc": "When to use",
+    "title": "When to use it, and when not to",
+    "text": "Use vector by default for sequences: contiguous memory makes iteration and indexing fast and works well with the CPU cache.\n\nReach for something else when you need fast insertion at the front (std::deque), references that stay valid while elements are added at either end (std::deque), or fast lookup by key (std::unordered_map, std::map). Even then, measure: for small and medium sizes a vector often still wins.\n\nComplexity: indexing O(1); push_back O(1) amortised; insert or erase in the middle O(n); finding a value O(n)."
+   }
+  ],
+  "checkpoint": [
+   [
+    "What is the difference between size() and capacity()?",
+    "size() is the number of elements stored; capacity() is how many fit in the current buffer before a reallocation."
+   ],
+   [
+    "Why is push_back O(1) amortised?",
+    "Capacity grows geometrically, so reallocations get rarer as the vector grows, and the total copying for n pushes is O(n)."
+   ],
+   [
+    "After which operations may a pointer to v[0] dangle?",
+    "After any operation that reallocates — push_back, insert, emplace or resize when the vector is full — and after erase or insert at or before that element."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Memory layout and growth factor",
+     "hint": "2x in libstdc++, about 1.5x in some others",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: reserve and the default container",
+     "hint": "why vector is the default",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "iterator-invalidation",
+    "deque"
+   ]
+  },
+  "interview": {
+   "think": "Work out the total copying cost of n pushes under each growth policy.",
+   "advancedTitle": "Advanced follow-up: move or copy during reallocation"
+  },
+  "recall": [
+   [
+    "Why should move constructors be noexcept?",
+    "During reallocation std::vector moves elements only if the move constructor is noexcept (or copying is impossible); otherwise it copies, to keep the strong exception guarantee."
+   ],
+   [
+    "Why is std::vector<bool> a trap?",
+    "It is a bit-packed specialisation: v[i] returns a proxy object, not a real bool&."
+   ],
+   [
+    "What does the erase-remove idiom do?",
+    "std::remove shifts the kept elements to the front and returns the new logical end; erase then removes the leftover tail. C++20's std::erase_if does both."
+   ]
+  ]
+ },
+ "race-conditions": {
+  "orientation": {
+   "fromPilot": true,
+   "what": "What goes wrong when threads touch the same data without coordination, and why C++ treats an unsynchronized conflicting access as undefined behavior.",
+   "firstPass": "~25–30 min",
+   "laterPass": "~30–40 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Timeline",
+    "title": "Execution timeline",
+    "intro": "Two threads each run counter++ once, starting from 0:",
+    "stages": [
+     {
+      "name": "Thread A reads",
+      "io": "counter = 0",
+      "note": "Loads the current value into a register."
+     },
+     {
+      "name": "Thread B reads",
+      "io": "counter = 0",
+      "note": "Loads the same value before A has written anything back."
+     },
+     {
+      "name": "Both add 1",
+      "io": "1 and 1",
+      "note": "Each thread computes 0 + 1 in its own register."
+     },
+     {
+      "name": "Both write back",
+      "io": "counter = 1",
+      "note": "The second write overwrites the first. Two increments ran, but the value went up by one: a lost update."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "A data race is two threads accessing the same memory location, at least one of them writing, at least one access non-atomic, and nothing ordering them.",
+     "In C++ a data race is undefined behavior, not just a wrong number: the compiler may optimise as if it cannot happen.",
+     "Fix it by ordering the accesses — a mutex or std::atomic — or by not sharing the data at all."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Two people editing one spreadsheet cell",
+    "field": "analogy"
+   },
+   {
+    "type": "pilot-predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal"
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Full example",
+    "title": "The full example",
+    "intro": "The same race with real threads, and what fixes it:",
+    "field": "code"
+   },
+   {
+    "type": "example",
+    "id": "gl-o2",
+    "toc": "Optimizer surprise",
+    "title": "Why passing tests prove nothing",
+    "intro": "The same program built twice with GCC 13 and run five times each (your numbers will differ):",
+    "shell": "$ g++ -O0 -pthread race.cpp -o race0\n$ for i in 1 2 3 4 5; do ./race0; done | xargs\n123567 185671 140799 199304 136624\n\n$ g++ -O2 -pthread race.cpp -o race2\n$ for i in 1 2 3 4 5; do ./race2; done | xargs\n200000 200000 200000 200000 200000\n\n$ g++ -O2 -pthread -fsanitize=thread race.cpp -o race_tsan && ./race_tsan\nWARNING: ThreadSanitizer: data race",
+    "terms": [
+     [
+      "-O0",
+      "Every increment is a separate load, add and store, so updates are lost."
+     ],
+     [
+      "-O2",
+      "The optimizer can keep each thread's running count in a register and write it back once, so lost updates become rare. The code is exactly as broken; the bug is only hidden."
+     ],
+     [
+      "ThreadSanitizer",
+      "Reports the race from the access pattern, whether or not the output was wrong."
+     ]
+    ]
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: why counter++ races",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What makes a data race?",
+    "Two threads access the same memory location, at least one access is a write, at least one is non-atomic, and no synchronization orders them."
+   ],
+   [
+    "Why isn't counter++ on an int safe from two threads?",
+    "It is a separate read, add and write; two threads can interleave those steps and lose an update, and formally it is undefined behavior."
+   ],
+   [
+    "Name two ways to fix the counter.",
+    "Protect the increment with a std::mutex, or make counter a std::atomic<int>. Giving each thread its own counter and adding them up at the end also works."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Visibility between threads",
+     "hint": "why a write may never be seen",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: where races hide",
+     "hint": "check-then-act, caches, lazy initialization",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "atomics-basics",
+    "lock-guard"
+   ]
+  },
+  "interview": {
+   "think": "Answer yes or no, justify it with the definition, then give three fixes.",
+   "advancedTitle": "Advanced follow-up: why data races are undefined behavior"
+  },
+  "recall": [
+   {
+    "pilot": 0,
+    "a": "Two threads access the same location, at least one writes, at least one access is not atomic, and nothing establishes an ordering (happens-before) between them."
+   },
+   {
+    "pilot": 1,
+    "a": "It compiles to a load, an add and a store; another thread's steps can run in between, so one increment can overwrite the other."
+   },
+   {
+    "pilot": 2,
+    "a": "A std::mutex around the increment, or std::atomic<int>. Per-thread counters summed afterwards avoid sharing entirely."
+   }
   ]
  }
 };
@@ -13744,7 +16115,7 @@ function selfCheckSave(o){ try{ localStorage.setItem(SELF_CHECK_KEY, JSON.string
 
 function journeyStepHTML(id, p, st, target){
   return '<div class="journey-step'+(p[st.level]?' done':'')+'">'+
-    '<div class="checkbox'+(p[st.level]?' checked':'')+'" data-action="toggle-level" data-topic="'+id+'" data-level="'+st.level+'" title="Tick when you can actually do this">'+(p[st.level]?'&#10003;':'')+'</div>'+
+    '<div class="checkbox'+(p[st.level]?' checked':'')+'" data-action="toggle-level" data-topic="'+id+'" data-level="'+st.level+'" data-label="'+st.mark+' '+st.name+': '+st.desc+'" title="Tick when you can actually do this">'+(p[st.level]?'&#10003;':'')+'</div>'+
     '<div class="js-body"><div class="js-name">'+st.mark+' '+st.name+'</div><div class="js-desc">'+st.desc+'</div>'+
     (target ? '<button type="button" class="js-go" data-scroll="'+target+'">Go to this part &darr;</button>' : '')+'</div></div>';
 }
@@ -13752,7 +16123,10 @@ function journeyStepHTML(id, p, st, target){
    status values (todo / in_progress / done / skipped) and the level ticks
    are the same ones the classic tracker uses. */
 function journeyCardHTML(id, p, sched, g){
-  const tg = g.journey || {};
+  const tg = Object.assign({}, g.journey||{});
+  const coreBlocks = (g.core||[]).filter(b=>b.type!=='aside');
+  if(!tg.simple && coreBlocks[0]) tg.simple = coreBlocks[0].id;
+  if(!tg.practical){ const pb = coreBlocks.find(b=>/^(example|predict|pilot-predict|field-code)$/.test(b.type)); if(pb) tg.practical = pb.id; }
   const nId = nextTopicId(id);
   const firstDone = p.simple && p.practical;
   const firstCount = (p.simple?1:0)+(p.practical?1:0);
@@ -13788,8 +16162,15 @@ function journeyCardHTML(id, p, sched, g){
       (sched ? ' Next revision due: <strong class="tabular">'+sched.due+'</strong>.' : '')+'</div>'+
   '</div>';
 }
+/* orientation.fromPilot: take why/outcomes from the topic's TOPIC_LEARNING_PILOT entry by reference. */
+function glOrientation(id, g){
+  const o = Object.assign({}, g.orientation||{});
+  const pl = o.fromPilot ? TOPIC_LEARNING_PILOT[id] : null;
+  if(pl){ if(!o.why) o.why = pl.whyItMatters; if(!o.outcomes) o.outcomes = pl.whatYoullLearn; }
+  return o;
+}
 function startHereHTML(id, g){
-  const o = g.orientation || {};
+  const o = glOrientation(id, g);
   const row = (k, v) => v ? '<div class="sh-row"><div class="sh-k">'+k+'</div><div class="sh-v">'+v+'</div></div>' : '';
   return '<div class="start-here" id="gl-start">'+
     '<div class="sh-kicker">Start here</div>'+
@@ -13797,9 +16178,22 @@ function startHereHTML(id, g){
     row('Why it matters', inl(o.why))+
     row('What to understand', (o.outcomes||[]).length ? '<ol class="sh-outcomes">'+o.outcomes.map(x=>'<li>'+inl(x)+'</li>').join('')+'</ol>' : '')+
     row('How long', '<b>First pass:</b> '+escapeHtml(o.firstPass||'')+' &mdash; the Core part<br><b>Deep dive + interview:</b> '+escapeHtml(o.laterPass||'')+', on a later pass<br><span class="sh-note">Rough estimates, not targets.</span>')+
-    row('When to move on', inl(o.moveOn))+
+    row('When to move on', inl(o.moveOn || 'When you can answer the checkpoint questions at the end of the Core part in your own words. The later parts can wait for another pass.'))+
+    row('Prerequisites', glPrereqHTML(id))+
+    row('What comes next', glNextHTML(id))+
     '<button type="button" class="btn btn-sm btn-primary" data-scroll="'+((g.core&&g.core[0]&&g.core[0].id)||'gl-core')+'">Begin with the '+escapeHtml(((g.core&&g.core[0]&&g.core[0].toc)||'lesson').toLowerCase())+' &darr;</button>'+
   '</div>';
+}
+function glTopicChip(tid){ return '<span class="chip chip-neutral" style="cursor:pointer" data-action="open-topic" data-topic="'+tid+'">'+escapeHtml(TOPICS[tid].name)+'</span>'; }
+function glPrereqHTML(id){
+  const pr = (TOPICS[id].prereqs||[]).filter(t=>TOPICS[t]);
+  return pr.length ? '<div class="sh-chips">'+pr.map(glTopicChip).join(' ')+'</div>' : '<span class="sh-note">None &mdash; this topic can be studied on its own.</span>';
+}
+function glNextHTML(id){
+  const nId = nextTopicId(id);
+  const later = TOPIC_ORDER.filter(o=>o!==nId && (TOPICS[o].prereqs||[]).includes(id)).slice(0,4);
+  return (nId ? '<div class="sh-chips"><span class="sh-note">Next in the curriculum:</span> '+glTopicChip(nId)+'</div>' : '<span class="sh-note">This is the last topic in the curriculum.</span>')+
+    (later.length ? '<div class="sh-chips" style="margin-top:6px"><span class="sh-note">Builds toward:</span> '+later.map(glTopicChip).join(' ')+'</div>' : '');
 }
 function glSection(sid, num, title, body){
   return '<section class="gl-sec" id="'+sid+'" aria-labelledby="'+sid+'-h"><h3 id="'+sid+'-h"><span class="num">'+num+'</span>'+title+'</h3><div class="prose">'+body+'</div></section>';
@@ -13846,6 +16240,11 @@ function glCoreBlock(b, dc, F){
     case 'field-code': { const v = F(b.field); return v ? (b.intro?'<p>'+inl(b.intro)+'</p>':'')+renderCode(v) : ''; }
     case 'field-steps': { const v = F(b.field)||[]; return v.length ? '<ol class="steps">'+v.map(s=>'<li>'+inl(s)+'</li>').join('')+'</ol>' : ''; }
     case 'prose': return b.text ? String(b.text).split('\n\n').map(pp=>'<p>'+inl(pp)+'</p>').join('') : '';
+    case 'pilot-predict': {
+      const pl = TOPIC_LEARNING_PILOT[b.topic]; if(!pl || !pl.predictionCode) return '';
+      return renderCode(pl.predictionCode)+'<p class="gl-q">'+inl(pl.predictionQ)+'</p><p class="gl-think">Decide on your answer and say why before you reveal.</p>'+
+        glReveal(b.id+'-r', 'Reveal reasoning', '<p>'+inl(pl.predictionReveal)+'</p>');
+    }
     default: return '';
   }
 }
@@ -13859,7 +16258,7 @@ function guidedLessonHTML(id, dc, g, relatedQs){
   let n = 0; const coreToc = [];
   const core = (g.core||[]).map(b=>{
     if(b.type==='aside'){ const v = F(b.field); return v ? glMore(b.id, escapeHtml(b.title), b.hint, '<div class="callout info"><span class="ic" aria-hidden="true">&#9679;</span><div>'+para(v)+'</div></div>') : ''; }
-    const body = glCoreBlock(b, dc, F);
+    const body = glCoreBlock(Object.assign({topic:id}, b), dc, F);
     if(!body) return '';
     n++; if(b.toc) coreToc.push([b.id, b.toc]);
     return glSection(b.id, String(n), escapeHtml(b.title), body);
@@ -13874,6 +16273,32 @@ function guidedLessonHTML(id, dc, g, relatedQs){
         '<div class="gl-done-actions">'+(nId?'<button type="button" class="btn btn-sm btn-primary" data-action="open-topic" data-topic="'+nId+'">Next Topic: '+escapeHtml(TOPICS[nId].name)+' &rarr;</button>':'<span class="gl-small">This is the last topic in the curriculum.</span>')+
         '<button type="button" class="btn btn-sm" data-scroll="gl-deep">Continue to Deep Dive &darr;</button></div></div></div>');
   }
+
+  // ---- Practice & debug: canonical items rendered in place (same ids/actions as their own views) ----
+  const rel = x => (x.related||[]).includes(id);
+  const oqs = (typeof OUTPUT_QUESTIONS!=='undefined' ? OUTPUT_QUESTIONS : []).filter(rel);
+  const bugs = (typeof DEBUG_BUGS!=='undefined' ? DEBUG_BUGS : []).filter(rel);
+  const practice = oqs.map(o=>{
+    const a = STATE.outputAttempts[o.id];
+    return '<div class="gl-practice" id="glp-'+o.id+'"><div class="gl-q">'+escapeHtml(o.title)+(a?' <span class="chip '+(a.correct>0?'chip-good':'chip-neutral')+'">'+a.correct+'/'+a.attempts+' correct</span>':'')+'</div>'+
+      renderCode(o.code)+'<button type="button" class="btn btn-sm" data-action="toggle-output" data-id="'+o.id+'">What will this print?</button>'+
+      '<div id="reveal-'+o.id+'" hidden data-keep-shown style="margin-top:10px"><div class="callout good"><span class="ic">&#9654;</span><div><strong>Answer:</strong> '+escapeHtml(o.answer)+'</div></div>'+
+      '<p style="margin-top:8px">'+inl(o.explain)+'</p>'+
+      '<div class="gl-done-actions"><button type="button" class="btn btn-sm btn-primary" data-action="mark-output" data-id="'+o.id+'" data-correct="1">I got it right</button><button type="button" class="btn btn-sm" data-action="mark-output" data-id="'+o.id+'" data-correct="0">I got it wrong</button></div></div></div>';
+  }).join('');
+  const debugHTML = bugs.map(bg=>{
+    const a = STATE.debugAttempts[bg.id];
+    const labels = {why:'Why it happens',reproduce:'How to reproduce',debug:'How to debug',fix:'How to fix',prevent:'How to prevent'};
+    return '<div class="gl-practice" id="gld-'+bg.id+'"><div class="gl-q">'+escapeHtml(bg.title)+(a?' <span class="chip chip-good">solved &times;'+a.solved+'</span>':'')+'</div>'+
+      renderCode(bg.code)+'<p class="gl-think">What is wrong, and how would you prove it? Decide before you reveal.</p>'+
+      '<button type="button" class="btn btn-sm" data-action="toggle-debug" data-id="'+bg.id+'">Reveal diagnosis</button>'+
+      '<div id="dreveal-'+bg.id+'" hidden data-keep-shown style="margin-top:10px"><dl class="gl-terms">'+
+        ['why','reproduce','debug','fix','prevent'].filter(k=>bg[k]).map(k=>'<dt>'+labels[k]+'</dt><dd>'+inl(bg[k])+'</dd>').join('')+'</dl>'+
+        '<button type="button" class="btn btn-sm btn-primary" data-action="mark-debug-solved" data-id="'+bg.id+'">I diagnosed this correctly</button></div></div>';
+  }).join('');
+  const practicePart = (practice || debugHTML) ? glPart('gl-practice', 'Part 2 &middot; Apply it', 'Practice', 'Try these now or on your next pass. Your answers are recorded in the same place as the Output Prediction and Debugging pages.')+
+    (practice ? glSection('gl-predict-more', '&#9654;', 'Predict the output', practice) : '')+
+    (debugHTML ? glSection('gl-debug', '&#9888;', 'Debug this', debugHTML) : '') : '';
 
   // ---- Part 2: deep dive ----
   const dd = g.deepDive || {};
@@ -13904,32 +16329,58 @@ function guidedLessonHTML(id, dc, g, relatedQs){
   });
 
   const hasDeep = deepItems.length || extras.length;
-  const deep = hasDeep ? glPart('gl-deep', 'Part 2 &middot; Later pass', 'Deep dive', dd.intro ? inl(dd.intro) : 'Internals, edge cases and production behavior. Open whichever item you need &mdash; they are independent, and none of them is required to continue.')+
+  const partNo = practicePart ? 3 : 2;
+  const deep = hasDeep ? glPart('gl-deep', 'Part '+partNo+' &middot; Later pass', 'Deep dive', dd.intro ? inl(dd.intro) : 'Internals, edge cases and production behavior. Open whichever item you need &mdash; they are independent, and none of them is required to continue.')+
     deepItems.join('')+extras.join('')+
     (nextTopics.length ? '<div class="gl-deeper"><span class="gl-small">'+escapeHtml(dd.nextTopicsLabel||'Go deeper next:')+'</span> '+nextTopics.map(t=>'<span class="chip chip-neutral" style="cursor:pointer" data-action="open-topic" data-topic="'+t+'">'+escapeHtml(TOPICS[t].name)+'</span>').join(' ')+'</div>' : '') : '';
 
-  const hasInterview = (iq && iq.q) || (adv && adv.q) || mistake || traps;
-  const interview = hasInterview ? glPart('gl-interview', 'Part 3 &middot; After it makes sense', 'Interview', 'Answer out loud first, then compare with the model answer.')+
-    (iq && iq.q ? glSection('gl-iq', '?', 'Interview checkpoint', '<p class="gl-q">'+inl(iq.q)+'</p>'+(iv.think?'<p class="gl-think">'+inl(iv.think)+'</p>':'')+glReveal('gl-iq-r', 'Reveal answer', para(iq.a))) : '')+
+  const fq = relatedQs[0];
+  const hasInterview = (iq && iq.q) || (adv && adv.q) || mistake || traps || fq;
+  const interview = hasInterview ? glPart('gl-interview', 'Part '+(partNo+(hasDeep?1:0))+' &middot; After it makes sense', 'Interview', 'Answer out loud first, then compare with the model answer.')+
+    (iq && iq.q ? glSection('gl-iq', '?', 'Interview checkpoint', '<p class="gl-q">'+inl(iq.q)+'</p><p class="gl-think">'+inl(iv.think || 'Answer out loud before you reveal: what is the rule, and why does it hold?')+'</p>'+glReveal('gl-iq-r', 'Reveal answer', para(iq.a))) : '')+
+    (fq ? glSection('gl-fq', '&#8627;', 'Follow-up', '<p class="gl-q">'+inl(fq.q)+'</p>'+glReveal('gl-fq-r', 'Reveal answer', para(fq.simple)+(fq.deep?'<details class="gl-inline-more"><summary>Go deeper</summary>'+para(fq.deep)+'</details>':''))) : '')+
     (adv && adv.q ? glMore('gl-adv', escapeHtml(iv.advancedTitle||'Advanced follow-up'), iv.advancedHint, qa(adv)) : '')+
     (mistake||traps ? glMore('gl-traps', 'Traps and the most common mistake', trapsArr.length ? trapsArr.length+' traps interviewers like' : null, mistake+traps) : '')+
-    (relatedQs.length ? '<p class="gl-small gl-related"><span class="link" data-nav="questions" data-params=\''+JSON.stringify({highlight:relatedQs[0].id})+'\'>Practise '+relatedQs.length+' related question'+(relatedQs.length>1?'s':'')+' in Interview Prep &rarr;</span></p>' : '') : '';
+    (relatedQs.length ? '<p class="gl-small gl-related"><span class="link" data-nav="questions" data-params=\''+JSON.stringify({highlight:relatedQs[0].id})+'\'>Practise '+relatedQs.length+' related question'+(relatedQs.length>1?'s':'')+' in Interview Prep &rarr;</span></p>' : '<p class="gl-small gl-related"><span class="link" data-nav="questions">Practise more interview questions &rarr;</span></p>') : '';
+
+  // ---- Recall: learning check (not mastery) ----
+  const pl = TOPIC_LEARNING_PILOT[id];
+  const recallQs = (g.recall||[]).map(r=>Array.isArray(r) ? r : (r && typeof r.pilot==='number' && pl && pl.recall ? [pl.recall[r.pilot], r.a] : null)).filter(Boolean);
+  const recallSec = recallQs.length ? glSection('gl-recall', '&#8635;', 'Recall &mdash; without looking back',
+    '<ol class="gl-check">'+recallQs.map((r,i)=>'<li><p class="gl-q">'+inl(r[0])+'</p>'+(r[1]?glReveal('gl-rc-'+(i+1), 'Check your answer', '<p>'+inl(r[1])+'</p>'):'')+'</li>').join('')+'</ol>') : '';
 
   // ---- Recall: learner self-check (device-local, never touches mastery state) ----
   const sc = selfCheckLoad()[id] || [];
-  const recall = (g.recall||[]).length ? '<section class="gl-sec gl-cannow" id="gl-cannow" aria-labelledby="gl-cannow-h"><h3 id="gl-cannow-h"><span class="num">&#10003;</span>You should now be able to&hellip;</h3>'+
+  const canNow = (g.canNow && g.canNow.length) ? g.canNow : (glOrientation(id, g).outcomes||[]);
+  const recall = canNow.length ? '<section class="gl-sec gl-cannow" id="gl-cannow" aria-labelledby="gl-cannow-h"><h3 id="gl-cannow-h"><span class="num">&#10003;</span>You should now be able to&hellip;</h3>'+
     '<p class="gl-small">A personal self-check, saved on this device only. It does not tick journey stages or affect mastery.</p>'+
-    '<ul class="gl-can">'+g.recall.map((c,i)=>'<li'+(sc[i]?' class="done"':'')+'><label><input type="checkbox" data-selfcheck="'+id+'|'+i+'"'+(sc[i]?' checked':'')+'> '+escapeHtml(c)+'</label></li>').join('')+'</ul></section>' : '';
+    '<ul class="gl-can">'+canNow.map((c,i)=>'<li'+(sc[i]?' class="done"':'')+'><label><input type="checkbox" data-selfcheck="'+id+'|'+i+'"'+(sc[i]?' checked':'')+'> '+escapeHtml(c)+'</label></li>').join('')+'</ul></section>' : '';
 
   const tocRow = (label, links) => links.length ? '<div class="gl-toc-row"><span class="gl-toc-label">'+label+'</span>'+links.map(l=>'<button type="button" class="toc-link" data-scroll="'+l[0]+'">'+l[1]+'</button>').join('')+'</div>' : '';
   const toc = '<nav class="gl-toc" aria-label="On this page">'+
     tocRow('Core', coreToc)+
-    tocRow('Later', [hasDeep?['gl-deep','Deep dive']:null, hasInterview?['gl-interview','Interview']:null, recall?['gl-cannow','What you gained']:null].filter(Boolean))+
+    tocRow('Later', [practicePart?['gl-practice','Practice']:null, hasDeep?['gl-deep','Deep dive']:null, hasInterview?['gl-interview','Interview']:null, recallSec?['gl-recall','Recall']:null, recall?['gl-cannow','What you gained']:null].filter(Boolean))+
   '</nav>';
 
   return '<div class="card card-pad lesson guided" style="margin-bottom:14px">'+toc+
     glPart('gl-core', 'Part 1 &middot; First pass', 'Core', 'The minimum mental model. Everything here is visible, and nothing essential is hidden further down.')+
-    core+checkpoint+deep+interview+recall+'</div>';
+    core+checkpoint+practicePart+deep+interview+recallSec+recall+'</div>'+moduleContextHTML(id);
+}
+/* Where this topic sits in its module, and what to do when the module ends. */
+function moduleContextHTML(id){
+  const t = TOPICS[id];
+  const phase = PHASE_DEFS.find(ph=>ph.id===t.phase);
+  const pos = topicPositionInPhase(id);
+  const nId = nextTopicId(id);
+  const phaseDone = topicsForPhase(t.phase).every(tid=>getTopicProgress(tid).status==='done');
+  const lastInPhase = pos.index === pos.total;
+  const nextPhase = lastInPhase && nId ? PHASE_DEFS.find(ph=>ph.id===TOPICS[nId].phase) : null;
+  return '<div class="card card-pad module-ctx" style="margin-bottom:14px">'+
+    '<div class="mc-row"><div><div class="mc-k">Module</div><div class="mc-t">'+escapeHtml(phase?phase.title:t.phaseTitle)+' <span class="mc-pos">Topic '+pos.index+' of '+pos.total+'</span>'+(phaseDone?' <span class="jc-badge good">&#10003; Module complete</span>':'')+'</div></div>'+
+      '<button type="button" class="btn btn-sm" data-nav="topics" data-params=\''+JSON.stringify({phase:t.phase})+'\'>View '+escapeHtml(phase?phase.short||phase.title:t.phaseTitle)+'</button></div>'+
+    (nextPhase ? '<div class="mc-row mc-next"><div><div class="mc-k">Next module</div><div class="mc-t">'+escapeHtml(nextPhase.title)+'</div></div><button type="button" class="btn btn-sm btn-primary" data-action="open-topic" data-topic="'+nId+'">Start next module &rarr;</button></div>'
+      : (nId ? '<div class="mc-row mc-next"><div><div class="mc-k">Up next</div><div class="mc-t">'+escapeHtml(TOPICS[nId].name)+'</div></div><button type="button" class="btn btn-sm btn-primary" data-action="open-topic" data-topic="'+nId+'">Next Topic &rarr;</button></div>' : '<div class="mc-row mc-next"><div class="mc-t">End of curriculum.</div></div>'))+
+  '</div>';
 }
 document.addEventListener('change', function(e){
   const cb = e.target && e.target.closest ? e.target.closest('input[data-selfcheck]') : null;
@@ -14081,10 +16532,10 @@ VIEWS.topicDetail = function(params){
   '</div>';
   if(guide) html += topicNavBarHTML(id);
 
-  if(learningPlan) html += renderOrientationBlock(id, learningPlan);
+  if(learningPlan && !guide) html += renderOrientationBlock(id, learningPlan);
 
-  // prerequisites
-  if(prereqs.length || recommendedBefore.length){
+  // prerequisites (guided lessons show these inside Start here)
+  if(!guide && (prereqs.length || recommendedBefore.length)){
     html += '<div class="card card-pad" style="margin-bottom:14px">'+
       (prereqs.length ? '<div style="margin-bottom:6px"><strong style="font-size:12.5px">Prerequisites: </strong>'+prereqs.map(pr=>'<span class="chip '+(getTopicProgress(pr).status==='done'?'chip-good':'chip-neutral')+'" style="cursor:pointer" data-action="open-topic" data-topic="'+pr+'">'+(getTopicProgress(pr).status==='done'?'&#10003; ':'')+escapeHtml(TOPICS[pr].name)+'</span> ').join('')+'</div>' : '')+
       (recommendedBefore.length ? '<div><strong style="font-size:12.5px">Recommended before: </strong>'+recommendedBefore.slice(0,6).map(r=>'<span class="chip chip-neutral" style="cursor:pointer" data-action="open-topic" data-topic="'+r+'">&rarr; '+escapeHtml(TOPICS[r].name)+'</span> ').join('')+'</div>' : '')+
@@ -14161,11 +16612,11 @@ VIEWS.topicDetail = function(params){
 
   if(patternEntry) html += patternCardHTML(patternEntry);
 
-  if(learningPlan) html += renderPredictionChallenge(id, learningPlan);
+  if(learningPlan && !guide) html += renderPredictionChallenge(id, learningPlan);
 
   if(typeof recommendedResourcesHTML==='function') html += recommendedResourcesHTML(id);
 
-  if(learningPlan){
+  if(learningPlan && !guide){
     html += renderInterviewCheckpoint(id, relatedQs);
   } else if(relatedQs.length && !guide){
     html += '<div class="card card-pad" style="margin-bottom:14px"><div class="section-title">Related interview questions</div>'+
@@ -14173,7 +16624,7 @@ VIEWS.topicDetail = function(params){
     '</div>';
   }
 
-  if(learningPlan) html += renderRecallChecklist(learningPlan);
+  if(learningPlan && !guide) html += renderRecallChecklist(learningPlan);
 
   html += '<div class="card card-pad" style="margin-bottom:14px">'+
     '<div class="section-title">Personal Notes</div>'+
@@ -16238,7 +18689,8 @@ function enhanceUI(root){
     if(el.classList.contains('checkbox')){
       el.setAttribute('role','checkbox');
       el.setAttribute('aria-checked', el.classList.contains('checked') ? 'true' : 'false');
-      if(el.parentElement) el.setAttribute('aria-label', el.parentElement.textContent.replace(el.textContent,'').trim());
+      if(el.hasAttribute('data-label')) el.setAttribute('aria-label', el.getAttribute('data-label'));
+      else if(el.parentElement) el.setAttribute('aria-label', el.parentElement.textContent.replace(el.textContent,'').trim());
     } else if(!el.hasAttribute('role')){
       el.setAttribute('role','button');
     }
@@ -16351,7 +18803,8 @@ function injectResumeCard(el){
   if(!header) return;
   header.insertAdjacentHTML('afterend',
     '<div class="card card-pad resume-card"><div><div class="rc-k">Continue where you left off</div>'+
-    '<div class="rc-t">'+escapeHtml(t.name)+'</div><div class="rc-s">'+escapeHtml(t.phaseTitle)+' &middot; '+topicPercent(id)+'% of levels checked</div></div>'+
+    '<div class="rc-t">'+escapeHtml(t.name)+'</div><div class="rc-s">'+escapeHtml(t.phaseTitle)+' &middot; Topic '+topicPositionInPhase(id).index+' of '+topicPositionInPhase(id).total+' &middot; '+topicPercent(id)+'% of levels checked'+
+      ((typeof GUIDED_LESSONS!=='undefined' && GUIDED_LESSONS[id] && GUIDED_LESSONS[id].orientation && GUIDED_LESSONS[id].orientation.firstPass) ? ' &middot; first pass '+escapeHtml(GUIDED_LESSONS[id].orientation.firstPass) : '')+'</div></div>'+
     '<button class="btn btn-primary btn-sm" data-action="open-topic" data-topic="'+id+'">Resume topic &rarr;</button></div>');
 }
 
