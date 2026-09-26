@@ -181,6 +181,15 @@ code.inline{background:var(--bg-elevated);padding:1px 5px;border-radius:5px;font
 .check-row.link:hover{background:var(--bg-elevated);}
 .check-row .row-arrow{margin-left:auto;flex:0 0 auto;font-size:11.5px;color:var(--accent);white-space:nowrap;opacity:0;transition:opacity .12s ease;}
 .check-row.link:hover .row-arrow{opacity:1;}
+/* Lists that sit directly in an unpadded card (All Topics, practice banks, labs,
+   design, projects, bookmarks): give rows real breathing room from the card edge. */
+.card:not(.card-pad) > .checklist{padding:6px 0;}
+.card:not(.card-pad) > .checklist > .check-row{padding:14px 20px;gap:14px;border-radius:0;}
+.card:not(.card-pad) > .checklist > .check-row .row-title{font-size:14.5px;line-height:1.4;}
+.card:not(.card-pad) > .checklist > .check-row .row-meta{font-size:12px;margin-top:7px;gap:6px 10px;align-items:center;}
+.card:not(.card-pad) > .checklist > .check-row .row-arrow{opacity:.55;}
+.card:not(.card-pad) > .checklist > .check-row.link:hover .row-arrow{opacity:1;}
+@media(max-width:600px){.card:not(.card-pad) > .checklist > .check-row{padding:13px 16px;}.card:not(.card-pad) > .checklist > .check-row .row-arrow{display:none;}}
 .card.link{cursor:pointer;transition:border-color .12s ease,background .12s ease;}
 .card.link:hover{border-color:var(--accent);background:var(--bg-elevated);}
 
