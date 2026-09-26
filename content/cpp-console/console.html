@@ -2067,14 +2067,14 @@ DEEP_CONTENT['memory-stack'] = {
   realWorld:"Recursive algorithms operating on untrusted or very large input sizes (e.g. a naive recursive JSON parser on deeply nested input) are a real, production-relevant stack overflow risk -- the fix is usually converting to an iterative algorithm with an explicit heap-allocated stack/queue data structure instead of relying on the call stack's fixed size.",
   mistake:"Declaring a very large array as a local variable (e.g. `char buffer[10*1024*1024];` inside a function) -- this can overflow the stack immediately on entry to that function, especially in a thread with a smaller-than-main-thread stack size (a common default for worker threads).",
   interviewQ:{q:"Why is stack allocation typically much faster than heap allocation?", a:"Stack allocation is just a pointer adjustment (moving the stack pointer by a known, compile-time-determined amount) with no bookkeeping, no search for a suitably-sized free block, and no thread-safety synchronization needed (each thread has its own stack). Heap allocation must consult the allocator's internal data structures (free lists, size classes), potentially involve locking in a multithreaded allocator, and handle fragmentation -- all real, measurable overhead absent from stack allocation."},
-  advancedQ:{q:"Why can spawning many threads with large default stack sizes be a real resource concern, and how would you address it?", a:"Each thread typically reserves its own stack (often megabytes by default, e.g. commonly 1-8MB depending on platform/settings), and this is usually reserved address space (and, depending on the OS, can involve actual committed memory) per thread -- so a system spawning thousands of threads can exhaust address space or memory purely from stack reservations, even if each thread's actual usage is small. The fix is typically explicitly reducing the per-thread stack size at creation (where the platform allows it) or, more fundamentally, using a bounded thread pool plus a task queue rather than one OS thread per logical unit of work."},
+  advancedQ:{q:"Why can spawning many threads with large default stack sizes be a real resource concern, and how would you address it?", a:"Each thread typically reserves its own stack (often megabytes by default: glibc on Linux uses the RLIMIT_STACK value, commonly 8 MB; Windows defaults to 1 MB; macOS gives secondary threads 512 KB), and this is usually reserved address space (and, depending on the OS, can involve actual committed memory) per thread -- so a system spawning thousands of threads can exhaust address space or memory purely from stack reservations, even if each thread's actual usage is small. The fix is typically explicitly reducing the per-thread stack size at creation (where the platform allows it) or, more fundamentally, using a bounded thread pool plus a task queue rather than one OS thread per logical unit of work."},
   traps:["Declaring large arrays/buffers as local (stack) variables without considering the platform's stack size limit, especially in a non-main thread.","Assuming stack memory is zero-initialized -- it holds whatever the previous frame using that memory left behind, which is exactly why uninitialized-read bugs on locals produce 'garbage that sometimes looks plausible.'"]
 };
 DEEP_CONTENT['memory-heap'] = {
   def:"The heap (free store) is a region of memory for dynamically-sized, explicitly-managed allocations whose lifetime is not tied to any particular function's scope -- obtained via `new`/`malloc` and returned via `delete`/`free`, with no automatic cleanup.",
   why:"The heap is what lets a program create data whose size isn't known until runtime, or whose lifetime needs to outlive the function that created it (e.g. an object handed off to another thread, or returned by pointer/reference to a caller) -- capabilities the stack's rigid, scope-bound LIFO discipline cannot provide.",
   analogy:"The heap is like a large public warehouse with a check-in/check-out desk: you can request a bin of any size, keep it as long as you want (even after you've left the building), but you're personally responsible for returning it -- unlike the stack's automatic, scope-bound 'cafeteria tray' cleanup.",
-  code:`void demo() {\n    int* p = new int(42);      // explicit heap allocation\n    // ... use *p ...\n    delete p;                  // explicit, MANUAL deallocation -- easy to forget\n\n    // preferred modern approach: tie the deallocation to an object's lifetime\n    auto up = std::make_unique<int>(42);  // freed automatically when up goes out of scope\n}`,
+  code:`#include <memory>\n\nvoid demo() {\n    int* p = new int(42);      // explicit heap allocation\n    // ... use *p ...\n    delete p;                  // explicit, MANUAL deallocation -- easy to forget\n\n    // preferred modern approach: tie the deallocation to an object's lifetime\n    auto up = std::make_unique<int>(42);  // freed automatically when up goes out of scope\n}`,
   steps:[
     "A heap allocation request asks the allocator to find (or carve out) a free block of at least the requested size, update its internal bookkeeping (marking that block used), and return a pointer -- unlike stack allocation, this involves nontrivial internal logic and, in a multithreaded program, typically some synchronization.",
     "The allocated memory remains reserved and valid until explicitly freed -- there is NO automatic trigger for this in raw new/delete usage; the programmer (or, in modern C++, a smart pointer's destructor) must explicitly release it.",
@@ -2159,7 +2159,7 @@ DEEP_CONTENT['memory-leaks'] = {
   def:"A memory leak is memory that has become unreachable (no remaining pointer/reference can ever reach it again) but was never freed -- it remains allocated for the rest of the program's run, permanently unusable and unrecoverable without a restart.",
   why:"Leaks don't corrupt anything or produce wrong answers the way most UB does -- a leak is a purely QUANTITATIVE bug (the program just uses more and more memory over time), which is exactly why it's dangerous specifically for long-running processes (servers, daemons) rather than short-lived command-line tools, where the process exits (and the OS reclaims everything) long before a leak's effects would be noticeable.",
   analogy:"A memory leak is like losing the key to a storage unit you're still paying rent on -- the unit (memory) is still allocated to you and unusable by anyone else, but you have no way to access or release it anymore; every additional lost key (leaked allocation) rents another unit, and eventually you've rented out the whole facility.",
-  code:`void leaky(){\n    int* p = new int(5);\n    if(someCondition()) return;    // EARLY RETURN skips the delete below -- leak!\n    delete p;\n}\n\n// Modern fix: tie the lifetime to a scope via RAII, so every exit path cleans up\nvoid fixed(){\n    auto p = std::make_unique<int>(5);\n    if(someCondition()) return;    // unique_ptr's destructor still runs -- no leak\n}`,
+  code:`#include <memory>\n\nbool someCondition();\n\nvoid leaky(){\n    int* p = new int(5);\n    if(someCondition()) return;    // EARLY RETURN skips the delete below -- leak!\n    delete p;\n}\n\n// Modern fix: tie the lifetime to a scope via RAII, so every exit path cleans up\nvoid fixed(){\n    auto p = std::make_unique<int>(5);\n    if(someCondition()) return;    // unique_ptr's destructor still runs -- no leak\n}`,
   steps:[
     "Memory becomes leaked the moment the LAST reachable reference/pointer to it is lost (overwritten, goes out of scope, or the owning object holding it is itself destroyed without freeing it) while the memory itself was never deallocated.",
     "From that point on, nothing in the program can ever free it again -- it's not merely dangling (a stale pointer to it) or corrupted, it is genuinely, permanently unreachable and unrecoverable memory for the remaining lifetime of the process.",
@@ -3566,7 +3566,7 @@ DEEP_CONTENT['op-subscript'] = {
 DEEP_CONTENT['op-call'] = {
   def:"`operator()` (the function-call operator) lets an object be invoked using function-call syntax (`obj(args...)`) — a class overloading it is called a FUNCTOR (function object), and unlike other operators, it can be overloaded with ANY number and any types of parameters, since it's really just a specially-named member function invoked with a special syntax.",
   why:"Functors give you 'callable objects' that can carry STATE between calls (unlike a plain function pointer, which carries no data) — this is foundational to how much of the STL's algorithm customization works (custom comparators, predicates) and is also the conceptual mechanism underlying how lambda expressions are implemented under the hood (a lambda IS, essentially, a compiler-generated functor).",
-  code:`class Multiplier {\n    int factor;\npublic:\n    Multiplier(int f) : factor(f) {}\n    int operator()(int x) const { return x * factor; }   // STATE (factor) carried between calls\n};\n\n// operator() can take ANY number/type of parameters, unlike other operators:\nclass Adder { public: int operator()(int a, int b, int c) const { return a+b+c; } };\n\nint main() {\n    Multiplier triple(3);\n    std::cout << triple(5);       // 15 - called just like a function, but carries 'factor'\n\n    std::vector<int> v = {5, 3, 8, 1};\n    std::sort(v.begin(), v.end(), [](int a, int b){ return a > b; });  // a LAMBDA is a functor\n    // under the hood, the compiler generates something conceptually equivalent to:\n    // struct __Lambda123 { bool operator()(int a, int b) const { return a > b; } };\n\n    Adder add3;\n    std::cout << add3(1,2,3);     // 6\n}`,
+  code:`#include <algorithm>\n#include <iostream>\n#include <vector>\n\nclass Multiplier {\n    int factor;\npublic:\n    Multiplier(int f) : factor(f) {}\n    int operator()(int x) const { return x * factor; }   // STATE (factor) carried between calls\n};\n\n// operator() can take ANY number/type of parameters, unlike other operators:\nclass Adder { public: int operator()(int a, int b, int c) const { return a+b+c; } };\n\nint main() {\n    Multiplier triple(3);\n    std::cout << triple(5);       // 15 - called just like a function, but carries 'factor'\n\n    std::vector<int> v = {5, 3, 8, 1};\n    std::sort(v.begin(), v.end(), [](int a, int b){ return a > b; });  // a LAMBDA is a functor\n    // under the hood, the compiler generates something conceptually equivalent to:\n    // struct __Lambda123 { bool operator()(int a, int b) const { return a > b; } };\n\n    Adder add3;\n    std::cout << add3(1,2,3);     // 6\n}`,
   steps:[
     "A functor object holds member data (like `factor` above) that's set up ONCE (typically via its constructor), and then `operator()` uses that stored state on every subsequent call — this is precisely what a plain function pointer or free function cannot do without resorting to global/static state or extra parameters.",
     "The STL's algorithm functions (`std::sort`, `std::for_each`, `std::count_if`, etc.) are designed to accept ANYTHING callable via `operator()` with the right signature — a plain function pointer, a functor object, or a lambda — treating them uniformly through templates, which is why functors integrate so seamlessly with generic algorithm code.",
@@ -3583,7 +3583,7 @@ DEEP_CONTENT['op-call'] = {
 DEEP_CONTENT['op-arrow'] = {
   def:"`operator->` lets a class behave like a pointer for member access syntax (`smartPtr->member`) — its defining, unusual rule is that the compiler applies `operator->` REPEATEDLY, chaining calls until the result is an actual raw pointer, at which point the built-in `->` semantics finally apply to reach the real member.",
   why:"This operator is THE mechanism that makes smart pointers (`unique_ptr`, `shared_ptr`) and other pointer-like wrapper types (iterators, proxy objects) usable with the exact same `->` syntax as raw pointers — without it, every use site would need to write `smartPtr.get()->member` instead of the natural `smartPtr->member`.",
-  code:`template<typename T>\nclass SimpleUniquePtr {\n    T* ptr;\npublic:\n    explicit SimpleUniquePtr(T* p) : ptr(p) {}\n    ~SimpleUniquePtr(){ delete ptr; }\n    T* operator->() const { return ptr; }     // returns the RAW pointer\n    T& operator*() const { return *ptr; }\n};\n\nstruct Widget { void draw(){ std::cout << \"drawing\\n\"; } };\n\nvoid demo() {\n    SimpleUniquePtr<Widget> w(new Widget());\n    w->draw();   // compiler: w.operator->() returns a Widget*, THEN applies built-in\n                 // -> to THAT raw pointer to reach draw() - operator-> is called ONCE\n                 // here because it directly returned a raw pointer already.\n}\n\n// THE CHAINING RULE illustrated with a wrapper-of-a-wrapper:\nclass LoggingPtr {\n    SimpleUniquePtr<Widget>& inner;\npublic:\n    LoggingPtr(SimpleUniquePtr<Widget>& p) : inner(p) {}\n    SimpleUniquePtr<Widget>& operator->() { std::cout << \"accessed!\\n\"; return inner; }\n};\n// loggingPtr->draw(); would call LoggingPtr::operator-> (prints \"accessed!\", returns\n// the SimpleUniquePtr), and since THAT'S not a raw pointer either, the compiler\n// AUTOMATICALLY calls operator-> AGAIN on it (SimpleUniquePtr::operator->, returning\n// the raw Widget*), and only THEN applies built-in -> to finally reach draw().`,
+  code:`#include <iostream>\n\n// (copy operations omitted for brevity -- a real owning pointer must delete\n//  or define them, see Rule of 5)\ntemplate<typename T>\nclass SimpleUniquePtr {\n    T* ptr;\npublic:\n    explicit SimpleUniquePtr(T* p) : ptr(p) {}\n    ~SimpleUniquePtr(){ delete ptr; }\n    T* operator->() const { return ptr; }     // returns the RAW pointer\n    T& operator*() const { return *ptr; }\n};\n\nstruct Widget { void draw(){ std::cout << \"drawing\\n\"; } };\n\nvoid demo() {\n    SimpleUniquePtr<Widget> w(new Widget());\n    w->draw();   // compiler: w.operator->() returns a Widget*, THEN applies built-in\n                 // -> to THAT raw pointer to reach draw() - operator-> is called ONCE\n                 // here because it directly returned a raw pointer already.\n}\n\n// THE CHAINING RULE illustrated with a wrapper-of-a-wrapper:\nclass LoggingPtr {\n    SimpleUniquePtr<Widget>& inner;\npublic:\n    LoggingPtr(SimpleUniquePtr<Widget>& p) : inner(p) {}\n    SimpleUniquePtr<Widget>& operator->() { std::cout << \"accessed!\\n\"; return inner; }\n};\n// loggingPtr->draw(); would call LoggingPtr::operator-> (prints \"accessed!\", returns\n// the SimpleUniquePtr), and since THAT'S not a raw pointer either, the compiler\n// AUTOMATICALLY calls operator-> AGAIN on it (SimpleUniquePtr::operator->, returning\n// the raw Widget*), and only THEN applies built-in -> to finally reach draw().`,
   steps:[
     "WHAT MAKES operator-> UNUSUAL: unlike every other overloadable operator, its result isn't used directly the way, say, operator+'s result is — instead, the compiler recursively applies `->` to whatever `operator->` returns, AGAIN and AGAIN, until it finally gets an actual raw pointer, and only then does it perform the built-in pointer member-access to reach the requested member.",
     "WHY THIS CHAINING RULE EXISTS: it's precisely what allows layers of pointer-like wrapper types (a smart pointer wrapping a raw pointer, or a proxy wrapping a smart pointer) to compose transparently — each layer's `operator->` only needs to know how to peel off ONE layer (return the thing it wraps), and the compiler handles walking all the way down the chain to the real pointer automatically.",
@@ -3600,7 +3600,7 @@ DEEP_CONTENT['op-arrow'] = {
 DEEP_CONTENT['op-stream'] = {
   def:"Overloading `operator<<` (stream insertion, for output) and `operator>>` (stream extraction, for input) lets a user-defined type work naturally with `std::cout`, `std::cin`, and file streams — both MUST be non-member functions (since the left operand is the stream type, which you don't own and can't add member functions to), and are typically declared as `friend` to access the class's private data directly.",
   why:"Without these overloads, printing or reading a custom type would require manually extracting and formatting its fields at every call site (`std::cout << obj.getX() << \",\" << obj.getY();`) rather than the natural, consistent `std::cout << obj;` — which also means the object's OWN class controls exactly how it's formatted, in one canonical place.",
-  code:`class Point {\n    int x, y;\npublic:\n    Point(int x, int y) : x(x), y(y) {}\n    friend std::ostream& operator<<(std::ostream& os, const Point& p);\n    friend std::istream& operator>>(std::istream& is, Point& p);\n};\nstd::ostream& operator<<(std::ostream& os, const Point& p){\n    os << \"(\" << p.x << \", \" << p.y << \")\";   // friend access to private x, y\n    return os;                                   // return the STREAM, for chaining\n}\nstd::istream& operator>>(std::istream& is, Point& p){\n    is >> p.x >> p.y;                            // NOTE: p is NON-const - extraction mutates it\n    return is;\n}\n\nint main() {\n    Point pt(3, 4);\n    std::cout << \"Point: \" << pt << \"\\n\";   // chains: os << \"Point: \" returns os,\n                                              // THEN operator<<(os, pt) is called on that\n    std::cin >> pt;                           // reads two ints INTO pt's x and y\n}`,
+  code:`#include <iostream>\n\nclass Point {\n    int x, y;\npublic:\n    Point(int x, int y) : x(x), y(y) {}\n    friend std::ostream& operator<<(std::ostream& os, const Point& p);\n    friend std::istream& operator>>(std::istream& is, Point& p);\n};\nstd::ostream& operator<<(std::ostream& os, const Point& p){\n    os << \"(\" << p.x << \", \" << p.y << \")\";   // friend access to private x, y\n    return os;                                   // return the STREAM, for chaining\n}\nstd::istream& operator>>(std::istream& is, Point& p){\n    is >> p.x >> p.y;                            // NOTE: p is NON-const - extraction mutates it\n    return is;\n}\n\nint main() {\n    Point pt(3, 4);\n    std::cout << \"Point: \" << pt << \"\\n\";   // chains: os << \"Point: \" returns os,\n                                              // THEN operator<<(os, pt) is called on that\n    std::cin >> pt;                           // reads two ints INTO pt's x and y\n}`,
   steps:[
     "WHY THESE MUST BE NON-MEMBER FUNCTIONS: `std::cout << obj` requires the LEFT operand (`std::cout`, of type `std::ostream`) to have an applicable `operator<<` — but you cannot add member functions to `std::ostream` (it's a standard library type you don't own), so the only way to make `stream << myType` work at all is via a non-member function taking the stream as its first parameter.",
     "WHY friend IS COMMONLY USED: since these are non-member functions, they have no automatic access to the class's PRIVATE data — declaring them as `friend` inside the class grants that access explicitly, letting the stream operator read (for `<<`) or write (for `>>`) private members directly, which is usually simpler than requiring the class to expose public getters/setters purely to support formatting.",
@@ -3617,7 +3617,7 @@ DEEP_CONTENT['op-stream'] = {
 DEEP_CONTENT['op-new-delete'] = {
   def:"Overloading `operator new`/`operator delete` (as class-specific static member functions, or globally) lets you customize how raw memory is ALLOCATED and DEALLOCATED for a type — this is distinct from, and happens BEFORE/AFTER, constructor/destructor invocation, which handle object INITIALIZATION and CLEANUP on already-allocated/about-to-be-freed memory.",
   why:"The default global `operator new`/`delete` go through a general-purpose heap allocator suited for arbitrary-size, arbitrary-lifetime allocations — for types with very specific, predictable allocation patterns (many same-sized objects created and destroyed rapidly, as in a game engine's entity system or a memory pool), a custom allocator can be dramatically faster than the general-purpose default, and overloading operator new/delete is how you plug a custom allocation strategy into ordinary `new`/`delete` syntax.",
-  code:`class PoolAllocated {\n    static inline std::vector<void*> freeList;   // simplified pool - real code needs more care\npublic:\n    static void* operator new(size_t size){\n        if (!freeList.empty()){\n            void* p = freeList.back(); freeList.pop_back();\n            return p;                              // REUSE a previously-freed block - fast\n        }\n        return ::operator new(size);              // fall back to global allocator\n    }\n    static void operator delete(void* p){\n        freeList.push_back(p);                     // DON'T actually free - return to the pool\n    }\n};\n\n// Usage is COMPLETELY UNCHANGED - ordinary new/delete syntax, but now routed\n// through the custom pool logic instead of the default global allocator:\nvoid demo() {\n    PoolAllocated* obj = new PoolAllocated();   // calls PoolAllocated::operator new,\n                                                // THEN runs the constructor on that memory\n    delete obj;                                 // runs the destructor, THEN calls\n                                                // PoolAllocated::operator delete\n}`,
+  code:`#include <cstddef>\n#include <new>\n#include <vector>\n\nclass PoolAllocated {\n    static inline std::vector<void*> freeList;   // simplified pool - real code needs more care\npublic:\n    static void* operator new(std::size_t size){\n        if (!freeList.empty()){\n            void* p = freeList.back(); freeList.pop_back();\n            return p;                              // REUSE a previously-freed block - fast\n        }\n        return ::operator new(size);              // fall back to global allocator\n    }\n    static void operator delete(void* p){\n        freeList.push_back(p);                     // DON'T actually free - return to the pool\n    }\n};\n\n// Usage is COMPLETELY UNCHANGED - ordinary new/delete syntax, but now routed\n// through the custom pool logic instead of the default global allocator:\nvoid demo() {\n    PoolAllocated* obj = new PoolAllocated();   // calls PoolAllocated::operator new,\n                                                // THEN runs the constructor on that memory\n    delete obj;                                 // runs the destructor, THEN calls\n                                                // PoolAllocated::operator delete\n}`,
   steps:[
     "WHEN operator new IS CALLED vs WHEN THE CONSTRUCTOR RUNS: `new PoolAllocated()` first calls `PoolAllocated::operator new(sizeof(PoolAllocated))` to obtain RAW, UNINITIALIZED memory of the right size — only AFTER that raw memory is successfully obtained does the compiler invoke the CONSTRUCTOR on that memory to actually initialize the object; these are two genuinely separate steps, even though ordinary `new` syntax makes them look like one operation.",
     "SYMMETRICALLY FOR delete: `delete obj` first calls the DESTRUCTOR on the object (cleaning up its internal state/resources) and only AFTER that calls `PoolAllocated::operator delete(ptr)` to release the now-raw memory back to whatever allocation strategy is managing it — again, two separate steps in a fixed order.",
@@ -3627,14 +3627,14 @@ DEEP_CONTENT['op-new-delete'] = {
   realWorld:"Game engines (per-frame entity/particle allocation), high-frequency trading systems (order object pools), and other latency-sensitive systems where the general-purpose heap allocator's overhead (and unpredictability, since it may need to talk to the OS for more memory unpredictably) is a measurable bottleneck — custom operator new/delete overloads are the standard mechanism for plugging a pool or arena allocator into ordinary, familiar new/delete syntax.",
   mistake:"Overloading `operator new`/`delete` and assuming this ALSO controls object CONSTRUCTION/DESTRUCTION timing or logic — these operators are purely about the RAW MEMORY step; the constructor/destructor calls that bracket them are entirely separate and are never skipped or altered by customizing operator new/delete.",
   interviewQ:{q:"When you write 'new PoolAllocated()' with a custom operator new overloaded on that class, what is the exact sequence of steps that happens, and which parts does your overload actually control?", a:"The sequence is: (1) the compiler calls `PoolAllocated::operator new(sizeof(PoolAllocated))` to obtain a block of RAW, uninitialized memory of the correct size — this is the part your overload controls, and it can implement this however it likes (pool reuse, arena allocation, falling back to the global allocator, etc.) as long as it returns a valid pointer to at least that many bytes; (2) ASSUMING step 1 succeeds, the compiler then invokes PoolAllocated's CONSTRUCTOR on that raw memory, actually initializing the object's members — this step is entirely outside your operator new overload's control, it's the ordinary, unavoidable constructor-invocation machinery; (3) if the constructor THROWS an exception, the compiler automatically calls the matching `operator delete` to release the raw memory back (since the object never finished being constructed, there's no object to destruct, only raw memory to release) — this automatic cleanup-on-constructor-failure is itself a language guarantee, not something your operator new/delete implementation needs to handle manually."},
-  advancedQ:{q:"Why is it important that operator delete's exception specification generally be noexcept, and what could go wrong if a custom operator delete implementation could throw?", a:"operator delete can be invoked in an exception-handling context specifically BECAUSE a constructor threw partway through object construction (as described above) — the runtime needs to release the just-allocated raw memory as part of unwinding from that constructor failure. If operator delete ITSELF could throw a second exception while handling the cleanup from the FIRST exception, the C++ runtime would face two simultaneous, unresolved exceptions with no well-defined way to propagate 'both' — this scenario (an exception thrown while already unwinding due to another exception) triggers `std::terminate()`, immediately and unconditionally aborting the program, which is a far worse outcome than whatever the original exception was trying to communicate. This is precisely why operator delete overloads are expected (and, since C++11, effectively required by convention and by the standard's own default operator delete's noexcept specification) to never throw — deallocation logic should be simple, robust bookkeeping (like the pool's push_back in the example) that cannot itself fail in a way that would need to throw."},
+  advancedQ:{q:"Why is it important that operator delete's exception specification generally be noexcept, and what could go wrong if a custom operator delete implementation could throw?", a:"operator delete can be invoked in an exception-handling context specifically BECAUSE a constructor threw partway through object construction (as described above) — the runtime needs to release the just-allocated raw memory as part of unwinding from that constructor failure. If operator delete ITSELF could throw a second exception while handling the cleanup from the FIRST exception, the C++ runtime would face two simultaneous, unresolved exceptions with no well-defined way to propagate 'both' — this scenario (an exception thrown while already unwinding due to another exception) triggers `std::terminate()`, immediately and unconditionally aborting the program, which is a far worse outcome than whatever the original exception was trying to communicate. This is precisely why operator delete must never throw: since C++11 a deallocation function without an explicit exception specification is implicitly noexcept, and a deallocation function that exits by throwing is undefined behavior — deallocation logic should be simple, robust bookkeeping (like the pool's push_back in the example) that cannot itself fail in a way that would need to throw."},
   traps:["Assuming overloading operator new/delete changes anything about WHEN or HOW the constructor/destructor run — it only affects the raw memory acquisition/release steps, which are strictly separate.","Writing an operator delete implementation that can throw — risks std::terminate() if it's invoked during exception-driven cleanup from a failed constructor.","Forgetting to fall back to the global allocator (::operator new) for cases the custom pool/arena isn't designed to handle efficiently (wrong size, pool exhausted) — a custom allocator overload should usually still work correctly (if not optimally) in edge cases outside its main design target."]
 };
 
 DEEP_CONTENT['op-member-vs-friend'] = {
   def:"For a binary operator, you have three implementation choices — MEMBER function (implicit left operand is `*this`), NON-MEMBER FRIEND function (explicit access to private data via a `friend` declaration, but not a member itself), or NON-MEMBER NON-FRIEND function (uses only the class's public interface) — and the correct choice for a given operator is governed by specific, well-established conventions rather than arbitrary preference.",
   why:"The choice affects genuinely observable behavior: whether implicit conversions apply to the LEFT operand, whether the operator needs (and gets) access to private data, and how tightly coupled the operator's implementation is to the class's internals — getting this choice wrong for a given operator either breaks expected usage patterns (asymmetric implicit conversion support) or unnecessarily increases coupling.",
-  code:`class Money {\n    long cents;\npublic:\n    Money(double dollars) : cents(static_cast<long>(dollars * 100)) {}   // implicit conversion!\n    long getCents() const { return cents; }\n\n    Money& operator+=(const Money& rhs){ cents += rhs.cents; return *this; }   // MEMBER - correct choice\n\n    friend bool operator==(const Money& a, const Money& b);   // FRIEND - needs private access, wants symmetry\n};\nbool operator==(const Money& a, const Money& b){ return a.cents == b.cents; }   // NON-MEMBER, friend\n\n// NON-MEMBER NON-FRIEND (uses only the public interface) - possible here since getCents() is public:\nMoney operator+(Money lhs, const Money& rhs){ lhs += rhs; return lhs; }   // no friend needed!\n\nMoney m1(5.00), m2(3.00);\nMoney m3 = m1 + m2;      // works\nMoney m4 = 2.00 + m1;    // ALSO works - '2.00' implicitly converts to Money via the non-explicit\n                         // constructor, and since operator+ is NON-MEMBER, this left-side\n                         // conversion is available - a MEMBER operator+ would NOT support this.`,
+  code:`#include <cmath>\n\nclass Money {\n    long cents;\npublic:\n    Money(double dollars) : cents(std::lround(dollars * 100)) {}   // implicit conversion!\n    // (std::lround, not static_cast<long>: 0.29 * 100 is 28.999... in binary floating\n    //  point, so truncation would silently give 28 cents)\n    long getCents() const { return cents; }\n\n    Money& operator+=(const Money& rhs){ cents += rhs.cents; return *this; }   // MEMBER - correct choice\n\n    friend bool operator==(const Money& a, const Money& b);   // FRIEND - needs private access, wants symmetry\n};\nbool operator==(const Money& a, const Money& b){ return a.cents == b.cents; }   // NON-MEMBER, friend\n\n// NON-MEMBER NON-FRIEND (uses only the public interface) - possible here since getCents() is public:\nMoney operator+(Money lhs, const Money& rhs){ lhs += rhs; return lhs; }   // no friend needed!\n\nMoney m1(5.00), m2(3.00);\nMoney m3 = m1 + m2;      // works\nMoney m4 = 2.00 + m1;    // ALSO works - '2.00' implicitly converts to Money via the non-explicit\n                         // constructor, and since operator+ is NON-MEMBER, this left-side\n                         // conversion is available - a MEMBER operator+ would NOT support this.`,
   steps:[
     "WHEN A MEMBER IS THE RIGHT CHOICE: operators that inherently modify `*this` and never need LEFT-side implicit conversion support — compound assignment (`+=`), pre/post increment/decrement, subscript (`[]`), function-call (`()`), and arrow (`->`) are all conventionally members, since none of these ever needs 'something implicitly convertible to my class' to appear on the syntactic left in a way a member couldn't already handle (they're all effectively unary or inherently left-operand-is-the-object operators).",
     "WHEN A NON-MEMBER (POSSIBLY FRIEND) IS THE RIGHT CHOICE: symmetric binary operators where you want implicit conversions to apply to EITHER operand — arithmetic (`+ - * /`), comparison (`== != < > <= >=`), and stream operators (`<< >>`, which additionally MUST be non-member since the left operand's type isn't yours to add members to) — all conventionally use non-member functions specifically for this symmetry.",
@@ -3651,7 +3651,7 @@ DEEP_CONTENT['op-member-vs-friend'] = {
 DEEP_CONTENT['op-not-overloadable'] = {
   def:"A specific, fixed set of operators CANNOT be overloaded in C++, regardless of any user-defined type involved: the scope resolution operator (`::`), the member access operator (`.`), the member-pointer-access operator (`.*`), the ternary conditional operator (`?:`), and (as a related restriction) `sizeof`, `typeid`, and the `alignof`/`_Alignof` operators — these remain fixed, built-in operations no matter what type they're applied to.",
   why:"These operators are excluded specifically because allowing them to be overloaded would either be technically impossible to implement sensibly (there's no 'object' to dispatch on in a meaningful way for some of them) or would undermine fundamental language guarantees that code relies on being consistent and predictable regardless of the types involved — this is a frequently-tested piece of interview trivia precisely because it's easy to assume 'everything is overloadable in C++' and be wrong.",
-  code:`// None of these can EVER be overloaded, for ANY type:\n\n// :: (scope resolution) - always resolves names within a fixed, static scope\nstd::vector<int> v;   // '::' here is just namespace/scope lookup, not an operator call\n\n// . (member access) - ALWAYS accesses the actual, real member of the actual object\nstruct S { int x; };\nvoid touch(S& s) { s.x = 5; }   // '.' cannot be redefined - operator-> CAN be overloaded (see op-arrow),\n                // which is EXACTLY why smart pointers use -> instead of . for member access -\n                // there is NO way to make 'smartPtr.member' work via overloading, ever.\n\n// ?: (ternary) - cannot be overloaded; always evaluates exactly one branch based on the condition\nint x = (5 > 3) ? 10 : 20;   // no way to make this dispatch to a custom type's logic\n\n// sizeof, typeid, alignof - always operate on TYPE/layout information the compiler\n// determines directly, not through any runtime dispatch mechanism an overload could hook into\nconstexpr std::size_t intSize = sizeof(int);   // always the built-in, compiler-determined answer`,
+  code:`#include <cstddef>\n#include <vector>\n\n// None of these can EVER be overloaded, for ANY type:\n\n// :: (scope resolution) - always resolves names within a fixed, static scope\nstd::vector<int> v;   // '::' here is just namespace/scope lookup, not an operator call\n\n// . (member access) - ALWAYS accesses the actual, real member of the actual object\nstruct S { int x; };\nvoid touch(S& s) { s.x = 5; }   // '.' cannot be redefined - operator-> CAN be overloaded (see op-arrow),\n                // which is EXACTLY why smart pointers use -> instead of . for member access -\n                // there is NO way to make 'smartPtr.member' work via overloading, ever.\n\n// ?: (ternary) - cannot be overloaded; always evaluates exactly one branch based on the condition\nint x = (5 > 3) ? 10 : 20;   // no way to make this dispatch to a custom type's logic\n\n// sizeof, typeid, alignof - always operate on TYPE/layout information the compiler\n// determines directly, not through any runtime dispatch mechanism an overload could hook into\nconstexpr std::size_t intSize = sizeof(int);   // always the built-in, compiler-determined answer`,
   steps:[
     "WHY `.` (dot) SPECIFICALLY CANNOT BE OVERLOADED: allowing `.` to be overloaded would mean even accessing an object's OWN, real members could be silently intercepted/redirected — this would undermine the basic guarantee that `obj.member` always, unconditionally refers to the actual member `member` of the actual object `obj`, a guarantee virtually all C++ code implicitly and heavily relies on; this exact limitation is precisely why `operator->` exists and CAN be overloaded — it's the sanctioned mechanism for 'pointer/proxy-like member access' that `.` deliberately cannot provide.",
     "WHY `::` CANNOT BE OVERLOADED: scope resolution is resolved at COMPILE TIME based on the program's static structure (namespaces, class hierarchies) — there's no 'object' or runtime value to dispatch a user-defined overload on in the first place; it's a fundamentally different KIND of language construct than a runtime operator applied to values.",
@@ -3668,7 +3668,7 @@ DEEP_CONTENT['op-not-overloadable'] = {
 DEEP_CONTENT['op-best-practices'] = {
   def:"Beyond the mechanics of any individual operator, a set of cross-cutting best practices governs GOOD operator overloading design: preserve the operator's expected mathematical/intuitive meaning (don't overload `+` to do something unrelated to addition), maintain consistency between related operators (`==` and `!=`, `<` and the rest of the ordering family), avoid surprising side effects, and know when NOT to overload an operator at all in favor of a clearly-named function.",
   why:"Operator overloading's power (making custom types feel native) is exactly matched by its capacity for confusion when misused — an operator whose behavior doesn't match what its symbol universally suggests is far more dangerous than an equivalently 'bad' named function would be, precisely because callers bring strong, symbol-based intuitions to `+`, `==`, and friends that a named function like `combineWith()` doesn't carry.",
-  code:`// BAD: overloading + for something that isn't remotely addition-like -\n// this is the single most commonly cited 'operator overloading gone wrong' example:\nclass EventEmitter {\npublic:\n    EventEmitter& operator+(std::function<void()> handler){   // 'adding' a HANDLER??\n        registerHandler(handler);       // this is really 'subscribe', not 'add'\n        return *this;\n    }\n};\n// emitter + myHandler;   // what does this even MEAN at a glance? Confusing and surprising.\n// BETTER: emitter.subscribe(myHandler);  - a clearly-named function says exactly what happens\n\n// GOOD: operators used for genuinely arithmetic/comparison-like types, matching\n// their built-in-operator intuitions exactly:\nclass Money { /* + means combine amounts, == means same amount - matches intuition */ };\nclass Matrix { /* + means elementwise addition, * means matrix multiplication - matches math */ };\n\n// CONSISTENCY: if you define ==, define != to match it (or use C++20's automatic\n// derivation); if you define <, make sure > , <=, >= AGREE with it (or derive via <=>).`,
+  code:`// BAD: overloading + for something that isn't remotely addition-like -\n// this is the single most commonly cited 'operator overloading gone wrong' example:\n#include <functional>\n#include <vector>\n\nclass EventEmitter {\n    std::vector<std::function<void()>> handlers_;\n    void registerHandler(std::function<void()> h) { handlers_.push_back(std::move(h)); }\npublic:\n    EventEmitter& operator+(std::function<void()> handler){   // 'adding' a HANDLER??\n        registerHandler(handler);       // this is really 'subscribe', not 'add'\n        return *this;\n    }\n};\n// emitter + myHandler;   // what does this even MEAN at a glance? Confusing and surprising.\n// BETTER: emitter.subscribe(myHandler);  - a clearly-named function says exactly what happens\n\n// GOOD: operators used for genuinely arithmetic/comparison-like types, matching\n// their built-in-operator intuitions exactly:\nclass Money { /* + means combine amounts, == means same amount - matches intuition */ };\nclass Matrix { /* + means elementwise addition, * means matrix multiplication - matches math */ };\n\n// CONSISTENCY: if you define ==, define != to match it (or use C++20's automatic\n// derivation); if you define <, make sure > , <=, >= AGREE with it (or derive via <=>).`,
   steps:[
     "PRESERVE EXPECTED MEANING: an operator overload should do what a reasonable reader, familiar with what that symbol means for built-in types or common mathematical objects, would expect — `+` should mean some form of combination/addition, `==` should mean some form of value equality, `<` should mean some form of ordering; using an operator for an UNRELATED operation (as in the EventEmitter example) trades a small amount of typing convenience for a significant, ongoing comprehension cost for every future reader.",
     "MAINTAIN CROSS-OPERATOR CONSISTENCY: related operators should never contradict each other — `a == b` being true while `a != b` is ALSO true (from independently, inconsistently hand-written logic) is a correctness bug, not just a style issue, and can break standard library algorithms/containers that assume these relationships hold; C++20's `<=>` and `= default` mechanisms exist specifically to make this consistency automatic rather than manually maintained.",
@@ -7341,10 +7341,10 @@ DEEP_CONTENT['memory-static'] = {
  analogy: "Think of .data and .bss as parking spots painted onto the lot BEFORE the building even opens -- they exist and have a fixed address no matter what, some pre-loaded with a car already parked (.data), some just marked empty and ready (.bss). A function-local static is different: it's a spot that stays roped off until the first visitor actually needs it, at which point (and only then) the valet pulls a car in and unhooks the rope for everyone after -- and C++11 guarantees only one valet can do that pull even if two visitors arrive at the exact same instant on different threads.",
  code: "#include <cstdio>\n\n// --- The fiasco: two globals in DIFFERENT translation units ---\n// file logger.cpp:\n// Logger g_logger; // constructed at static-init time, order vs other TUs is UNSPECIFIED\n\n// file audit.cpp:\n// extern Logger g_logger;\n// struct AuditInit {\n//   AuditInit() { g_logger.write(\"audit starting\"); } // may run BEFORE g_logger's ctor!\n// } g_auditInit;\n\n// --- The fix: construct-on-first-use (Meyers singleton) ---\nclass Logger {\npublic:\n static Logger& instance() {\n  static Logger inst; // constructed on first call to instance(), thread-safe per C++11\n  return inst;\n }\n void write(const char* msg) { std::printf(\"[log] %s\\n\", msg); }\nprivate:\n Logger() { std::printf(\"Logger constructed\\n\"); }\n ~Logger() { std::printf(\"Logger destroyed\\n\"); }\n Logger(const Logger&) = delete;\n Logger& operator=(const Logger&) = delete;\n};\n\nint main() {\n Logger::instance().write(\"app starting\"); // guaranteed Logger already exists here\n Logger::instance().write(\"app running\");\n}",
  steps: [
-  "Before the loader even runs main(), the OS maps the .bss section as zero-filled pages (often via anonymous mmap/copy-on-write zero pages -- cheap, no disk I/O) and copies the .data section's stored initial bytes out of the binary image into RAM.",
+  "Before main() runs, the OS loader maps the .bss section as zero-filled pages (often via anonymous mmap/copy-on-write zero pages -- cheap, no disk I/O) and maps the .data section's stored initial bytes from the binary image (copy-on-write, so a page is only copied when first written).",
   "The runtime then executes dynamic initializers -- constructors for statics whose initial value can't be computed at compile time -- in declaration order within each translation unit, but the ORDER BETWEEN translation units is left to the linker/runtime and is not specified by the standard.",
-  "If AuditInit's constructor (in audit.cpp) runs before Logger's constructor (in logger.cpp) happens to run, g_logger.write() executes on a Logger object whose memory is zeroed/garbage but whose constructor hasn't run yet -- calling a member function on an unconstructed object, undefined behavior that often just silently corrupts or crashes.",
-  "main() begins only after ALL static/global initializers across the whole program have completed.",
+  "If AuditInit's constructor (in audit.cpp) runs before Logger's constructor (in logger.cpp) happens to run, g_logger.write() executes on a Logger object whose memory has been zero-initialized (static storage is always zero-initialized before any dynamic initialization) but whose constructor hasn't run yet -- calling a member function on an unconstructed object, undefined behavior that often just silently corrupts or crashes.",
+  "In practice (GCC, Clang, MSVC) main() begins only after the static/global initializers of the executable and its startup-linked shared libraries have completed -- the standard technically allows dynamic initialization to be deferred until first use of something in that translation unit, and libraries loaded later with dlopen/LoadLibrary initialize at load time.",
   "Now trace the Meyers singleton: the first call to Logger::instance() checks a hidden guard variable (compiler-generated, effectively an atomic/once-flag under the hood via __cxa_guard_acquire on Itanium ABI); the guard is false, so it acquires a lock, constructs Logger in a fixed static-storage address, sets the guard true, and releases.",
   "Every subsequent call to instance() (from any TU, any thread) sees the guard already true and just returns the reference -- an atomic load plus a branch, not a re-construction.",
   "At program exit, statics are destroyed in the REVERSE order of the completion of their construction (a global LIFO order across the whole program, tracked via atexit-style registration) -- meaning a static constructed late is destroyed first."
@@ -7371,7 +7371,7 @@ DEEP_CONTENT['new-delete'] = {
   "The compiler then emits, in that raw memory, effectively a placement-new call that runs Widget's constructor -- if the constructor throws, the compiler-generated code automatically calls the matching operator delete on that same block (since no destructor is needed -- the object never finished constructing) and propagates the exception, so a failed construction never leaks the raw block.",
   "The typed Widget* is returned to the caller only after construction succeeds.",
   "delete w first calls ~Widget() on the pointed-to object, then calls operator delete(w) to return the raw bytes to the allocator.",
-  "For new Widget[3], the runtime typically allocates a few extra bytes before the returned pointer to store the element count (an implementation-defined 'array cookie'), constructs 3 Widgets in order, and returns a pointer to the first element (not to the cookie).",
+  "For new Widget[3], the runtime typically allocates a few extra bytes before the returned pointer to store the element count (an implementation-defined 'array cookie' -- on the Itanium ABI used by GCC and Clang it is only added when the element type has a non-trivial destructor, since otherwise delete[] has no destructors to count), constructs 3 Widgets in order, and returns a pointer to the first element (not to the cookie).",
   "delete[] arr reads that hidden count, runs 3 destructors in reverse construction order, then frees the ENTIRE block including the cookie bytes.",
   "If you instead call plain delete on that array pointer, it does not know about the cookie or the count -- it destructs exactly one Widget and passes the pointer straight to operator delete, which may misinterpret the cookie bytes as allocator metadata, corrupting the heap in a way that often doesn't crash until much later, at an unrelated allocation."
  ],
@@ -24523,6 +24523,2147 @@ const GUIDED_LESSONS = {
    [
     "Why does std::map::operator[] have no const version?",
     "It inserts a default value when the key is missing, which a const map can't do; use find() or at()."
+   ]
+  ]
+ },
+ "op-call": {
+  "orientation": {
+   "what": "operator(): making an object callable (a functor), which can carry state between calls — and is exactly how lambdas are implemented.",
+   "why": "Functors are how STL algorithms are customized, and understanding them explains lambdas, capture costs, and why algorithms copy the callables you pass.",
+   "outcomes": [
+    "Write a functor with state",
+    "Explain how a lambda maps to a compiler-generated class",
+    "Predict what happens to a functor passed to an algorithm",
+    "Choose between a functor, a lambda and a function pointer"
+   ],
+   "firstPass": "~10–15 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: an object you can call",
+    "intro": "Multiplier triple(3); triple(5);:",
+    "stages": [
+     {
+      "name": "Construct",
+      "io": "factor = 3",
+      "note": "State is set once, in the constructor."
+     },
+     {
+      "name": "Call",
+      "io": "triple.operator()(5)",
+      "note": "The call syntax invokes the member function operator()."
+     },
+     {
+      "name": "Use state",
+      "io": "5 * factor",
+      "note": "The call reads (or updates) the object's members."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "A class with operator() is a function object (functor): obj(args) calls obj.operator()(args).",
+     "Unlike a function pointer, a functor carries state in its members; different instances keep independent state.",
+     "A lambda is a compiler-generated functor: captures become members, the body becomes operator()."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A programmable macro button",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <algorithm>\n#include <vector>\nstruct Count {\n    int n = 0;\n    void operator()(int) { ++n; }\n};\n\nstd::vector<int> v{1, 2, 3};\nCount c;\nCount r = std::for_each(v.begin(), v.end(), c);\n// c.n = ?   r.n = ?",
+    "q": "What are c.n and r.n?",
+    "options": [
+     [
+      "A",
+      "3 and 3"
+     ],
+     [
+      "B",
+      "0 and 3"
+     ],
+     [
+      "C",
+      "3 and 0"
+     ],
+     [
+      "D",
+      "0 and 0"
+     ]
+    ],
+    "reveal": [
+     "B — c.n is 0 and r.n is 3.",
+     "Algorithms take function objects by value, so for_each counted in its own copy.",
+     "std::for_each returns that copy, so r holds the count; c was never touched.",
+     "To keep state, use the returned object, or pass std::ref(c)."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Full example",
+    "title": "The example",
+    "intro": "A stateful functor, a lambda, and a multi-parameter operator():",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: functors and lambdas",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What is a functor?",
+    "An object of a class that overloads operator(), so it can be called like a function."
+   ],
+   [
+    "What can a functor do that a function pointer can't?",
+    "Carry per-instance state between calls."
+   ],
+   [
+    "How is a lambda implemented?",
+    "As an unnamed class: captures become data members and the body becomes a const operator()."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "A functor's size",
+     "hint": "its members — the same as a lambda's captures",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: comparators and predicates",
+     "hint": "sort, set, priority_queue, count_if",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "lambdas",
+    "function-pointers",
+    "algo-sorting"
+   ]
+  },
+  "interview": {
+   "think": "Ask where the state lives.",
+   "advancedTitle": "Advanced follow-up: capture by value in a hot loop"
+  },
+  "recall": [
+   [
+    "Can operator() be overloaded with different parameter lists?",
+    "Yes, like any member function; one functor can support several call signatures."
+   ],
+   [
+    "Why does a lambda's body not modify by-value captures by default?",
+    "Its operator() is const; mark the lambda mutable to allow it."
+   ],
+   [
+    "When is a named functor class still better than a lambda?",
+    "When it is reused in many places, is templated, or has complex state or several overloads."
+   ]
+  ]
+ },
+ "op-arrow": {
+  "orientation": {
+   "what": "operator->: giving a class pointer-like member access — and its unusual rule that the compiler keeps applying -> until it reaches a raw pointer.",
+   "why": "It is what makes smart pointers, iterators and proxies usable with ptr->member, and the chaining rule explains layered proxies.",
+   "outcomes": [
+    "Implement operator-> and operator* for a pointer-like type",
+    "Explain the chaining rule",
+    "Predict how many times operator-> runs",
+    "Know why . can't be overloaded but -> can"
+   ],
+   "firstPass": "~10–15 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: peel until you reach a raw pointer",
+    "intro": "w->draw() on a wrapper:",
+    "stages": [
+     {
+      "name": "w.operator->()",
+      "io": "returns something",
+      "note": "If it returns a raw pointer, stop here."
+     },
+     {
+      "name": "Another class?",
+      "io": "call -> again",
+      "note": "If it returns an object with operator->, the compiler applies -> to it too."
+     },
+     {
+      "name": "Raw pointer",
+      "io": "built-in ->",
+      "note": "Finally, ordinary member access reaches draw()."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "operator-> lets a class use ptr->member syntax; it must return a raw pointer or an object that itself has operator->.",
+     "The compiler applies -> repeatedly until the result is a raw pointer, then does ordinary member access.",
+     "Pointer-like types provide operator* as well, returning a reference."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Russian nesting dolls",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <iostream>\nstruct Widget { void draw() { std::cout << \"drawing\"; } };\nstruct Inner {\n    Widget w;\n    Widget* operator->() { std::cout << \"inner \"; return &w; }\n};\nstruct Outer {\n    Inner in;\n    Inner& operator->() { std::cout << \"outer \"; return in; }\n};\n\nint main() { Outer o; o->draw(); }",
+    "q": "What does this print?",
+    "options": [
+     [
+      "A",
+      "drawing"
+     ],
+     [
+      "B",
+      "outer drawing"
+     ],
+     [
+      "C",
+      "outer inner drawing"
+     ],
+     [
+      "D",
+      "Compile error: Inner is not a pointer"
+     ]
+    ],
+    "reveal": [
+     "C — outer inner drawing.",
+     "Outer::operator-> returns an Inner, which is not a raw pointer, so the compiler calls Inner::operator-> too.",
+     "That returns a Widget*, and built-in -> reaches draw().",
+     "One -> in the source became two operator-> calls."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Full example",
+    "title": "The example",
+    "intro": "A minimal owning pointer, and a wrapper of a wrapper:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: the chaining rule",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What must operator-> return?",
+    "A raw pointer, or an object of a class that also overloads operator->."
+   ],
+   [
+    "How many times is operator-> called for a smart pointer that returns T*?",
+    "Once."
+   ],
+   [
+    "Why do smart pointers use -> rather than . for member access?",
+    "The . operator can't be overloaded; -> can."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Zero overhead",
+     "hint": "returning the stored pointer",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: pointer-like types",
+     "hint": "smart pointers, iterators, proxies",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "unique-ptr",
+    "iterators",
+    "op-not-overloadable"
+   ]
+  },
+  "interview": {
+   "think": "Keep asking: is the result a raw pointer yet?",
+   "advancedTitle": "Advanced follow-up: when the chain can't end"
+  },
+  "recall": [
+   [
+    "Should operator-> be const?",
+    "Usually yes, returning T*: a const smart pointer can still point at a mutable object, like T* const."
+   ],
+   [
+    "What is the difference between operator-> and operator*?",
+    "-> is used for member access; * returns a reference to the pointed-to object itself."
+   ],
+   [
+    "What happens if operator-> returns an int?",
+    "A compile error at the use site: the chain can't reach a raw pointer."
+   ]
+  ]
+ },
+ "op-stream": {
+  "orientation": {
+   "what": "Overloading << and >> so your types work with std::cout, std::cin and file streams.",
+   "why": "Every type with a text form benefits, and the rules — non-member, return the stream, non-const target for >> — are a standard interview question.",
+   "outcomes": [
+    "Write operator<< and operator>> for a class",
+    "Explain why they must be non-members",
+    "Explain why both return the stream",
+    "Handle a failed read"
+   ],
+   "firstPass": "~10–15 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: the stream is on the left",
+    "intro": "std::cout << \"Point: \" << pt;:",
+    "stages": [
+     {
+      "name": "cout << \"Point: \"",
+      "io": "returns cout",
+      "note": "The built-in overload returns the same stream by reference."
+     },
+     {
+      "name": "operator<<(cout, pt)",
+      "io": "your function",
+      "note": "A non-member, since the left operand is a stream you don't own."
+     },
+     {
+      "name": "return os",
+      "io": "chaining",
+      "note": "Returning the stream lets the next << continue on it."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "operator<< and operator>> must be non-members, because the stream is the left operand.",
+     "They are often friends so they can read or write private members directly.",
+     "Both take the stream by reference and return it by reference, so calls chain; >> takes the target by non-const reference."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A translator beside a microphone you can't rewire",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <iostream>\nstruct P {\n    int x = 1;\n    std::ostream& operator<<(std::ostream& os) const {   // MEMBER\n        return os << x;\n    }\n};\n\nP p;\nstd::cout << p;   // (1)\np << std::cout;   // (2)",
+    "q": "Which lines compile?",
+    "options": [
+     [
+      "A",
+      "Both"
+     ],
+     [
+      "B",
+      "Only (1)"
+     ],
+     [
+      "C",
+      "Only (2)"
+     ],
+     [
+      "D",
+      "Neither"
+     ]
+    ],
+    "reveal": [
+     "C — only (2).",
+     "A member operator always has the object as its left operand, so it is written p << std::cout.",
+     "(1) needs operator<<(std::ostream&, const P&) — a non-member.",
+     "That backwards syntax is why stream operators are always non-members."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "<< and >> as friend functions of Point:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: why the signatures look like this",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Why must operator<< be a non-member?",
+    "The left operand is std::ostream, which you can't add members to; a member would put your object on the left."
+   ],
+   [
+    "Why return the stream?",
+    "So chained expressions like cout << a << b keep writing to the same stream."
+   ],
+   [
+    "Why does operator>> take the object by non-const reference?",
+    "It writes the parsed values into the object."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "No memory cost",
+     "hint": "formatting through the stream's buffer",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: logging and config",
+     "hint": "one canonical text format per type",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "op-member-vs-friend",
+    "namespaces"
+   ]
+  },
+  "interview": {
+   "think": "Look at which operand is on the left.",
+   "advancedTitle": "Advanced follow-up: immutable types and >>"
+  },
+  "recall": [
+   [
+    "How should operator>> report a parse failure?",
+    "Set the stream's failbit (is.setstate(std::ios::failbit)) and leave the object in a valid state; callers test the stream."
+   ],
+   [
+    "Do these operators need to be friends?",
+    "Only if they need private members; with enough public interface they can be plain non-members."
+   ],
+   [
+    "Where should operator<< be declared so ADL finds it?",
+    "In the same namespace as the class (or as a hidden friend inside it)."
+   ]
+  ]
+ },
+ "op-new-delete": {
+  "orientation": {
+   "what": "Overloading operator new and operator delete: replacing how raw memory is obtained and released for a class — separate from construction and destruction.",
+   "why": "Custom allocation (pools, arenas, tracking) plugs into ordinary new/delete syntax this way; the key is knowing exactly which step you control.",
+   "outcomes": [
+    "Write class-specific operator new and delete",
+    "Separate allocation from construction",
+    "Predict what happens when the constructor throws",
+    "Know why operator delete must not throw"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~20–25 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: memory around the object's lifetime",
+    "intro": "new PoolAllocated(); ... delete obj;:",
+    "stages": [
+     {
+      "name": "operator new",
+      "io": "raw memory",
+      "note": "Your overload runs: return at least sizeof(T) bytes."
+     },
+     {
+      "name": "Constructor",
+      "io": "initialize",
+      "note": "Not controlled by your overload. If it throws, the matching operator delete frees the memory."
+     },
+     {
+      "name": "Destructor",
+      "io": "clean up",
+      "note": "Runs first on delete."
+     },
+     {
+      "name": "operator delete",
+      "io": "release memory",
+      "note": "Your overload runs last: return the block to the pool."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "operator new and operator delete only obtain and release raw memory; constructors and destructors are separate steps.",
+     "A class-specific overload is a static member used for new T; it can pool, track or redirect allocations.",
+     "If the constructor throws, the language calls the matching operator delete automatically; deallocation functions must not throw."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Renting specialized storage — movers work the same",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <iostream>\n#include <new>\n#include <stdexcept>\nstruct Pool {\n    static void* operator new(std::size_t n) { std::cout << \"new \"; return ::operator new(n); }\n    static void operator delete(void* p)     { std::cout << \"delete \"; ::operator delete(p); }\n    Pool() { std::cout << \"ctor \"; throw std::runtime_error(\"x\"); }\n};\n\nint main() {\n    try { new Pool; } catch (...) { std::cout << \"caught\"; }\n}",
+    "q": "What does this print?",
+    "options": [
+     [
+      "A",
+      "new ctor caught"
+     ],
+     [
+      "B",
+      "new ctor delete caught"
+     ],
+     [
+      "C",
+      "ctor caught"
+     ],
+     [
+      "D",
+      "new ctor caught delete"
+     ]
+    ],
+    "reveal": [
+     "B — new ctor delete caught.",
+     "operator new runs first, then the constructor, which throws.",
+     "The object never finished construction, so no destructor runs — but the language calls the matching operator delete to free the raw memory.",
+     "Only then does the exception reach the catch handler."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "A class that recycles its own blocks:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: allocation versus construction",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What does a custom operator new control?",
+    "Only how raw memory is obtained; construction happens afterwards and is unchanged."
+   ],
+   [
+    "What happens to the memory if the constructor throws?",
+    "The matching operator delete is called automatically, then the exception propagates."
+   ],
+   [
+    "Why must operator delete not throw?",
+    "It can run during exception cleanup; deallocation functions are implicitly noexcept and throwing from one is undefined behavior."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Trading memory for speed",
+     "hint": "pools keep freed blocks",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: pools and arenas",
+     "hint": "games, trading systems, allocation tracking",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "new-delete",
+    "placement-new",
+    "memory-pools",
+    "custom-allocators"
+   ]
+  },
+  "interview": {
+   "think": "Split new into its two steps and say which one you own.",
+   "advancedTitle": "Advanced follow-up: why operator delete must be noexcept"
+  },
+  "recall": [
+   [
+    "Is a class-specific operator new static?",
+    "Yes, implicitly — it runs before any object exists."
+   ],
+   [
+    "What should a pool do with a size it wasn't designed for (for example a larger derived class)?",
+    "Fall back to ::operator new, or reject such types."
+   ],
+   [
+    "What is placement new?",
+    "A new-expression that constructs an object in memory you already have, without allocating."
+   ]
+  ]
+ },
+ "op-member-vs-friend": {
+  "orientation": {
+   "what": "Choosing between a member, a friend non-member and a plain non-member function when overloading an operator.",
+   "why": "The choice decides whether conversions work on both sides and how many functions can touch your private data. Some operators must be members.",
+   "outcomes": [
+    "Pick member or non-member for each kind of operator",
+    "Know which operators must be members",
+    "Use friend only when private access is needed",
+    "Explain the effect on implicit conversions"
+   ],
+   "firstPass": "~10–15 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: three choices",
+    "intro": "Where each operator for Money belongs:",
+    "stages": [
+     {
+      "name": "Member",
+      "io": "+=, =, [], (), ->",
+      "note": "Operators that act on *this. The last four must be members."
+     },
+     {
+      "name": "Non-member friend",
+      "io": "== (reads cents)",
+      "note": "Symmetric, and needs private data."
+     },
+     {
+      "name": "Plain non-member",
+      "io": "+ built on +=",
+      "note": "Symmetric, and the public interface is enough — no friend needed."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Operators that modify *this (+=, ++, =) are members; =, [], () and -> must be members.",
+     "Symmetric binary operators (+, ==, <) are non-members, so implicit conversions work on both operands.",
+     "Make a non-member a friend only if it needs private data; otherwise use the public interface."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Family with house keys versus guests with the seating chart",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "struct M { long c; };\n\nM& operator+=(M& a, const M& b);   // (1) non-member\nM& operator=(M& a, const M& b);    // (2) non-member\nbool operator==(const M&, const M&); // (3) non-member",
+    "q": "Which declaration is an error?",
+    "options": [
+     [
+      "A",
+      "(1)"
+     ],
+     [
+      "B",
+      "(2)"
+     ],
+     [
+      "C",
+      "(3)"
+     ],
+     [
+      "D",
+      "None"
+     ]
+    ],
+    "reveal": [
+     "B — (2).",
+     "operator=, operator[], operator() and operator-> must be non-static members.",
+     "GCC: 'operator=' must be a non-static member function.",
+     "+= can legally be a non-member, though by convention it is a member."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "Money with a member +=, a friend ==, and a plain non-member +:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: choosing where each operator lives",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Which operators must be members?",
+    "= (assignment), [], () and ->."
+   ],
+   [
+    "Why are symmetric operators non-members?",
+    "So an implicit conversion can apply to the left operand as well as the right."
+   ],
+   [
+    "When should a non-member operator be a friend?",
+    "Only when it needs private members; otherwise the public interface keeps coupling lower."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "No run-time difference",
+     "hint": "an API and encapsulation decision",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: code review signals",
+     "hint": "friend everywhere versus a small public API",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "op-arithmetic",
+    "op-stream",
+    "op-best-practices"
+   ]
+  },
+  "interview": {
+   "think": "Ask whether the left operand might need a conversion.",
+   "advancedTitle": "Advanced follow-up: the cost of an unnecessary friend"
+  },
+  "recall": [
+   [
+    "Why does the Money constructor use std::lround?",
+    "0.29 * 100 is 28.999… in binary floating point, so truncating would give 28 cents."
+   ],
+   [
+    "What is a hidden friend?",
+    "A friend operator defined inside the class body; only argument-dependent lookup finds it."
+   ],
+   [
+    "Can operator<< be a member of your class?",
+    "Not for cout << obj; it must be a non-member."
+   ]
+  ]
+ },
+ "op-not-overloadable": {
+  "orientation": {
+   "what": "Which operators can never be overloaded (::, ., .*, ?:, sizeof, typeid, alignof), and which can be overloaded but shouldn't be (&&, ||, comma).",
+   "why": "A standard interview question — and the reasons explain why smart pointers use -> and why overloading && is a trap.",
+   "outcomes": [
+    "List the operators that can't be overloaded",
+    "Explain why . can't be but -> can",
+    "Explain why ?: isn't overloadable",
+    "Know why overloading && and || loses short-circuiting"
+   ],
+   "firstPass": "~10–15 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: the fixed core of the language",
+    "intro": "Operators and why they stay built-in:",
+    "stages": [
+     {
+      "name": ":: . .*",
+      "io": "names and members",
+      "note": "Must always mean the real scope or the real member."
+     },
+     {
+      "name": "?:",
+      "io": "one branch only",
+      "note": "Only the chosen branch is evaluated; a function call would evaluate both."
+     },
+     {
+      "name": "sizeof typeid alignof",
+      "io": "compile-time facts",
+      "note": "Answered from the type itself."
+     },
+     {
+      "name": "&& || ,",
+      "io": "overloadable, but…",
+      "note": "Overloads become ordinary calls: both operands are always evaluated."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "::, ., .*, ?:, sizeof, typeid and alignof can never be overloaded.",
+     ". stays fixed so obj.member always means the real member; operator-> is the sanctioned hook for pointer-like types.",
+     "&&, || and the comma operator can be overloaded, but the overloads lose short-circuit evaluation — so almost never do it."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Constitutional rights no town council can override",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <iostream>\nstruct B { bool v; };\nB f() { std::cout << \"f \"; return {false}; }\nB g() { std::cout << \"g \"; return {true}; }\nbool operator&&(B a, B b) { return a.v && b.v; }\n\nint main() {\n    bool r = f() && g();\n}",
+    "q": "What does this print?",
+    "options": [
+     [
+      "A",
+      "f"
+     ],
+     [
+      "B",
+      "f g"
+     ],
+     [
+      "C",
+      "g f"
+     ],
+     [
+      "D",
+      "Nothing"
+     ]
+    ],
+    "reveal": [
+     "B — f g.",
+     "With an overloaded &&, the expression is a function call, so both arguments are evaluated.",
+     "For built-in bool, f() && g() would stop after f returned false.",
+     "Since C++17 the operands are evaluated left to right, as for the built-in operator — but short-circuiting is still lost."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "The operators you can't overload:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: why each one is fixed",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Name the operators that can't be overloaded.",
+    "::, ., .*, ?:, sizeof, typeid and alignof (and the cast keywords such as static_cast)."
+   ],
+   [
+    "Why can -> be overloaded but . can't?",
+    "-> bottoms out at a raw pointer's built-in access, so the real member is still reached; overloading . would break that guarantee."
+   ],
+   [
+    "Why is ?: not overloadable?",
+    "It evaluates only one branch; a function call evaluates all of its arguments."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "No memory aspect",
+     "hint": "a language rule",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In practice: why it matters",
+     "hint": "smart pointers and proxies",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "op-arrow",
+    "op-best-practices"
+   ]
+  },
+  "interview": {
+   "think": "For each operator, ask what guarantee overloading would break.",
+   "advancedTitle": "Advanced follow-up: why ?: stays built-in"
+  },
+  "recall": [
+   [
+    "Can the comma operator be overloaded?",
+    "Yes, but like && and || it then loses its built-in sequencing guarantees in older standards and surprises readers; avoid it."
+   ],
+   [
+    "Can operator new be overloaded?",
+    "Yes: operator new and delete are overloadable (they control raw allocation)."
+   ],
+   [
+    "Can co_await be overloaded?",
+    "Yes, operator co_await is overloadable in C++20."
+   ]
+  ]
+ },
+ "op-best-practices": {
+  "orientation": {
+   "what": "Judgment for operator overloading: keep conventional meanings, keep related operators consistent, and use named functions when no symbol fits.",
+   "why": "An operator that does something surprising is worse than a badly named function, because readers bring strong intuitions to +, == and <.",
+   "outcomes": [
+    "Spot an operator overload that violates expectations",
+    "Keep related operators consistent",
+    "Decide when a named function is better",
+    "Use C++20 rewriting to avoid inconsistency"
+   ],
+   "firstPass": "~10–15 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: three questions before overloading",
+    "intro": "Should this be an operator?",
+    "stages": [
+     {
+      "name": "Meaning",
+      "io": "does the symbol fit?",
+      "note": "+ should combine, == should compare values, < should order."
+     },
+     {
+      "name": "Consistency",
+      "io": "do related operators agree?",
+      "note": "== and !=, and the whole ordering family, must never contradict."
+     },
+     {
+      "name": "Surprise",
+      "io": "any hidden side effects?",
+      "note": "No logging, throwing or unrelated mutation a reader wouldn't expect."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Overload an operator only when its conventional meaning fits the operation.",
+     "Keep related operators consistent: build them from one canonical comparison, or let C++20 rewrite them.",
+     "If no symbol naturally fits, a clearly named function (subscribe, mergeInto) is better."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A 'silence' symbol that means 'play loudly'",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "struct E {\n    int v;\n    bool operator==(const E& o) const { return v == o.v; }\n    // no operator!= written\n};\n\nE a{1}, b{2};\nbool diff = (a != b);",
+    "q": "Does this compile?",
+    "options": [
+     [
+      "A",
+      "Yes, in every standard"
+     ],
+     [
+      "B",
+      "Only in C++20 and later"
+     ],
+     [
+      "C",
+      "Only before C++20"
+     ],
+     [
+      "D",
+      "Never"
+     ]
+    ],
+    "reveal": [
+     "B — only in C++20 and later.",
+     "C++20 rewrites a != b as !(a == b) using your operator==.",
+     "In C++17 GCC reports: no match for 'operator!='.",
+     "The rewrite also guarantees == and != can't disagree."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "An operator that doesn't match its meaning, and ones that do:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: the three rules",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Why is using + to subscribe an event handler bad design?",
+    "Readers expect + to combine values; a named function like subscribe says what happens."
+   ],
+   [
+    "How do you keep comparison operators consistent?",
+    "Derive them from one canonical comparison, or default == and <=> in C++20."
+   ],
+   [
+    "When should you not overload an operator at all?",
+    "When the operation has no natural, widely understood symbol."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "No memory aspect",
+     "hint": "a design and review topic",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: style guides",
+     "hint": "what reviewers look for",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "op-comparison",
+    "spaceship-operator"
+   ]
+  },
+  "interview": {
+   "think": "Ask what a reader who has never seen the class would expect.",
+   "advancedTitle": "Advanced follow-up: <=> and consistency by construction"
+  },
+  "recall": [
+   [
+    "Name a famous 'surprising' operator overload in the standard library.",
+    "<< and >> for streams — accepted today, but a shift operator reused for I/O."
+   ],
+   [
+    "Should operators throw or log?",
+    "Only as their built-in counterparts would suggest; hidden side effects surprise readers."
+   ],
+   [
+    "Does C++20 rewrite a < b from operator<=>?",
+    "Yes: (a <=> b) < 0."
+   ]
+  ]
+ },
+ "memory-stack": {
+  "orientation": {
+   "what": "The call stack: how frames for locals, parameters and return addresses are created and released, and what limits its size.",
+   "why": "Stack allocation is nearly free, but the stack is small and fixed. Large locals and deep recursion crash programs, especially on threads with small stacks.",
+   "outcomes": [
+    "Explain what a stack frame contains",
+    "Explain why stack allocation is so cheap",
+    "Know typical stack limits per platform",
+    "Avoid stack overflow from recursion and big locals"
+   ],
+   "firstPass": "~10–15 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: a pointer that moves",
+    "intro": "Calling f() and returning:",
+    "stages": [
+     {
+      "name": "Call",
+      "io": "push a frame",
+      "note": "The stack pointer moves by the frame size: parameters, locals, return address, saved registers."
+     },
+     {
+      "name": "Inside f",
+      "io": "locals live here",
+      "note": "Nested scopes reuse parts of the frame."
+     },
+     {
+      "name": "Return",
+      "io": "pop the frame",
+      "note": "The stack pointer moves back — every local freed in one step."
+     },
+     {
+      "name": "Too deep or too big",
+      "io": "stack overflow",
+      "note": "Exceeding the limit crashes the program.",
+      "err": "Segmentation fault (Linux)"
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Each call gets a frame on the stack; allocating it is a single stack-pointer adjustment.",
+     "Locals are freed automatically, all at once, when the function returns.",
+     "The stack is small and fixed per thread (8 MB is common on Linux, 1 MB on Windows), so big buffers and deep recursion overflow it."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A stack of cafeteria trays",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "void f() {\n    volatile char buf[16 * 1024 * 1024];   // 16 MB local array\n    buf[0] = 1;\n}\n\nint main() { f(); }   // Linux, default 8 MB stack",
+    "q": "What happens?",
+    "options": [
+     [
+      "A",
+      "It runs fine"
+     ],
+     [
+      "B",
+      "Compile error: array too large"
+     ],
+     [
+      "C",
+      "It crashes with a stack overflow (segmentation fault)"
+     ],
+     [
+      "D",
+      "The compiler moves buf to the heap"
+     ]
+    ],
+    "reveal": [
+     "C — it crashes.",
+     "The frame needs more than the 8 MB the main thread gets on a typical Linux system.",
+     "Touching the array faults beyond the stack's guard region: Segmentation fault.",
+     "Use std::vector<char> (heap) for large buffers; worker threads often have even smaller stacks."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "Frames and nested scopes:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: a frame's lifetime",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Why is stack allocation faster than heap allocation?",
+    "It is just a stack-pointer adjustment: no search, no bookkeeping, no locking."
+   ],
+   [
+    "What causes a stack overflow?",
+    "Recursion too deep, or locals too large for the thread's fixed stack size."
+   ],
+   [
+    "Is stack memory zeroed?",
+    "No: an uninitialized local holds whatever earlier frames left there."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Limits and growth direction",
+     "hint": "downward growth, fixed size, per-platform defaults",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: recursion on untrusted input",
+     "hint": "parsers and explicit stacks",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "memory-heap",
+    "stack-vs-heap",
+    "bug-stack-overflow"
+   ]
+  },
+  "interview": {
+   "think": "Say what one allocation costs on each side.",
+   "advancedTitle": "Advanced follow-up: thousands of threads and their stacks"
+  },
+  "recall": [
+   [
+    "How do you make a deeply recursive algorithm safe?",
+    "Convert it to an iterative loop with an explicit heap-allocated stack or queue."
+   ],
+   [
+    "Why can a worker thread overflow where main doesn't?",
+    "Worker threads often get smaller default stacks (for example 512 KB on macOS)."
+   ],
+   [
+    "Can standard C++ recover from a stack overflow?",
+    "No: it typically crashes the process."
+   ]
+  ]
+ },
+ "memory-heap": {
+  "orientation": {
+   "what": "The heap (free store): memory whose size and lifetime you choose at run time, obtained with new or malloc and released explicitly.",
+   "why": "The heap lets data outlive a function and have run-time sizes — but it costs allocator work, and manual management leads to leaks and use-after-free.",
+   "outcomes": [
+    "Explain when to use the heap instead of the stack",
+    "Explain what an allocation costs",
+    "Tie heap lifetimes to objects with RAII",
+    "Explain fragmentation"
+   ],
+   "firstPass": "~10–15 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: a warehouse with a check-out desk",
+    "intro": "auto up = std::make_unique<int>(42);:",
+    "stages": [
+     {
+      "name": "Allocate",
+      "io": "allocator finds a block",
+      "note": "Searches free lists or size classes, updates bookkeeping, maybe takes a lock."
+     },
+     {
+      "name": "Use",
+      "io": "any lifetime",
+      "note": "The block stays valid until it is freed — even after the function returns."
+     },
+     {
+      "name": "Free",
+      "io": "back to the allocator",
+      "note": "unique_ptr's destructor frees it; with raw new you must remember delete."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Use the heap when the size is known only at run time or the object must outlive the current scope.",
+     "A heap allocation does real work (finding a block, bookkeeping, possibly locking) and must be released explicitly.",
+     "In modern C++, let a smart pointer or container own every heap allocation."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A public warehouse where you return your own bins",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "int* a() { int x = 5;              return &x; }\nint* b() { int* p = new int(5);    return p; }\nint* c() { static int s = 5;      return &s; }\n\n// Which returned pointers are still usable by the caller?",
+    "q": "Which functions return a pointer you can safely use?",
+    "options": [
+     [
+      "A",
+      "Only b"
+     ],
+     [
+      "B",
+      "b and c"
+     ],
+     [
+      "C",
+      "a and b"
+     ],
+     [
+      "D",
+      "All three"
+     ]
+    ],
+    "reveal": [
+     "B — b and c.",
+     "a returns the address of a local, which dies when a returns — a dangling pointer.",
+     "b's heap object lives until someone deletes it (and someone must).",
+     "c's static lives for the whole program."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "Manual new/delete versus unique_ptr:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: what an allocation does",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "When do you need the heap?",
+    "When the size is only known at run time, or the object must outlive the scope that creates it."
+   ],
+   [
+    "Is 'the object is big' a reason for the heap?",
+    "Only because of the stack's size limit; the real reasons are lifetime and run-time size."
+   ],
+   [
+    "What owns heap memory in modern C++?",
+    "A smart pointer or container, whose destructor frees it on every exit path."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "No ordering, no automatic cleanup",
+     "hint": "freedom that creates bugs",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: no naked new",
+     "hint": "smart pointers and containers",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "new-delete",
+    "memory-leaks",
+    "smart-pointers-overview",
+    "fragmentation"
+   ]
+  },
+  "interview": {
+   "think": "Compare cost and lifetime for each side.",
+   "advancedTitle": "Advanced follow-up: fragmentation without leaks",
+   "followUp": "q011"
+  },
+  "recall": [
+   [
+    "What is heap fragmentation?",
+    "Free memory split into small non-adjacent blocks, so a large request can fail even though enough total memory is free."
+   ],
+   [
+    "Can memory grow without a leak?",
+    "Yes: fragmentation, or an unbounded but reachable cache."
+   ],
+   [
+    "What does make_unique add over new?",
+    "Exception safety and no way to forget the delete."
+   ]
+  ]
+ },
+ "memory-static": {
+  "orientation": {
+   "what": "Static storage: objects that live for the whole program, where they are placed (.data, .bss), when they are initialized, and the initialization-order fiasco.",
+   "why": "Globals and function-local statics are everywhere (loggers, registries). Their cross-file initialization order is unspecified, which causes real bugs.",
+   "outcomes": [
+    "Tell .data from .bss",
+    "Explain when globals and function-local statics are initialized",
+    "Explain the static initialization order fiasco",
+    "Fix it with construct-on-first-use"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~25–30 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: from load to exit",
+    "intro": "Static objects over a program's life:",
+    "stages": [
+     {
+      "name": "Load",
+      "io": "zero, then constants",
+      "note": ".bss is zero-filled; .data's initial bytes come from the file."
+     },
+     {
+      "name": "Before main",
+      "io": "dynamic initialization",
+      "note": "Constructors run top to bottom within a file; the order between files is unspecified."
+     },
+     {
+      "name": "First call",
+      "io": "function-local statics",
+      "note": "Constructed when control first reaches them — thread-safe since C++11."
+     },
+     {
+      "name": "Exit",
+      "io": "reverse order",
+      "note": "Destroyed in reverse order of construction completion."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Static objects live at a fixed address for the whole program: zero-initialized ones in .bss, others in .data.",
+     "Globals with constructors are initialized before main in file order — but the order across files is unspecified.",
+     "A function-local static is built on first use and thread-safely, so returning one from a function fixes cross-file ordering."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Parking spots painted before the building opens",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <iostream>\nstruct S {\n    const char* n;\n    S(const char* s) : n(s) { std::cout << n << ' '; }\n    ~S() { std::cout << '~' << n << ' '; }\n};\nS& a() { static S x(\"A\"); return x; }\nS& b() { static S x(\"B\"); return x; }\n\nint main() {\n    b();\n    a();\n    std::cout << \"| \";\n}",
+    "q": "What does the whole program print?",
+    "options": [
+     [
+      "A",
+      "A B | ~A ~B"
+     ],
+     [
+      "B",
+      "B A | ~A ~B"
+     ],
+     [
+      "C",
+      "B A | ~B ~A"
+     ],
+     [
+      "D",
+      "| B A ~A ~B"
+     ]
+    ],
+    "reveal": [
+     "B — B A | ~A ~B.",
+     "Function-local statics are constructed on first call: b() first, then a().",
+     "At exit, statics are destroyed in reverse order of construction: A was built last, so it is destroyed first.",
+     "Neither is constructed before main — unlike a global."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Full example",
+    "title": "The example",
+    "intro": "The fiasco, and the Meyers singleton that avoids it:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: from load to exit",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What is the static initialization order fiasco?",
+    "A global's constructor in one file uses a global from another file that may not be constructed yet, because cross-file order is unspecified."
+   ],
+   [
+    "When is a function-local static initialized?",
+    "The first time control passes through its declaration; C++11 makes that thread-safe."
+   ],
+   [
+    "In what order are statics destroyed?",
+    "Reverse order of their construction completing."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": ".data, .bss and the guard variable",
+     "hint": "what the linker and loader do",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: loggers and registries",
+     "hint": "construct-on-first-use",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "static-keyword",
+    "pat-singleton",
+    "storage-duration"
+   ]
+  },
+  "interview": {
+   "think": "Separate what is guaranteed within one file from what is guaranteed across files.",
+   "advancedTitle": "Advanced follow-up: fixing the fiasco, and C++11's thread-safety guarantee"
+  },
+  "recall": [
+   [
+    "What is the static deinitialization order fiasco?",
+    "A static's destructor using another static that was constructed later and so has already been destroyed."
+   ],
+   [
+    "Is reading a function-local static free after initialization?",
+    "Almost: a guard check and a branch on each access."
+   ],
+   [
+    "What does .bss cost in the executable file?",
+    "Nothing but its size: zero-initialized data isn't stored in the file."
+   ]
+  ]
+ },
+ "new-delete": {
+  "orientation": {
+   "what": "What new and delete really do: allocate then construct, destroy then deallocate — plus the array forms, null deletes and double deletes.",
+   "why": "new is two steps, which explains exception safety, the hidden bookkeeping of new[], and why mismatching new[] with delete is undefined behavior.",
+   "outcomes": [
+    "Split new and delete into their two steps each",
+    "Explain why new[] needs delete[]",
+    "Know that deleting nullptr is safe and double delete isn't",
+    "Explain what happens when a constructor throws"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~20–25 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: two steps each way",
+    "intro": "Widget* w = new Widget(); delete w;:",
+    "stages": [
+     {
+      "name": "operator new",
+      "io": "raw bytes",
+      "note": "At least sizeof(Widget) bytes, or std::bad_alloc."
+     },
+     {
+      "name": "Constructor",
+      "io": "build in place",
+      "note": "If it throws, the memory is freed automatically."
+     },
+     {
+      "name": "Destructor",
+      "io": "on delete",
+      "note": "Runs first."
+     },
+     {
+      "name": "operator delete",
+      "io": "release",
+      "note": "Then the bytes go back to the allocator."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "new = allocate (operator new) + construct; delete = destroy + deallocate (operator delete).",
+     "new[] may store the element count before the array so delete[] can run every destructor — always pair new with delete and new[] with delete[].",
+     "Deleting nullptr is a no-op; deleting the same pointer twice is undefined behavior."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Renting an apartment and having it furnished",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <cstdio>\n#include <cstdlib>\n#include <new>\nvoid* operator new[](std::size_t n) { std::printf(\"%zu \", n); return std::malloc(n); }\nvoid operator delete[](void* p) noexcept { std::free(p); }\n\nstruct W { int x; ~W() {} };   // non-trivial destructor\nstruct T { int x; };            // trivial\n\nint main() {\n    delete[] new W[3];\n    delete[] new T[3];\n}",
+    "q": "What does this print on x86-64 with GCC or Clang?",
+    "options": [
+     [
+      "A",
+      "12 12"
+     ],
+     [
+      "B",
+      "20 12"
+     ],
+     [
+      "C",
+      "20 20"
+     ],
+     [
+      "D",
+      "24 12"
+     ]
+    ],
+    "reveal": [
+     "B — 20 12.",
+     "Three 4-byte W objects need 12 bytes, plus an 8-byte 'array cookie' holding the count, because delete[] must run three destructors.",
+     "T has a trivial destructor, so no count is needed and no cookie is added.",
+     "The cookie is an Itanium-ABI detail; the language only requires new[]/delete[] to match."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Full example",
+    "title": "The example",
+    "intro": "new/delete, the array forms, null delete and double delete:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: inside new and delete",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What two steps does new Widget() perform?",
+    "Calls operator new for raw memory, then runs Widget's constructor in it."
+   ],
+   [
+    "Why is delete on a new[] pointer undefined behavior?",
+    "It runs one destructor and passes the wrong pointer or size to the deallocator, ignoring the array bookkeeping."
+   ],
+   [
+    "Is if (p) delete p; safer than delete p;?",
+    "No: deleting nullptr is already a no-op."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "The array cookie and double delete",
+     "hint": "what the allocator actually sees",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: instrumentation and pools",
+     "hint": "you can only hook the allocation half",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "malloc-free",
+    "placement-new",
+    "double-delete",
+    "op-new-delete"
+   ]
+  },
+  "interview": {
+   "think": "Always split the expression into its allocation and construction steps.",
+   "advancedTitle": "Advanced follow-up: new[]/delete mismatches and per-class overloads",
+   "followUp": "q013"
+  },
+  "recall": [
+   [
+    "What does new(std::nothrow) do on failure?",
+    "Returns nullptr instead of throwing std::bad_alloc."
+   ],
+   [
+    "Why can a new[]/delete mismatch appear to work in debug builds?",
+    "Allocator padding and debug heaps can hide the corruption until later."
+   ],
+   [
+    "What replaces new[] in modern code?",
+    "std::vector (or std::make_unique<T[]>(n))."
+   ]
+  ]
+ },
+ "malloc-free": {
+  "orientation": {
+   "what": "malloc/free versus new/delete: raw bytes versus typed objects, why the families must never be mixed, and when malloc is still the right call.",
+   "why": "malloc never runs constructors and free never runs destructors, and mixing allocator families is undefined behavior — mainly relevant when wrapping C APIs.",
+   "outcomes": [
+    "Explain what malloc does and doesn't do",
+    "Know why mixing new/free or malloc/delete is undefined behavior",
+    "Construct and destroy objects in malloc'd memory correctly",
+    "Wrap C-allocated buffers with unique_ptr and a custom deleter"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~20–25 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: bytes versus objects",
+    "intro": "What each family does:",
+    "stages": [
+     {
+      "name": "malloc(n)",
+      "io": "bytes only",
+      "note": "Aligned to max_align_t, uninitialized, no constructor."
+     },
+     {
+      "name": "placement new",
+      "io": "construct in them",
+      "note": "The only way to create an object in malloc'd memory."
+     },
+     {
+      "name": "~T()",
+      "io": "destroy explicitly",
+      "note": "free won't run destructors."
+     },
+     {
+      "name": "free(p)",
+      "io": "release bytes",
+      "note": "Only for pointers from malloc/calloc/realloc — never from new."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "malloc and free deal in raw bytes; they never construct or destroy C++ objects.",
+     "Never mix the families: free on a new'd pointer and delete on a malloc'd one are both undefined behavior.",
+     "Use malloc/free only for C interop, and give the pointer to the C library's free function via a unique_ptr custom deleter."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "An empty shipping container versus a furnished one",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <cstdlib>\n#include <string>\n\nauto* s = static_cast<std::string*>(std::malloc(sizeof(std::string)));\n*s = \"hi\";   // assign to it",
+    "q": "What happens?",
+    "options": [
+     [
+      "A",
+      "It works: s now holds \"hi\""
+     ],
+     [
+      "B",
+      "Compile error"
+     ],
+     [
+      "C",
+      "Undefined behavior: no std::string object exists there yet"
+     ],
+     [
+      "D",
+      "A memory leak, but otherwise fine"
+     ]
+    ],
+    "reveal": [
+     "C — undefined behavior.",
+     "malloc only gave you bytes; no std::string constructor has run, so there is no object to assign to.",
+     "operator= reads the garbage internal pointer and size as if they were valid.",
+     "Construct first with new (s) std::string(\"hi\"), and call s->~basic_string() before free(s)."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Full example",
+    "title": "The example",
+    "intro": "Correct C interop, and using malloc'd memory for a C++ object safely:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: what the allocator does",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Does malloc run a constructor?",
+    "No; it returns uninitialized bytes."
+   ],
+   [
+    "Why is free() on a pointer from new undefined behavior?",
+    "The two may use different allocators and metadata, and no destructor runs."
+   ],
+   [
+    "When is malloc/free legitimate in C++?",
+    "When a C API allocates or frees the buffer; match whatever allocator the API documents."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Allocator headers and alignment",
+     "hint": "ptmalloc chunks, max_align_t",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: wrapping C libraries",
+     "hint": "unique_ptr with a free deleter",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "new-delete",
+    "placement-new",
+    "custom-deleters"
+   ]
+  },
+  "interview": {
+   "think": "Ask whether a constructor has ever run on those bytes.",
+   "advancedTitle": "Advanced follow-up: N objects in a malloc'd buffer"
+  },
+  "recall": [
+   [
+    "Why must realloc never be used on non-trivially-copyable objects?",
+    "It may move the block with a raw byte copy, bypassing copy/move constructors."
+   ],
+   [
+    "What does malloc guarantee about alignment?",
+    "alignof(std::max_align_t); over-aligned types need std::aligned_alloc or operator new with alignment."
+   ],
+   [
+    "How do you free a C buffer automatically?",
+    "Wrap it in std::unique_ptr with a deleter that calls free, for example struct FreeDeleter { void operator()(void* p) const { std::free(p); } };"
+   ]
+  ]
+ },
+ "memory-leaks": {
+  "orientation": {
+   "what": "Memory leaks: memory that is still allocated but no longer reachable — how they happen with raw pointers and with shared_ptr cycles, and how to find them.",
+   "why": "Leaks don't corrupt data; they slowly exhaust memory in long-running services. Smart pointers prevent most of them, but not reference cycles.",
+   "outcomes": [
+    "Define a leak precisely",
+    "Spot the early-return leak and fix it with RAII",
+    "Explain and break a shared_ptr cycle",
+    "Find a slow leak in production"
+   ],
+   "firstPass": "~10–15 min",
+   "laterPass": "~20–25 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: the last pointer disappears",
+    "intro": "How a block becomes a leak:",
+    "stages": [
+     {
+      "name": "Allocate",
+      "io": "one owner",
+      "note": "p points to the new block."
+     },
+     {
+      "name": "Lose the pointer",
+      "io": "early return, overwrite, owner destroyed",
+      "note": "No pointer to the block remains, but it was never freed."
+     },
+     {
+      "name": "Leaked",
+      "io": "unreachable forever",
+      "note": "Nothing can free it until the process exits."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "A leak is memory that was never freed and can no longer be reached.",
+     "RAII (unique_ptr, containers) frees on every exit path, which removes the classic early-return and exception leaks.",
+     "shared_ptr can still leak through reference cycles; make one side of the cycle a weak_ptr."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Paying rent on a storage unit whose key you lost",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <iostream>\n#include <memory>\nstruct B;\nstruct A { std::shared_ptr<B> b; ~A() { std::cout << \"~A \"; } };\nstruct B { std::shared_ptr<A> a; ~B() { std::cout << \"~B \"; } };\n\nint main() {\n    {\n        auto x = std::make_shared<A>();\n        auto y = std::make_shared<B>();\n        x->b = y;\n        y->a = x;\n    }\n    std::cout << \"end\";\n}",
+    "q": "What does this print?",
+    "options": [
+     [
+      "A",
+      "~A ~B end"
+     ],
+     [
+      "B",
+      "~B ~A end"
+     ],
+     [
+      "C",
+      "end"
+     ],
+     [
+      "D",
+      "end ~A ~B"
+     ]
+    ],
+    "reveal": [
+     "C — only end.",
+     "When x and y go out of scope, each object is still owned by the other, so both counts stay at 1.",
+     "Neither destructor ever runs: both objects leak.",
+     "Change one member to std::weak_ptr and both are destroyed at the closing brace."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "An early-return leak and its RAII fix:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: how memory becomes unreachable",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What is a memory leak?",
+    "Allocated memory that is no longer reachable by any pointer and was never freed."
+   ],
+   [
+    "Can a program that only uses smart pointers leak?",
+    "Yes, through shared_ptr reference cycles."
+   ],
+   [
+    "Is an ever-growing cache a leak?",
+    "Not technically — it's reachable — but it causes the same symptom and needs an eviction policy."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Leaked versus dangling",
+     "hint": "inert waste versus corruption",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: cycles are the modern leak",
+     "hint": "observers, parent/child links",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "dangling-pointers",
+    "weak-ptr",
+    "ref-counting-cycles",
+    "asan"
+   ]
+  },
+  "interview": {
+   "think": "Ask whether any pointer can still reach the memory.",
+   "advancedTitle": "Advanced follow-up: finding a slow leak in a running service",
+   "followUp": "q042"
+  },
+  "recall": [
+   [
+    "Which tools find leaks?",
+    "LeakSanitizer (-fsanitize=address) and Valgrind for tests; heaptrack or tcmalloc/jemalloc heap profiling for running services."
+   ],
+   [
+    "Does the OS reclaim leaked memory at exit?",
+    "Yes, which is why leaks mostly matter in long-running processes."
+   ],
+   [
+    "Which side of a parent/child cycle should be weak_ptr?",
+    "Usually the back-pointer from child to parent."
    ]
   ]
  }
