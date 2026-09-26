@@ -1527,14 +1527,14 @@ DEEP_CONTENT['virtual-functions'] = {
   def:"A virtual function is a member function that resolves to the *most-derived* override at runtime, based on the dynamic type of the object, rather than the compile-time (static) type of the pointer/reference used to call it.",
   why:"It's the mechanism that makes runtime polymorphism possible: code written against a `Shape*` can correctly call `Circle::draw()` or `Square::draw()` without ever knowing which concrete type it holds, so you can add new shapes later without touching the calling code.",
   analogy:"Think of a virtual function like a job title with an unknown employee behind it. You send a request to 'whoever holds the Manager title' — you don't need to know it's specifically Priya today and Sam tomorrow. The company directory (the vtable) is what actually resolves the title to the right person at the moment you knock.",
-  code:`class Shape {\npublic:\n    virtual void draw() const { std::cout << "Shape\\n"; }\n    virtual ~Shape() = default;   // ALWAYS virtual if base is polymorphic\n};\nclass Circle : public Shape {\npublic:\n    void draw() const override { std::cout << "Circle\\n"; }\n};\n\nvoid render(const Shape& s) { s.draw(); }  // doesn't know or care which shape\n\nint main() {\n    Shape* s = new Circle();\n    s->draw();     // prints "Circle" — resolved at RUNTIME via the vtable\n    render(*s);    // also "Circle" — same mechanism through a reference\n    delete s;      // runs ~Circle then ~Shape, thanks to the virtual destructor\n}`,
+  code:`#include <iostream>\n\nclass Shape {\npublic:\n    virtual void draw() const { std::cout << "Shape\\n"; }\n    virtual ~Shape() = default;   // ALWAYS virtual if base is polymorphic\n};\nclass Circle : public Shape {\npublic:\n    void draw() const override { std::cout << "Circle\\n"; }\n};\n\nvoid render(const Shape& s) { s.draw(); }  // doesn't know or care which shape\n\nint main() {\n    Shape* s = new Circle();\n    s->draw();     // prints "Circle" — resolved at RUNTIME via the vtable\n    render(*s);    // also "Circle" — same mechanism through a reference\n    delete s;      // runs ~Circle then ~Shape, thanks to the virtual destructor\n}`,
   steps:[
     "Because `Shape` declares at least one `virtual` function, the compiler gives every `Shape`-derived object a hidden pointer (the vptr), usually as the object's first field.",
     "`s->draw()` compiles to: read `s`'s vptr → index into the vtable it points to → call the function pointer stored at `draw`'s slot.",
     "Which vtable the vptr points to was decided when the object was *constructed* (`Circle`'s constructor sets it to `Circle`'s vtable) — not at the call site.",
     "Because the lookup happens through data (the vptr), not through the static type of the pointer/reference, `Shape*` and `Circle*` produce identical behavior for the same object."
   ],
-  memory:"```\nCircle object layout:\n+------------------+\n| vptr             | ---> Circle's vtable: [ &Circle::draw, &Circle::~Circle ]\n+------------------+\n| Shape's fields... |\n| Circle's fields...|\n+------------------+\n```\nEvery polymorphic object pays one pointer (8 bytes on 64-bit) for the vptr, and every virtual call pays one extra pointer dereference plus an indirect call compared to a plain function call — small, but not free, which matters in hot loops (see 'virtual function overhead').",
+  memory:"```\nCircle object layout:\n+------------------+\n| vptr             | ---> Circle's vtable: [ &Circle::draw, &Circle::~Circle ]\n+------------------+\n| Shape's fields... |\n| Circle's fields...|\n+------------------+\n```\nThe diagram is simplified: on the Itanium ABI (GCC, Clang) the vtable also holds an offset-to-top entry and a pointer to the type_info before the function slots, and has two destructor entries (complete-object and deleting); MSVC uses a single 'scalar deleting destructor' entry. Every polymorphic object pays one pointer (8 bytes on 64-bit) for the vptr, and every virtual call pays one extra pointer dereference plus an indirect call compared to a plain function call — small, but not free, which matters in hot loops (see 'virtual function overhead').",
   realWorld:"GUI frameworks (`Widget::paint()`), game engines (`Entity::update()`), plugin architectures, and any 'strategy object' passed through a base-class pointer all rely on virtual dispatch. Interfaces in C++ (pure abstract classes) are built entirely out of virtual functions.",
   mistake:"Forgetting `virtual` on the base class destructor. `Shape* s = new Circle(); delete s;` then only calls `~Shape()`, never `~Circle()` — any resources `Circle` owns leak, and this is one of the most common real-world C++ bugs in inheritance hierarchies.",
   interviewQ:{q:"What is the performance cost of a virtual function call?", a:"One extra memory load (fetch the vptr from the object, then fetch the function pointer from the vtable) plus an indirect call instead of a direct one — the indirect call also defeats inlining in most cases, which is often the bigger cost in practice than the dereference itself, since inlining is what enables further compiler optimizations."},
@@ -6941,14 +6941,14 @@ DEEP_CONTENT['encapsulation'] = {
   def: "Encapsulation in C++ is enforced entirely by the compiler at COMPILE TIME through the public/protected/private access specifiers, which control which pieces of CODE (not which running processes or users) are allowed to reference a given member by name during compilation. It has zero runtime representation and zero effect on object layout — a private int and a public int occupy identical memory in identical positions; the ONLY difference is whether code outside the class (or outside the class-plus-friends-plus-derived-classes, for protected) is permitted to name that member in source code that successfully compiles.",
   why: "Because access control is purely a compile-time, name-lookup-level check, it protects a class's invariants against ACCIDENTAL misuse by well-behaved calling code (typos, forgetting a validation step, reaching into internals that were meant to be an implementation detail) — it is not, and was never designed to be, a security boundary against adversarial code: any code with a pointer to the object's memory and knowledge (or a guess) of the class's layout can use reinterpret_cast, memcpy, or even the classic '#define private public' trick before including a header to read or write 'private' data directly, and none of that is caught at runtime because there IS no runtime check to catch it.",
   analogy: "A private/protected member is like an 'Employees Only' sign on an office door — it's a social and procedural convention: ordinary visitors and the compiler (acting like a normal, rule-following building occupant) simply won't walk through it, and this stops the vast majority of accidental wandering-in. But the sign is not a locked vault door: someone who genuinely wants past it (a determined attacker, or a `reinterpret_cast`-wielding engineer) can still physically walk through, because there's no actual barrier there, only a label everyone conventionally agrees to respect.",
-  code: "class BankAccount {\npublic:\n    BankAccount(double balance) : balance_(balance) {}\n    // ANTI-PATTERN: a getter/setter pair that mirrors the private member exactly,\n    // with no invariant enforcement, provides NO benefit over making balance_ public:\n    double getBalance() const { return balance_; }\n    void setBalance(double b) { balance_ = b; }   // accepts ANY value, including negative!\nprivate:\n    double balance_;\n};\n\nclass BankAccountDoneRight {\npublic:\n    BankAccountDoneRight(double balance) : balance_(balance) {}\n    double getBalance() const { return balance_; }\n    // A real setter ENFORCES an invariant -- this is what encapsulation is actually for:\n    bool deposit(double amount) {\n        if (amount <= 0) return false;   // reject invalid input, protect the invariant\n        balance_ += amount;\n        return true;\n    }\nprivate:\n    double balance_;\n};\n\n// 'private' is a compile-time name-lookup rule only -- it is NOT a memory barrier:\nstruct Layout {\n    Layout(int x, int y) : a(x), b(y) {}  // a private member means no aggregate init\n    int a;\nprivate:\n    int b;\n};\nint main() {\n    Layout obj{1, 2};\n    int* sneaky = reinterpret_cast<int*>(&obj) + 1;  // computes the address of 'b' by hand\n    std::cout << *sneaky; // compiles and runs (UB per the standard, but no runtime check stops it):\n                          // proof that private is enforced by the compiler's name checker, not by hardware\n}",
+  code: "#include <iostream>\n\nclass BankAccount {\npublic:\n    BankAccount(double balance) : balance_(balance) {}\n    // ANTI-PATTERN: a getter/setter pair that mirrors the private member exactly,\n    // with no invariant enforcement, provides NO benefit over making balance_ public:\n    double getBalance() const { return balance_; }\n    void setBalance(double b) { balance_ = b; }   // accepts ANY value, including negative!\nprivate:\n    double balance_;\n};\n\nclass BankAccountDoneRight {\npublic:\n    BankAccountDoneRight(double balance) : balance_(balance) {}\n    double getBalance() const { return balance_; }\n    // A real setter ENFORCES an invariant -- this is what encapsulation is actually for:\n    bool deposit(double amount) {\n        if (amount <= 0) return false;   // reject invalid input, protect the invariant\n        balance_ += amount;\n        return true;\n    }\nprivate:\n    double balance_;\n};\n\n// 'private' is a compile-time name-lookup rule only -- it is NOT a memory barrier:\nstruct Layout {\n    Layout(int x, int y) : a(x), b(y) {}  // a private member means no aggregate init\n    int a;\nprivate:\n    int b;\n};\nint main() {\n    Layout obj{1, 2};\n    int* sneaky = reinterpret_cast<int*>(&obj) + 1;  // computes the address of 'b' by hand\n    std::cout << *sneaky; // compiles and runs (UB per the standard, but no runtime check stops it):\n                          // proof that private is enforced by the compiler's name checker, not by hardware\n}",
   steps: [
     "obj.b = 5; where b is private fails to COMPILE — the compiler's name-lookup phase sees 'b' is not accessible from this context and refuses to generate any code at all; nothing runs, nothing is checked at runtime.",
     "reinterpret_cast<int*>(&obj) + 1 instead computes a raw address by pointer arithmetic, entirely bypassing name lookup — the compiler has no way to know, and no obligation to check, that this address happens to coincide with a private member, so it happily generates the load/store instructions.",
     "At runtime, the CPU executes those instructions exactly as it would for any other memory access — there is no hardware or runtime flag distinguishing 'private' memory from 'public' memory; the distinction genuinely only existed at compile time, in the compiler's symbol table, and vanished the moment machine code was generated.",
     "This demonstrates concretely that private/protected/public access control is a language-level, compile-time-only discipline enforced by the compiler's front end, not a property the object itself carries at runtime."
   ],
-  memory: "Access specifiers have zero effect on the layout, size, or alignment of an object — a class with all-public members and an otherwise identical class with all-private members produce byte-for-byte identical object layouts. The standard does guarantee that members declared within the SAME access-specifier region (a run of members under one 'public:'/'private:'/'protected:' label) preserve their declaration order in memory, but the relative order of members across DIFFERENT access-specifier regions (e.g. whether a private member declared after a public block ends up physically before or after that public block) was unspecified before C++23; C++23 (P1847) now requires declaration order regardless of access specifiers, codifying what mainstream compilers already did.",
+  memory: "Access specifiers have zero effect on the layout, size, or alignment of an object — a class with all-public members and an otherwise identical class with all-private members produce byte-for-byte identical object layouts. The standard does guarantee that members with the SAME access control preserve their declaration order in memory (C++11 through C++20; C++03 guaranteed it only within one run under a single access-specifier label), but the relative order of members with DIFFERENT access control (e.g. whether a private member declared after a public block ends up physically before or after that public block) was unspecified before C++23; C++23 (P1847) now requires declaration order regardless of access specifiers, codifying what mainstream compilers already did.",
   realWorld: "A well-encapsulated BankAccount class hides whether balance_ is stored as a double, a fixed-point integer of cents, or an arbitrary-precision decimal type — client code that only ever calls getBalance()/deposit() never has to change when the internal representation is swapped for a more precise one, which is the actual practical payoff encapsulation is meant to deliver: implementation change without client breakage.",
   mistake: "Mechanically writing a public getter and a public setter for every single private data member (the 'JavaBean-style accessor' anti-pattern) — this exposes exactly the same read/write surface as making the member public outright, just with extra syntax, and provides none of encapsulation's real benefit (enforcing invariants, hiding representation) because the setter accepts and stores whatever it's given with no validation, and the getter returns the raw internal value with no abstraction over it.",
   interviewQ: {
@@ -6957,7 +6957,7 @@ DEEP_CONTENT['encapsulation'] = {
   },
   advancedQ: {
     q: "Does the C++ standard guarantee anything about the relative memory order of a class's private members versus its public members?",
-    a: "No cross-region guarantee: the standard only guarantees that non-static data members declared within a SINGLE access-specifier region (one contiguous run under one 'public:', 'private:', or 'protected:' label, with no intervening access-specifier keyword) appear in memory in their declaration order relative to EACH OTHER. Before C++23 it left the relative ordering of members across DIFFERENT access-specifier regions unspecified (C++23, via P1847, now requires full declaration order regardless of access specifiers) — meaning a class with 'public: int a; private: int b; public: int c;' does not, per the standard, guarantee that a comes before b comes before c in memory; a conforming compiler is free to place them in a different physical order (though in practice most mainstream compilers preserve full declaration order regardless of access-specifier boundaries, this is a quality-of-implementation choice, not a standard mandate)."
+    a: "No cross-access guarantee before C++23: C++11 through C++20 only guarantee that non-static data members with the SAME access control appear in memory in their declaration order relative to EACH OTHER (C++03 was stricter still: only members within a single run under one access-specifier label). Before C++23 it left the relative ordering of members across DIFFERENT access-specifier regions unspecified (C++23, via P1847, now requires full declaration order regardless of access specifiers) — meaning a class with 'public: int a; private: int b; public: int c;' does not, per the standard, guarantee that a comes before b comes before c in memory; a conforming compiler is free to place them in a different physical order (in practice GCC, Clang and MSVC always preserved full declaration order regardless of access specifiers; before C++23 that was a quality-of-implementation choice, and C++23 made it a requirement)."
   },
   traps: [
     "Writing a trivial getter/setter pair for every private member ('encapsulation theater') that exposes an identical read/write surface to making the member public, with zero invariant enforcement gained.",
@@ -6971,7 +6971,7 @@ DEEP_CONTENT['abstraction'] = {
   def: "Abstraction is the design discipline of exposing only the essential, stable 'what' of a component through its public interface while hiding the volatile 'how' of its implementation behind that interface. In C++ the primary language mechanism for runtime abstraction is the abstract base class built from pure virtual functions — client code programs against Base*/Base& and never needs to know, or be recompiled when, the concrete implementation behind that pointer changes. A second, compile-time-only mechanism is the pimpl (pointer to implementation) idiom, which hides a class's actual data representation behind an opaque forward-declared pointer so that even the private implementation details never appear in the public header at all.",
   why: "Abstraction is what lets a large codebase change one component's implementation without forcing every caller to change, recompile against new internals, or even know a change happened — it is the mechanism that turns 'is-a substitutable design' (via virtual dispatch) and 'compile-time firewalling' (via pimpl) into genuine decoupling between teams and modules, which is the entire reason large C++ systems remain maintainable as they grow.",
   analogy: "A car's steering wheel and pedals are the abstraction a driver interacts with — press the accelerator and the car goes faster, regardless of whether 'faster' is being produced by a gasoline engine, a diesel engine, or an electric motor underneath. The driver's interface (the essential 'what': accelerate, brake, steer) never has to change even if the manufacturer completely swaps out the entire drivetrain (the 'how') between model years — that swap is invisible to anyone who only ever interacts through the pedals and wheel.",
-  code: "// Abstraction via an abstract base class -- clients only ever see the interface:\nclass Shape {\npublic:\n    virtual ~Shape() = default;\n    virtual double area() const = 0;       // WHAT: 'give me the area' -- HOW is hidden\n};\nclass Circle : public Shape {\npublic:\n    Circle(double r) : r_(r) {}\n    double area() const override { return 3.14159 * r_ * r_; }  // HOW, hidden from callers\nprivate:\n    double r_;\n};\nvoid printArea(const Shape& s) {   // this function is fully abstracted from concrete types\n    std::cout << s.area();          // works for ANY current or future Shape subclass\n}\n\n// Abstraction via pimpl -- hides representation even from the header/compile unit:\n// widget.h\nclass Widget {\npublic:\n    Widget();\n    ~Widget();          // must be declared (defined in .cpp) since Impl is incomplete here\n    void doWork();\nprivate:\n    struct Impl;         // only FORWARD declared -- callers of Widget.h see no internal fields at all\n    std::unique_ptr<Impl> pImpl_;\n};",
+  code: "#include <iostream>\n#include <memory>\n\n// Abstraction via an abstract base class -- clients only ever see the interface:\nclass Shape {\npublic:\n    virtual ~Shape() = default;\n    virtual double area() const = 0;       // WHAT: 'give me the area' -- HOW is hidden\n};\nclass Circle : public Shape {\npublic:\n    Circle(double r) : r_(r) {}\n    double area() const override { return 3.14159 * r_ * r_; }  // HOW, hidden from callers\nprivate:\n    double r_;\n};\nvoid printArea(const Shape& s) {   // this function is fully abstracted from concrete types\n    std::cout << s.area();          // works for ANY current or future Shape subclass\n}\n\n// Abstraction via pimpl -- hides representation even from the header/compile unit:\n// widget.h\nclass Widget {\npublic:\n    Widget();\n    ~Widget();          // must be declared (defined in .cpp) since Impl is incomplete here\n    void doWork();\nprivate:\n    struct Impl;         // only FORWARD declared -- callers of Widget.h see no internal fields at all\n    std::unique_ptr<Impl> pImpl_;\n};",
   steps: [
     "printArea(s) is compiled once, referring only to Shape's interface — the compiler emits a virtual call through s's vptr without ever needing to know Circle exists.",
     "At runtime, s's vptr (set during whichever concrete object's construction actually happened) is followed to that concrete class's vtable, and area()'s slot is invoked — Circle::area() runs even though printArea's source code never mentions Circle.",
@@ -7008,8 +7008,8 @@ DEEP_CONTENT['inheritance'] = {
     "Inside PrivateDerived's own member functions, pub() and prot() are both fully callable (private access is still access, just restricted to the class's own scope) — this is what 'private inheritance grants access to the base's implementation without exposing an is-a relationship' means concretely.",
     "A further class 'GrandChild : public PrivateDerived' cannot call pub() or prot() through its PrivateDerived base subobject at all — those names became private in PrivateDerived and private members are not inherited-and-visible any further down the chain, unlike protected members which DO remain visible to further derived classes."
   ],
-  memory: "In single inheritance, a derived class's object layout places the base class subobject first (typically at offset 0), followed by the derived class's own newly-added data members — 'class D : public B { int extra; };' lays out as [B subobject bytes][extra], and a D* can be implicitly converted to a B* by simply reinterpreting the SAME address (no offset adjustment needed) precisely because the base subobject starts at offset 0. This layout is identical regardless of whether the inheritance keyword is public, protected, or private — the ACCESS transformation the keyword applies is a purely compile-time, name-lookup-level rule and has zero effect on the actual memory layout or the offset calculations the compiler performs.",
-  realWorld: "Many older or performance-focused codebases use private inheritance from a stateless base specifically for Empty Base Optimization (EBO) — e.g. a custom smart pointer class privately inheriting from an empty custom deleter/allocator class so that the deleter contributes zero bytes to the smart pointer's size, something composition (a deleter data member) generally cannot achieve without compiler-specific attributes. Public inheritance is used pervasively for polymorphic interface hierarchies (GUI widget hierarchies, exception hierarchies) where Liskov substitution through base pointers is the entire point.",
+  memory: "In single inheritance, a derived class's object layout places the base class subobject first (typically at offset 0), followed by the derived class's own newly-added data members — 'class D : public B { int extra; };' lays out as [B subobject bytes][extra], and a D* can be implicitly converted to a B* by simply reinterpreting the SAME address (no offset adjustment needed) precisely because the base subobject starts at offset 0. (Exception on the Itanium ABI used by GCC and Clang, and on MSVC: if B has no virtual functions but D adds one, D's vptr goes first and the B subobject moves to offset 8 on 64-bit, so the D*-to-B* conversion does adjust the address. The standard itself only guarantees offset 0 for standard-layout classes.) This layout is identical regardless of whether the inheritance keyword is public, protected, or private — the ACCESS transformation the keyword applies is a purely compile-time, name-lookup-level rule and has zero effect on the actual memory layout or the offset calculations the compiler performs.",
+  realWorld: "Many older or performance-focused codebases use private inheritance from a stateless base specifically for Empty Base Optimization (EBO) — e.g. a custom smart pointer class privately inheriting from an empty custom deleter/allocator class so that the deleter contributes zero bytes to the smart pointer's size, something composition (a deleter data member) could not achieve before C++20's [[no_unique_address]] (which GCC and Clang honor, while MSVC needs its own [[msvc::no_unique_address]]). Public inheritance is used pervasively for polymorphic interface hierarchies (GUI widget hierarchies, exception hierarchies) where Liskov substitution through base pointers is the entire point.",
   mistake: "Reaching for public inheritance purely to reuse a class's functions ('Stack inherits publicly from Vector so it gets push_back for free') when there is no genuine is-a relationship — this exposes the ENTIRE base interface (including operations like insert-in-the-middle or erase-at-index that violate the derived class's intended invariants, like a stack only ever growing/shrinking at one end) to every caller holding a Base*, silently breaking Liskov substitution and letting client code corrupt the derived class's supposed guarantees through operations the derived class never meant to offer.",
   interviewQ: {
     q: "What is the practical difference between private inheritance and composition (having a Base object as a private data member), and is there ever a real reason to prefer private inheritance?",
@@ -7031,7 +7031,7 @@ DEEP_CONTENT['composition'] = {
   def: "Composition models a strong 'has-a' relationship by embedding one class's object directly as a non-static data member (by value) of another class, so the composed (contained) object's lifetime is entirely bound to the containing object's lifetime — it's constructed as part of the container's construction (before the container's own constructor body runs) and destroyed as part of the container's destruction (in reverse declaration order), and it never exists independently of, or is shared between, multiple containers.",
   why: "'Favor composition over inheritance' is genuine senior-level advice, not dogma, because public inheritance is the TIGHTEST coupling relationship available in C++: it exposes a base's entire protected interface to every derived class forever, ties every derived class's binary layout to the base's layout (the fragile base class problem — changing a base's data members or virtual function set can silently break the memory layout assumptions baked into already-compiled derived classes, especially across shared-library version boundaries), and commits to that relationship at compile time with no way to swap implementations at runtime. Composition, by contrast, is loosely coupled (the composed object's implementation can change freely as long as its own interface stays stable), can be swapped for a different implementation at runtime (holding a pointer/reference to an interface — the classic Strategy pattern), and completely sidesteps multiple-inheritance diamond problems since composed members never participate in the containing class's own inheritance hierarchy.",
   analogy: "A car HAS an engine (composition) — the engine is a real, physical component bolted into the car, created when the car is assembled and scrapped when the car is scrapped, and a mechanic can swap in a different engine MODEL entirely without changing what fundamentally makes the vehicle 'a car'. Contrast this with a car BEING a vehicle (inheritance) — you cannot swap what 'vehicle' means for one specific car without it rippling through the definition every vehicle subtype shares; inheritance commits you to a shared, compile-time-fixed foundation, while composition lets you swap out a self-contained part.",
-  code: "// Tight coupling via inheritance -- Car is now permanently 'is-a' Engine, which makes no sense,\n// and Car cannot swap engines at runtime:\nclass Engine { public: virtual void start() { std::cout << \"vroom\"; } virtual ~Engine()=default; };\nclass BadCar : public Engine {};   // WRONG relationship: a Car is not an Engine\n\n// Composition -- Car HAS-an Engine, loosely coupled, swappable:\nclass IEngine { public: virtual void start() = 0; virtual ~IEngine() = default; };\nclass GasEngine   : public IEngine { public: void start() override { std::cout << \"vroom\"; } };\nclass ElectricEngine : public IEngine { public: void start() override { std::cout << \"whirr\"; } };\n\nclass Car {\npublic:\n    // dependency injected -- Car doesn't even need to know which concrete engine it got\n    explicit Car(std::unique_ptr<IEngine> engine) : engine_(std::move(engine)) {}\n    void start() { engine_->start(); }\nprivate:\n    std::unique_ptr<IEngine> engine_;   // owned, lifetime tied to Car -- destroyed when Car is\n};\n\nCar gasCar(std::make_unique<GasEngine>());\nCar evCar(std::make_unique<ElectricEngine>());\n// The SAME Car class works with either engine, chosen at runtime -- inheritance could never do this.",
+  code: "#include <iostream>\n#include <memory>\n#include <utility>\n\n// Tight coupling via inheritance -- Car is now permanently 'is-a' Engine, which makes no sense,\n// and Car cannot swap engines at runtime:\nclass Engine { public: virtual void start() { std::cout << \"vroom\"; } virtual ~Engine()=default; };\nclass BadCar : public Engine {};   // WRONG relationship: a Car is not an Engine\n\n// Composition -- Car HAS-an Engine, loosely coupled, swappable:\nclass IEngine { public: virtual void start() = 0; virtual ~IEngine() = default; };\nclass GasEngine   : public IEngine { public: void start() override { std::cout << \"vroom\"; } };\nclass ElectricEngine : public IEngine { public: void start() override { std::cout << \"whirr\"; } };\n\nclass Car {\npublic:\n    // dependency injected -- Car doesn't even need to know which concrete engine it got\n    explicit Car(std::unique_ptr<IEngine> engine) : engine_(std::move(engine)) {}\n    void start() { engine_->start(); }\nprivate:\n    std::unique_ptr<IEngine> engine_;   // owned, lifetime tied to Car -- destroyed when Car is\n};\n\nCar gasCar(std::make_unique<GasEngine>());\nCar evCar(std::make_unique<ElectricEngine>());\n// The SAME Car class works with either engine, chosen at runtime -- inheritance could never do this.",
   steps: [
     "Car's constructor runs: engine_ (a std::unique_ptr<IEngine> member) is initialized in the initializer list from the argument, taking ownership of whatever concrete IEngine was passed in — no Engine-specific code exists inside Car at all.",
     "Car::start() calls engine_->start(), which dispatches virtually to whichever concrete engine (Gas or Electric) was actually injected — Car's own code never branches on engine type.",
@@ -7039,7 +7039,7 @@ DEEP_CONTENT['composition'] = {
     "Swapping evCar to use a different engine implementation requires zero changes to the Car class itself — only the construction call site changes, demonstrating the loose coupling composition buys over hardcoding a specific engine via inheritance."
   ],
   memory: "When composition embeds an object BY VALUE (e.g. 'Engine engine_;' as a plain member, not a pointer), the composed object's bytes are laid out CONTIGUOUSLY inside the containing object — Car's memory literally contains Engine's bytes inline, with no extra indirection or separate allocation, exactly like a base class subobject's layout but without any of inheritance's access-transformation or vtable-sharing implications. When composition uses a pointer/unique_ptr (as in the example above, needed here because the concrete type is chosen at runtime and only known through the IEngine interface), the containing object stores only the pointer inline (8 bytes) and the actual engine object lives in a separate heap allocation — an explicit tradeoff of one indirection and one allocation in exchange for runtime polymorphism/swappability.",
-  realWorld: "std::vector itself is a textbook composition example: internally it composes a pointer, a size, and a capacity (and an allocator) — conceptually those are owned parts, not an is-a relationship (an implementation may privately inherit a helper base to get the empty-base optimization for the allocator, but that is an implementation detail, not public inheritance). GUI frameworks favor composing a Renderer/backend object into a Window class (rather than Window inheriting from a specific rendering backend) specifically so the same Window class can work with an OpenGL, Vulkan, or software renderer chosen at startup or runtime.",
+  realWorld: "std::vector itself is a textbook composition example: conceptually it composes a pointer, a size, and a capacity (and an allocator) — libstdc++, libc++ and Microsoft's STL all actually store three pointers (begin, end, end of capacity) — conceptually those are owned parts, not an is-a relationship (an implementation may privately inherit a helper base to get the empty-base optimization for the allocator, but that is an implementation detail, not public inheritance). GUI frameworks favor composing a Renderer/backend object into a Window class (rather than Window inheriting from a specific rendering backend) specifically so the same Window class can work with an OpenGL, Vulkan, or software renderer chosen at startup or runtime.",
   mistake: "Reaching for inheritance purely to reuse a utility class's functionality ('inherit from Logger to get log()') — this couples the inheriting class's entire public interface to Logger's interface (every caller can now call log() directly on the object, whether or not that's intended), and becomes especially painful the moment a class needs to reuse TWO such unrelated utility classes, forcing multiple inheritance and its associated diamond/ambiguity risks purely to avoid writing 'Logger logger_;' as a plain composed member.",
   interviewQ: {
     q: "Why is 'favor composition over inheritance' considered senior-level advice rather than an absolute rule?",
@@ -7061,7 +7061,7 @@ DEEP_CONTENT['aggregation'] = {
   def: "Aggregation is the WEAKER form of 'has-a', distinguished from composition by lifetime independence: the container holds a reference or pointer to an object it does not own, did not create, and will not destroy — the aggregated object is created independently (often before the container even exists), can be shared across multiple containers simultaneously, and continues to exist unaffected after the container holding a reference to it is destroyed. Composition, by contrast, ties the contained object's entire lifetime to the container's (created with it, destroyed with it, never shared).",
   why: "Getting aggregation vs composition right avoids two distinct, opposite bug classes: modeling a true aggregation relationship as composition causes premature destruction (destroying a shared object that other code still needs) or unnecessary deep copies of something meant to be shared; modeling a true composition relationship as aggregation (holding a bare, non-owning reference to something nobody is actually responsible for) causes dangling pointers, use-after-free, or leaks because no single piece of code has clear ownership responsibility for the object's lifetime.",
   analogy: "A university Department aggregates Professor objects: professors exist before the department was ever founded, can transfer to a different department, and remain fully alive and employed if their department is dissolved — the department never created a professor and has no business destroying one. Contrast this with a Car composing an Engine: the engine is manufactured as part of building that specific car and is scrapped when the car is scrapped; it doesn't pre-exist independently and doesn't get handed off to a different car mid-life the way a professor might transfer departments.",
-  code: "class Professor {\npublic:\n    explicit Professor(std::string name) : name_(std::move(name)) {}\n    const std::string& name() const { return name_; }\nprivate:\n    std::string name_;\n};\n\nclass Department {\npublic:\n    void addProfessor(Professor* p) { professors_.push_back(p); }  // does NOT take ownership\n    ~Department() {\n        // Correctly does nothing to the Professor objects -- Department never owned them.\n        // A composition-style '~Department(){ for (auto* p : professors_) delete p; }' here\n        // would be the classic aggregation-modeled-as-composition bug: it would destroy\n        // professors that ANOTHER department (or main()) still expects to be alive.\n    }\nprivate:\n    std::vector<Professor*> professors_;   // non-owning, raw pointers signal 'aggregation'\n};\n\nint main() {\n    Professor alice(\"Alice\");        // Alice exists independently, created in main\n    Department cs, math;\n    cs.addProfessor(&alice);         // shared across TWO departments -- impossible with composition\n    math.addProfessor(&alice);\n}   // cs and math are destroyed here; alice is untouched and remains valid in main's scope",
+  code: "#include <string>\n#include <utility>\n#include <vector>\n\nclass Professor {\npublic:\n    explicit Professor(std::string name) : name_(std::move(name)) {}\n    const std::string& name() const { return name_; }\nprivate:\n    std::string name_;\n};\n\nclass Department {\npublic:\n    void addProfessor(Professor* p) { professors_.push_back(p); }  // does NOT take ownership\n    ~Department() {\n        // Correctly does nothing to the Professor objects -- Department never owned them.\n        // A composition-style '~Department(){ for (auto* p : professors_) delete p; }' here\n        // would be the classic aggregation-modeled-as-composition bug: it would destroy\n        // professors that ANOTHER department (or main()) still expects to be alive.\n    }\nprivate:\n    std::vector<Professor*> professors_;   // non-owning, raw pointers signal 'aggregation'\n};\n\nint main() {\n    Professor alice(\"Alice\");        // Alice exists independently, created in main\n    Department cs, math;\n    cs.addProfessor(&alice);         // shared across TWO departments -- impossible with composition\n    math.addProfessor(&alice);\n}   // cs and math are destroyed here; alice is untouched and remains valid in main's scope",
   steps: [
     "Professor alice is constructed directly in main() — its lifetime is tied to main's scope, entirely independent of any Department object.",
     "cs.addProfessor(&alice) and math.addProfessor(&alice) both store alice's ADDRESS, not a copy of alice and not ownership of alice — two separate Department objects now hold non-owning pointers to the exact same Professor.",
@@ -7091,7 +7091,7 @@ DEEP_CONTENT['polymorphism'] = {
   def: "C++ has two genuinely distinct mechanisms that both legitimately count as 'polymorphism', and conflating them is a common interview stumble: compile-time (static) polymorphism — function/operator overloading (ad-hoc polymorphism) and templates (parametric polymorphism) — where the compiler resolves exactly which code runs based purely on static types known at compile time, with zero runtime dispatch cost; and runtime (dynamic) polymorphism — virtual functions (subtype polymorphism) — where the actual function invoked is determined at runtime based on the object's dynamic type via a vtable lookup, at the cost of an indirect call.",
   why: "An interviewer asking 'explain polymorphism in C++' is very often testing whether you know it's not just virtual functions — Bjarne Stroustrup himself categorizes C++'s polymorphism into ad-hoc (overloading), parametric (templates), and subtype (virtual dispatch); understanding all three, and specifically WHY templates achieve 'polymorphic-looking' generic code with zero runtime cost (by generating a distinct compiled instantiation per type ahead of time) while virtual functions achieve runtime flexibility at the cost of an indirect call, demonstrates the depth of understanding that separates rote memorization from genuine grasp of C++'s zero-overhead-abstraction philosophy.",
   analogy: "Compile-time polymorphism is like a print shop manufacturing a separate, custom-cut printing plate in advance for each specific paper size it knows it will ever need — once a job comes in, there's zero decision-making at print time because the exact right plate was already chosen and prepared ahead of time for that exact size. Runtime polymorphism is like a single universal printer that reads a barcode on every incoming job, even two jobs of the identical paper size back to back, and looks up which settings to apply EVERY single time before printing — more flexible (it can handle a paper size invented after the printer was built), but it pays a lookup cost on every single job, even repeated identical ones.",
-  code: "// Ad-hoc polymorphism: overload resolution picks the function at COMPILE time\nvoid print(int x)         { std::cout << \"int: \" << x; }\nvoid print(double x)      { std::cout << \"double: \" << x; }\nvoid print(const std::string& x) { std::cout << \"string: \" << x; }\n\n// Parametric polymorphism: the compiler generates a SEPARATE function per type used\ntemplate <typename T>\nT add(T a, T b) { return a + b; }\n// add(1, 2) instantiates add<int>; add(1.5, 2.5) instantiates add<double> --\n// two distinct, fully-optimized, directly-called functions exist in the binary.\n\n// Subtype (runtime) polymorphism: resolved via vtable lookup at RUNTIME\nstruct Shape { virtual double area() const = 0; virtual ~Shape() = default; };\nstruct Circle : Shape { double area() const override { return 3.14159; } };\nstruct Square : Shape { double area() const override { return 4.0; } };\n\nvoid report(const Shape& s) {   // the compiler cannot know at compile time which override runs\n    std::cout << s.area();       // resolved via vptr -> vtable lookup, EVERY call, at runtime\n}",
+  code: "#include <iostream>\n#include <string>\n\n// Ad-hoc polymorphism: overload resolution picks the function at COMPILE time\nvoid print(int x)         { std::cout << \"int: \" << x; }\nvoid print(double x)      { std::cout << \"double: \" << x; }\nvoid print(const std::string& x) { std::cout << \"string: \" << x; }\n\n// Parametric polymorphism: the compiler generates a SEPARATE function per type used\ntemplate <typename T>\nT add(T a, T b) { return a + b; }\n// add(1, 2) instantiates add<int>; add(1.5, 2.5) instantiates add<double> --\n// two distinct, fully-optimized, directly-called functions exist in the binary.\n\n// Subtype (runtime) polymorphism: resolved via vtable lookup at RUNTIME\nstruct Shape { virtual double area() const = 0; virtual ~Shape() = default; };\nstruct Circle : Shape { double area() const override { return 3.14159; } };\nstruct Square : Shape { double area() const override { return 4.0; } };\n\nvoid report(const Shape& s) {   // the compiler cannot know at compile time which override runs\n    std::cout << s.area();       // resolved via vptr -> vtable lookup, EVERY call, at runtime\n}",
   steps: [
     "print(42) and print(3.14) are resolved during COMPILATION by overload resolution matching argument types against the available signatures — by the time the program runs, each call site has already been permanently bound to one specific function address; there is no decision left to make at runtime.",
     "add(1, 2) causes the compiler to instantiate (generate actual machine code for) add<int> during compilation; a separate call add(1.5, 2.5) elsewhere instantiates add<double> as a completely distinct function — both calls become direct, fully inlinable calls, chosen entirely at compile time based on the argument types the compiler saw.",
@@ -7121,7 +7121,7 @@ DEEP_CONTENT['vtable'] = {
   def: "A vtable (virtual table) is a single, per-CLASS (never per-object) static array of function pointers generated once by the compiler for every polymorphic class, with one slot per distinct virtual function reachable from that class, where each slot holds the address of the MOST-DERIVED override of that function applicable to that exact class. Every object of a given class shares the exact same vtable — the table itself typically lives once in the binary's read-only data section, and is not allocated, copied, or freed by any user code at runtime.",
   why: "Recognizing that the vtable is per-class rather than per-object is exactly what explains why virtual dispatch is cheap in memory terms — a class with 50 virtual functions and one million live objects has ONE vtable (50 pointers, a few hundred bytes total) and one million vptrs (8 bytes each), not one million copies of a 50-entry table; it also explains the mechanics of a virtual call precisely: one memory load (object address to fetch the object's vptr) plus one more memory load (index into the vtable at the compile-time-known slot number to fetch the actual function address) plus one indirect call — three steps, versus a single direct-call instruction for a non-virtual function.",
   analogy: "Think of a vtable as a restaurant chain's single, shared laminated menu board bolted to the wall of a specific branch — there's exactly ONE menu board per branch (per class), not one per customer (per object) seated there; every customer at every table just needs to know which wall to glance at (their vptr) to see the current menu. When a new branch location decides to override an item ('the sushi branch replaces the default soup'), it doesn't sneak a sticky-note patch over one item on the ORIGINAL board — it manufactures and hangs its OWN complete replacement menu board with every slot filled in, some copied unchanged from the original chain menu (items it didn't customize) and some replaced with its own version (items it did).",
-  code: "struct Base {\n    virtual void f() { std::cout << \"Base::f\"; }   // vtable slot 0\n    virtual void g() { std::cout << \"Base::g\"; }   // vtable slot 1\n    virtual ~Base() = default;                      // vtable slot 2 (implementation-defined position)\n};\nstruct Derived : Base {\n    void f() override { std::cout << \"Derived::f\"; }   // Derived's slot 0 replaced\n    // g() NOT overridden -- Derived's slot 1 still points at Base::g\n};\n// Conceptually (actual layout/order is implementation-defined, e.g. Itanium ABI):\n// Base::vtable    = [ &Base::f,    &Base::g, &Base::~Base ]\n// Derived::vtable = [ &Derived::f, &Base::g, &Derived::~Derived ]   <- slot 1 falls through unchanged\n\nint main() {\n    Base* b = new Derived();\n    b->f();   // loads b's vptr (points at Derived::vtable since b is really a Derived) --\n              // indexes slot 0 -- calls Derived::f -- prints \"Derived::f\"\n    b->g();   // same vptr, slot 1 -- but Derived's slot 1 still holds &Base::g -- prints \"Base::g\"\n    delete b;\n}",
+  code: "#include <iostream>\n\nstruct Base {\n    virtual void f() { std::cout << \"Base::f\"; }   // vtable slot 0\n    virtual void g() { std::cout << \"Base::g\"; }   // vtable slot 1\n    virtual ~Base() = default;                      // vtable slot 2 (implementation-defined position)\n};\nstruct Derived : Base {\n    void f() override { std::cout << \"Derived::f\"; }   // Derived's slot 0 replaced\n    // g() NOT overridden -- Derived's slot 1 still points at Base::g\n};\n// Conceptually (actual layout/order is implementation-defined, e.g. Itanium ABI):\n// Base::vtable    = [ &Base::f,    &Base::g, &Base::~Base ]\n// Derived::vtable = [ &Derived::f, &Base::g, &Derived::~Derived ]   <- slot 1 falls through unchanged\n\nint main() {\n    Base* b = new Derived();\n    b->f();   // loads b's vptr (points at Derived::vtable since b is really a Derived) --\n              // indexes slot 0 -- calls Derived::f -- prints \"Derived::f\"\n    b->g();   // same vptr, slot 1 -- but Derived's slot 1 still holds &Base::g -- prints \"Base::g\"\n    delete b;\n}",
   steps: [
     "At compile time, the compiler assigns Base's two virtual functions fixed slot numbers (f = slot 0, g = slot 1) and builds Base's vtable as a static array of two function-pointer values, placed once in the binary.",
     "Compiling Derived, the compiler sees Derived overrides f() but not g() — it generates a NEW, separate vtable for Derived: slot 0 is replaced with the address of Derived::f, and slot 1 is simply copied through unchanged as the address of Base::g, since Derived offers no override for it.",
@@ -7134,7 +7134,7 @@ DEEP_CONTENT['vtable'] = {
   mistake: "Confusing the vtable (per-class, shared, one copy total) with the vptr (per-object, one copy per instance) — this single mix-up leads to systematically wrong intuitions about memory cost (believing N objects means N copies of the entire function-pointer table, rather than N cheap 8-byte pointers referencing one shared table) and about mutability (mistakenly believing you could somehow 'patch' a single object's virtual dispatch behavior independent of its class, when in reality the vtable is fixed per class at compile time and shared by every instance).",
   interviewQ: {
     q: "For a hierarchy with one Base class and three Derived classes each overriding at least one virtual function, how many vtables exist in total, and does creating 1,000 objects of one Derived class change that number?",
-    a: "Four vtables exist total — one for Base, and one for each of the three Derived classes (since each overrides something and therefore needs its own distinct table reflecting the override) — regardless of how many objects of any of those classes are ever created. Creating 1,000 objects of one Derived class adds exactly 1,000 vptrs (8 bytes each on a 64-bit system, one per object, pointing at that Derived class's single shared vtable) but adds ZERO additional vtables — the vtable is a compile-time, per-class artifact generated once by the compiler, never generated or duplicated at runtime as objects are created."
+    a: "Four vtables exist total — one for Base, and one for each of the three Derived classes (in practice every polymorphic class gets its own vtable, even one that overrides nothing, because the table also identifies the class's own type_info) — regardless of how many objects of any of those classes are ever created. Creating 1,000 objects of one Derived class adds exactly 1,000 vptrs (8 bytes each on a 64-bit system, one per object, pointing at that Derived class's single shared vtable) but adds ZERO additional vtables — the vtable is a compile-time, per-class artifact generated once by the compiler, never generated or duplicated at runtime as objects are created."
   },
   advancedQ: {
     q: "How does multiple inheritance from two independently-polymorphic base classes complicate vtable layout, and what is a 'thunk' in this context?",
@@ -7152,7 +7152,7 @@ DEEP_CONTENT['vptr'] = {
   def: "The vptr (virtual table pointer) is a hidden, compiler-inserted, per-OBJECT data member — conventionally the very first bytes of the object's layout — that points at the vtable of the object's CURRENT actual type at each moment in its life. Critically, the vptr is written by compiler-generated code inside EVERY constructor along an inheritance chain, once per constructor invocation, always setting it to point at THAT constructor's OWN class's vtable — which means during a multi-level construction (Base then Derived), the same object's vptr genuinely points at a DIFFERENT vtable at different stages, updated progressively as each successive constructor runs.",
   why: "This construction-time detail is exactly what explains the single most commonly-tested C++ gotcha: calling a virtual function from inside a base class's constructor (or destructor) never reaches a derived class's override, even for an object that will ultimately be a Derived — because at the precise moment Base::Base() is executing, the object's vptr has only been set (by Base::Base()'s own compiler-generated prologue) to point at Base's vtable; Derived::Derived() hasn't run yet to overwrite it with Derived's vtable, so the virtual call resolves exactly as if it were a plain, non-virtual call to Base's own version — no compiler error, just quietly 'wrong' behavior relative to what many engineers assume virtual dispatch guarantees.",
   analogy: "Think of object construction as issuing a hard-hat with a name badge in progressive stages on a job site — while Base's constructor is actively running, the object is only wearing an 'I am a Base' badge (vptr pointing at Base's vtable), because that is literally the only stage of construction that has completed at that exact moment; nobody has issued the 'I am a Derived' badge yet. Anyone who reads the badge WHILE Base's constructor is still the one running (any virtual call made from inside it) sees 'Base', full stop — there is no way to see a badge that hasn't been issued yet, even though everyone involved knows the final, fully-built worker will eventually be wearing the Derived badge.",
-  code: "struct Base {\n    Base() { init(); }              // calls a virtual function DURING construction\n    virtual void init() { std::cout << \"Base::init\\n\"; }\n};\nstruct Derived : Base {\n    void init() override { std::cout << \"Derived::init\\n\"; }\n};\nint main() {\n    Derived d;   // prints \"Base::init\", NOT \"Derived::init\" -- surprising to many engineers\n}\n\n// The sizeof cost of adding the FIRST virtual function to a class:\nstruct Empty {};                          // sizeof(Empty) == 1 (unique-address rule, no vptr needed)\nstruct EmptyVirtual { virtual void f(){} };  // sizeof(EmptyVirtual) == 8 on a typical 64-bit ABI --\n                                              // the jump is entirely due to the ONE new vptr\nstruct EmptyVirtual2 { virtual void f(){} virtual void g(){} virtual void h(){} };\n// sizeof(EmptyVirtual2) is STILL the same as EmptyVirtual's -- adding more virtual\n// functions costs zero additional per-object bytes; only the shared vtable grows.",
+  code: "#include <iostream>\n\nstruct Base {\n    Base() { init(); }              // calls a virtual function DURING construction\n    virtual void init() { std::cout << \"Base::init\\n\"; }\n};\nstruct Derived : Base {\n    void init() override { std::cout << \"Derived::init\\n\"; }\n};\nint main() {\n    Derived d;   // prints \"Base::init\", NOT \"Derived::init\" -- surprising to many engineers\n}\n\n// The sizeof cost of adding the FIRST virtual function to a class:\nstruct Empty {};                          // sizeof(Empty) == 1 (unique-address rule, no vptr needed)\nstruct EmptyVirtual { virtual void f(){} };  // sizeof(EmptyVirtual) == 8 on a typical 64-bit ABI --\n                                              // the jump is entirely due to the ONE new vptr\nstruct EmptyVirtual2 { virtual void f(){} virtual void g(){} virtual void h(){} };\n// sizeof(EmptyVirtual2) is STILL the same as EmptyVirtual's -- adding more virtual\n// functions costs zero additional per-object bytes; only the shared vtable grows.",
   steps: [
     "'Derived d;' begins: memory for the full Derived object is reserved (stack, here), sized to accommodate the vptr, Base's data members, and Derived's own data members.",
     "Base::Base() starts executing first (base subobjects always construct before the derived class's own constructor body): its compiler-generated prologue sets d's vptr to point at Base's vtable — this happens BEFORE a single line of Base::Base()'s own written body runs.",
@@ -7183,10 +7183,10 @@ DEEP_CONTENT['virtual-destructor'] = {
   def: "The classic bug: given 'class Base { ~Base(){} };' with a NON-virtual destructor and 'class Derived : public Base { ~Derived(){ /* releases some resource */ } };', executing 'delete basePtr;' where basePtr is a Base* that actually points at a heap-allocated Derived object is undefined behavior — because ~Base() is not virtual, the delete expression resolves which destructor to call STATICALLY, based purely on the pointer's compile-time type (Base*), so ~Derived() never runs at all: Derived's own members are never destroyed, and any resource ~Derived() was responsible for releasing silently leaks (or worse). Any class that will EVER be deleted through a base class pointer needs a virtual destructor — even if that base class is otherwise completely empty.",
   why: "This is one of the most frequently cited C++ interview gotchas precisely because the buggy code compiles cleanly with zero errors and often APPEARS to work in simple manual tests (no crash, just a silent leak that's easy to miss until a resource-exhaustion issue surfaces much later in production) — the fix costs exactly one word per object (adding 'virtual' to the destructor introduces a vptr if the class didn't already have one from some other virtual function) and is mandatory practice for any class ever intended to be deleted polymorphically, which in practice means essentially every base class designed to support runtime polymorphism at all.",
   analogy: "Imagine a shipping label that only describes the contents and disposal instructions for the OUTER box (Base). When the disposal crew (the delete expression) is told to 'process this per the label', they unpack and discard exactly what that outer label describes and stop there. If there's a separate, sealed inner compartment (Derived's own owned resources) with its own disposal instructions that the outer label never mentions exists, the crew has no way to know to open it — the inner contents simply stay sealed and are never disposed of, not because anyone was careless, but because the decision of what to process was made purely by reading the outer box's label, without ever inspecting what was actually packed inside.",
-  code: "class Base {\npublic:\n    ~Base() { std::cout << \"~Base\\n\"; }   // NOT virtual -- the bug\n};\nclass Derived : public Base {\npublic:\n    Derived() { data_ = new int[100]; }\n    ~Derived() { delete[] data_; std::cout << \"~Derived\\n\"; }\nprivate:\n    int* data_;\n};\n\nvoid buggy() {\n    Base* p = new Derived();\n    delete p;   // UB: typically prints only \"~Base\" -- ~Derived() never runs, data_ leaks 400 bytes\n}\n\n// THE FIX: mark the base destructor virtual\nclass FixedBase {\npublic:\n    virtual ~FixedBase() { std::cout << \"~FixedBase\\n\"; }\n};\nclass FixedDerived : public FixedBase {\npublic:\n    FixedDerived() { data_ = new int[100]; }\n    ~FixedDerived() override { delete[] data_; std::cout << \"~FixedDerived\\n\"; }\nprivate:\n    int* data_;\n};\nvoid fixed() {\n    FixedBase* fp = new FixedDerived();\n    delete fp;   // correct: prints \"~FixedDerived\" THEN \"~FixedBase\" -- data_ is properly freed\n}",
+  code: "#include <iostream>\n\nclass Base {\npublic:\n    ~Base() { std::cout << \"~Base\\n\"; }   // NOT virtual -- the bug\n};\nclass Derived : public Base {\npublic:\n    Derived() { data_ = new int[100]; }\n    ~Derived() { delete[] data_; std::cout << \"~Derived\\n\"; }\nprivate:\n    int* data_;\n};\n\nvoid buggy() {\n    Base* p = new Derived();\n    delete p;   // UB: typically prints only \"~Base\" -- ~Derived() never runs, data_ (100 ints) leaks\n}\n\n// THE FIX: mark the base destructor virtual\nclass FixedBase {\npublic:\n    virtual ~FixedBase() { std::cout << \"~FixedBase\\n\"; }\n};\nclass FixedDerived : public FixedBase {\npublic:\n    FixedDerived() { data_ = new int[100]; }\n    ~FixedDerived() override { delete[] data_; std::cout << \"~FixedDerived\\n\"; }\nprivate:\n    int* data_;\n};\nvoid fixed() {\n    FixedBase* fp = new FixedDerived();\n    delete fp;   // correct: prints \"~FixedDerived\" THEN \"~FixedBase\" -- data_ is properly freed\n}",
   steps: [
     "'delete p;' where p is Base* (non-virtual destructor case): the compiler resolves which destructor to call at COMPILE TIME, purely from p's static type (Base*) — there's no vtable lookup at all, exactly as with an ordinary non-virtual member function call.",
-    "~Base() runs and does nothing derived-specific; the delete expression additionally computes how many bytes to hand back to the deallocator using Base's own sizeof (since dispatch is non-polymorphic) — if Derived is actually larger than Base (it is here, due to the extra int* data_ member), this size mismatch compounds the UB beyond just the skipped cleanup.",
+    "~Base() runs and does nothing derived-specific; with sized deallocation the delete expression additionally hands the deallocator Base's own sizeof (since dispatch is non-polymorphic) — GCC enables sized deallocation by default from C++14, Clang only from Clang 19 (Clang 18 calls the unsized operator delete) — if Derived is actually larger than Base (it is here, due to the extra int* data_ member), this size mismatch compounds the UB beyond just the skipped cleanup.",
     "data_ (the heap array Derived allocated) is never freed at all — it's leaked, silently, with no crash and no diagnostic.",
     "With the fix (virtual ~FixedBase()), 'delete fp;' instead performs a genuine vtable lookup based on fp's DYNAMIC type: it finds FixedDerived's destructor override, correctly runs ~FixedDerived() first (freeing data_), and the language then automatically continues by running ~FixedBase() afterward — this two-step (most-derived-first) sequence, and the correct size used for deallocation, are both entirely a consequence of the destructor now being resolved virtually rather than statically."
   ],
@@ -7195,7 +7195,7 @@ DEEP_CONTENT['virtual-destructor'] = {
   mistake: "Designing an abstract base class with several pure virtual methods (which correctly makes the class non-instantiable, and can FEEL like it's already 'safe') but forgetting the destructor separately needs to be marked virtual — pure virtual functions have nothing to do with destructor dispatch; a class can be entirely abstract and still leak or invoke UB on polymorphic deletion if its own destructor isn't independently declared virtual.",
   interviewQ: {
     q: "Precisely what happens when you 'delete' a Derived object through a Base* pointer if Base's destructor is not declared virtual?",
-    a: "It's undefined behavior: because destructor dispatch for a non-virtual destructor is resolved statically using the pointer's compile-time (static) type, only ~Base() actually executes — ~Derived() and the destructors of any of Derived's own non-static data members never run at all, so any resources they manage (heap memory, file handles, mutex locks, reference counts) leak or are left in an inconsistent state. Additionally, since 'delete' also needs to know the object's total size to correctly return it to the allocator, and that size is computed from the STATIC type (Base) when destruction isn't polymorphic, if Derived's actual size differs from Base's the deallocation itself can also be performed incorrectly, compounding the undefined behavior beyond just the skipped cleanup."
+    a: "It's undefined behavior: because destructor dispatch for a non-virtual destructor is resolved statically using the pointer's compile-time (static) type, in practice (GCC, Clang, MSVC) only ~Base() executes — ~Derived() and the destructors of any of Derived's own non-static data members never run at all, so any resources they manage (heap memory, file handles, mutex locks, reference counts) leak or are left in an inconsistent state. Additionally, since 'delete' also needs to know the object's total size to correctly return it to the allocator, and that size is computed from the STATIC type (Base) when destruction isn't polymorphic, if Derived's actual size differs from Base's the deallocation itself can also be performed incorrectly, compounding the undefined behavior beyond just the skipped cleanup."
   },
   advancedQ: {
     q: "Does every class that will ever be inherited from need a virtual destructor, even if it's never actually used polymorphically (never deleted through a base class pointer)?",
@@ -7213,7 +7213,7 @@ DEEP_CONTENT['abstract-classes'] = {
   def: "An abstract class is any class that declares at least one PURE virtual function — a virtual function marked with the '= 0' pure-specifier, e.g. 'virtual void draw() = 0;' — which makes the class non-instantiable: you cannot create a standalone object of that exact type ('new AbstractThing()' or 'AbstractThing x;' both fail to compile), while the class remains fully usable as a base class, and critically remains fully usable as a POINTER OR REFERENCE type (AbstractThing* / AbstractThing&) even though no AbstractThing object itself can ever exist on its own. C++ has no dedicated 'interface' or 'abstract' keyword — a pure virtual function declared inside an ordinary class definition is the ENTIRE language mechanism.",
   why: "This is C++'s primary mechanism for expressing 'interface' as a first-class, compiler-enforced concept without a dedicated keyword (unlike Java or C#'s explicit 'interface'), and precisely understanding it — including what an abstract class IS still allowed to contain — is what separates candidates who've genuinely internalized the mechanism from those pattern-matching 'abstract means no data, no code, just method signatures', which is not actually the rule C++ enforces.",
   analogy: "Think of an abstract class as an official job requisition template a company posts: it specifies certain mandatory duties that whoever fills the role absolutely MUST perform (a pure virtual function is a duty with no default answer supplied — 'you must define how payroll gets processed'), but the requisition template can ALSO already include real, fully-written company policy sections that apply to every hire regardless of role (concrete, fully-implemented methods), and can already specify things every hire will have, like an assigned employee ID (a genuine data member). You simply cannot 'hire the requisition template itself' — only an actual specific person (a concrete derived class) who has agreed to and fulfilled every mandatory duty can actually start the job (be instantiated).",
-  code: "class Shape {\npublic:\n    explicit Shape(int id) : id_(id) {}     // abstract classes CAN have constructors -- this one runs\n    virtual double area() const = 0;         // pure virtual -- THIS is what makes Shape abstract\n    virtual void describe() const {           // a fully concrete (non-pure) virtual method -- totally fine\n        std::cout << \"Shape #\" << id_ << \", area=\" << area();\n    }\n    int getId() const { return id_; }         // an ordinary, non-virtual method -- also fine\n    virtual ~Shape() = default;\nprotected:\n    int id_;                                  // a genuine DATA MEMBER -- also fine, common misconception says no\n};\n\nclass Circle : public Shape {\npublic:\n    Circle(int id, double r) : Shape(id), r_(r) {}\n    double area() const override { return 3.14159 * r_ * r_; }   // implements the ONE pure virtual\nprivate:\n    double r_;\n};\n\n// Shape s(1);            // ERROR: cannot instantiate abstract class Shape\nint main() {\n    Shape* s = new Circle(1, 2.0);   // OK -- pointer/reference to the abstract TYPE is completely legal\n    s->describe();                    // uses Shape's own concrete method AND dispatches area() to Circle\n    delete s;\n}",
+  code: "#include <iostream>\n\nclass Shape {\npublic:\n    explicit Shape(int id) : id_(id) {}     // abstract classes CAN have constructors -- this one runs\n    virtual double area() const = 0;         // pure virtual -- THIS is what makes Shape abstract\n    virtual void describe() const {           // a fully concrete (non-pure) virtual method -- totally fine\n        std::cout << \"Shape #\" << id_ << \", area=\" << area();\n    }\n    int getId() const { return id_; }         // an ordinary, non-virtual method -- also fine\n    virtual ~Shape() = default;\nprotected:\n    int id_;                                  // a genuine DATA MEMBER -- also fine, common misconception says no\n};\n\nclass Circle : public Shape {\npublic:\n    Circle(int id, double r) : Shape(id), r_(r) {}\n    double area() const override { return 3.14159 * r_ * r_; }   // implements the ONE pure virtual\nprivate:\n    double r_;\n};\n\n// Shape s(1);            // ERROR: cannot instantiate abstract class Shape\nint main() {\n    Shape* s = new Circle(1, 2.0);   // OK -- pointer/reference to the abstract TYPE is completely legal\n    s->describe();                    // uses Shape's own concrete method AND dispatches area() to Circle\n    delete s;\n}",
   steps: [
     "The compiler processes Shape's definition, notices area() is declared with '= 0', and internally marks Shape as an abstract class — this fact is checked lazily, only at the point something actually TRIES to instantiate Shape directly.",
     "'Shape s(1);' triggers that check and fails to compile with a hard error naming area() as an unimplemented pure virtual — this is a compile-time-only restriction with zero runtime component.",
@@ -7221,7 +7221,7 @@ DEEP_CONTENT['abstract-classes'] = {
     "'new Circle(1, 2.0)' first runs Shape's OWN constructor (Shape(int id): id_(id){}) as a normal base-subobject construction step, setting id_ — this happens exactly like any other base class construction, entirely independent of the pure-virtual/abstract mechanism.",
     "s->describe() calls Shape's fully concrete describe() method directly (no dispatch needed, describe() isn't overridden by Circle), and INSIDE describe(), the call to area() dispatches virtually through the vtable to Circle::area() — demonstrating a concrete base method calling a still-pure-in-the-base virtual function that only becomes callable once a concrete override exists."
   ],
-  memory: "Were Shape's layout ever examined directly (which it can't be instantiated to observe), it would still follow every normal rule for a polymorphic class: a vptr pointing at Shape's OWN vtable, plus id_ as ordinary data — the vtable's slot for the pure virtual area() typically holds either a null pointer or a pointer to a special trap/abort stub (the exact value is implementation-defined), rather than being 'absent' from the table. This matters concretely during construction: while a Circle object's Shape base-subobject portion is being constructed (inside Shape's own constructor body), the object's vptr at that moment points at Shape's vtable (per the vptr-during-construction rules), so calling area() — directly or indirectly — from WITHIN Shape's constructor is itself undefined behavior, since that vtable slot has no real implementation to call yet.",
+  memory: "Were Shape's layout ever examined directly (which it can't be instantiated to observe), it would still follow every normal rule for a polymorphic class: a vptr pointing at Shape's OWN vtable, plus id_ as ordinary data — the vtable's slot for the pure virtual area() holds a pointer to a special trap stub (the exact value is implementation-defined: GCC and Clang use __cxa_pure_virtual, which prints 'pure virtual method called' and aborts; MSVC uses _purecall), rather than being 'absent' from the table. This matters concretely during construction: while a Circle object's Shape base-subobject portion is being constructed (inside Shape's own constructor body), the object's vptr at that moment points at Shape's vtable (per the vptr-during-construction rules), so calling area() — directly or indirectly — from WITHIN Shape's constructor is itself undefined behavior, since that vtable slot has no real implementation to call yet.",
   realWorld: "Nearly every plugin interface, visitor-pattern Visitor base class, and library-boundary abstraction (a database driver's IConnection interface, a rendering backend's IDevice interface) is implemented as an abstract class with a handful of pure virtuals — and very commonly ALSO includes shared concrete helper methods and even shared state (an ID, a reference count, a name string) that every concrete implementation inherits for free, exactly like Shape's id_ and describe() above, rather than being a bare, stateless set of pure virtual signatures.",
   mistake: "The common misconception that an abstract class 'cannot have a constructor' or 'cannot have data members because it's just an interface' — both are false. An abstract class can have a fully-functioning constructor (which genuinely runs, once, as part of every derived object's construction sequence), a destructor, any number of concrete non-pure methods, and ordinary data members exactly like any other class; the ONLY thing that makes a class 'abstract' and non-instantiable is the presence of at least one unimplemented pure virtual function anywhere in its own definition or inherited chain.",
   interviewQ: {
@@ -7244,7 +7244,7 @@ DEEP_CONTENT['interface-design'] = {
   def: "Since C++ has no dedicated 'interface' keyword, senior codebases model an interface as a PURE abstract class — an abstract base class containing only pure virtual functions (plus, almost always, a virtual destructor) and deliberately no data members and no implemented logic — the closest structural equivalent to a Java/C# interface, even though the language treats it as nothing more than an ordinary (if unusually 'thin') class the entire time. Good interface design in C++ additionally means practicing interface segregation: keeping each such pure-virtual interface small and focused on ONE coherent capability, rather than bundling many unrelated responsibilities into one 'fat' interface.",
   why: "Interface segregation matters even more sharply in C++ than in many garbage-collected, reflection-heavy languages, because implementing a fat interface (one bundling many unrelated pure virtuals) FORCES every implementer to supply a real function body for every single pure virtual just to become instantiable at all — there is no partial or optional interface implementation, and no built-in 'not supported, throws by default' fallback unless the implementer writes one themselves — so a fat interface systematically pollutes every implementing class with irrelevant boilerplate methods and creates artificial coupling between capabilities that have nothing to do with each other.",
   analogy: "Imagine a single 'universal' remote control with fifty buttons covering every conceivable appliance feature (TV channel controls, soundbar volume, blu-ray playback, smart-home dimmer settings, all crammed onto one physical remote design). Someone who only wants to build a simple lamp switch is nevertheless forced to physically wire up (implement) all fifty buttons on their remote, most of which do nothing sensible for a lamp. Compare that to a drawer of small, single-purpose remotes — a power-only remote, a volume-only remote, a dimmer-only remote — where the lamp switch designer only needs to build the power-only remote and never has to think about, or stub out, volume control at all.",
-  code: "// BAD: a fat interface bundling unrelated capabilities together\nclass IDevice {\npublic:\n    virtual void powerOn() = 0;\n    virtual void setVolume(int) = 0;     // meaningless for a lamp\n    virtual void setBrightness(int) = 0; // meaningless for a soundbar\n    virtual void eject() = 0;             // meaningless for almost everything except a disc player\n    virtual ~IDevice() = default;\n};\nclass SimpleLamp : public IDevice {\n    // forced to implement setVolume/eject with meaningless bodies just to be instantiable at all\npublic:\n    void powerOn() override { std::cout << \"lamp on\"; }\n    void setVolume(int) override { /* does nothing -- but MUST exist to compile */ }\n    void setBrightness(int b) override { level_ = b; }\n    void eject() override { /* does nothing -- but MUST exist to compile */ }\nprivate:\n    int level_ = 100;\n};\n\n// GOOD: segregated interfaces -- each class implements only what it genuinely supports\nclass IPowerable      { public: virtual void powerOn() = 0; virtual ~IPowerable() = default; };\nclass IVolumeControl  { public: virtual void setVolume(int) = 0; virtual ~IVolumeControl() = default; };\nclass IDimmable       { public: virtual void setBrightness(int) = 0; virtual ~IDimmable() = default; };\n\nclass BetterLamp : public IPowerable, public IDimmable {\npublic:\n    void powerOn() override { std::cout << \"lamp on\"; }\n    void setBrightness(int b) override { level_ = b; }\nprivate:\n    int level_ = 100;\n};\nclass Soundbar : public IPowerable, public IVolumeControl {\npublic:\n    void powerOn() override { std::cout << \"soundbar on\"; }\n    void setVolume(int v) override { volume_ = v; }\nprivate:\n    int volume_ = 50;\n};",
+  code: "#include <iostream>\n\n// BAD: a fat interface bundling unrelated capabilities together\nclass IDevice {\npublic:\n    virtual void powerOn() = 0;\n    virtual void setVolume(int) = 0;     // meaningless for a lamp\n    virtual void setBrightness(int) = 0; // meaningless for a soundbar\n    virtual void eject() = 0;             // meaningless for almost everything except a disc player\n    virtual ~IDevice() = default;\n};\nclass SimpleLamp : public IDevice {\n    // forced to implement setVolume/eject with meaningless bodies just to be instantiable at all\npublic:\n    void powerOn() override { std::cout << \"lamp on\"; }\n    void setVolume(int) override { /* does nothing -- but MUST exist to compile */ }\n    void setBrightness(int b) override { level_ = b; }\n    void eject() override { /* does nothing -- but MUST exist to compile */ }\nprivate:\n    int level_ = 100;\n};\n\n// GOOD: segregated interfaces -- each class implements only what it genuinely supports\nclass IPowerable      { public: virtual void powerOn() = 0; virtual ~IPowerable() = default; };\nclass IVolumeControl  { public: virtual void setVolume(int) = 0; virtual ~IVolumeControl() = default; };\nclass IDimmable       { public: virtual void setBrightness(int) = 0; virtual ~IDimmable() = default; };\n\nclass BetterLamp : public IPowerable, public IDimmable {\npublic:\n    void powerOn() override { std::cout << \"lamp on\"; }\n    void setBrightness(int b) override { level_ = b; }\nprivate:\n    int level_ = 100;\n};\nclass Soundbar : public IPowerable, public IVolumeControl {\npublic:\n    void powerOn() override { std::cout << \"soundbar on\"; }\n    void setVolume(int v) override { volume_ = v; }\nprivate:\n    int volume_ = 50;\n};",
   steps: [
     "A client function 'void turnOn(IPowerable& p) { p.powerOn(); }' can now accept ANY device that supports power control — a BetterLamp, a Soundbar, or a future device type — without ever knowing or caring whether that device also supports volume or dimming.",
     "Compare this to a version written against the fat 'IDevice&' interface: it would compile identically, but every implementer (including ones that make no sense, like SimpleLamp implementing setVolume) has already paid the cost of implementing methods it will never meaningfully use.",
@@ -20266,6 +20266,2142 @@ const GUIDED_LESSONS = {
    [
     "Does a vector of a move-only type still move when the move constructor can throw?",
     "Yes: with no copy constructor available it moves anyway, and gives up the strong exception guarantee."
+   ]
+  ]
+ },
+ "encapsulation": {
+  "orientation": {
+   "what": "Encapsulation: bundling data with the functions that guard it, and using public, protected and private to control which code may name each member.",
+   "why": "Access control is how a class protects its invariants from accidental misuse — but it is a compile-time rule, not a security boundary, and getter/setter pairs can make it meaningless.",
+   "outcomes": [
+    "Explain what private actually prevents, and what it doesn't",
+    "Design an interface that enforces an invariant rather than mirroring fields",
+    "Explain why access is per class, not per object",
+    "Know what access specifiers do (and don't do) to memory layout"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~20–25 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: a compile-time name check",
+    "intro": "What happens to obj.balance_ = -5; when balance_ is private:",
+    "stages": [
+     {
+      "name": "Source",
+      "io": "obj.balance_",
+      "note": "Code outside the class names a private member."
+     },
+     {
+      "name": "Compiler",
+      "io": "access check",
+      "note": "Name lookup finds the member, then checks whether this code may name it.",
+      "err": "error: 'double BankAccount::balance_' is private within this context"
+     },
+     {
+      "name": "Machine code",
+      "io": "no trace",
+      "note": "If it compiles, private and public members are laid out and accessed identically — nothing is checked at run time."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "public, protected and private control which code may NAME a member; the compiler checks this and it leaves no trace at run time.",
+     "Access is per class, not per object: a member function can read the private members of any object of its own class.",
+     "Encapsulation pays off when the interface enforces invariants (deposit rejects negative amounts) and hides representation — not when every field gets a getter and a setter."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "An 'Employees only' sign, not a vault door",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "class Account {\n    int balance_ = 0;\npublic:\n    void add(const Account& other) {\n        balance_ += other.balance_;   // (1)\n    }\n};\n\nint main() {\n    Account a, b;\n    a.add(b);\n}",
+    "q": "Does line (1) compile, reading another object's private member?",
+    "options": [
+     [
+      "A",
+      "No: other.balance_ is private"
+     ],
+     [
+      "B",
+      "Yes: access is checked per class, not per object"
+     ],
+     [
+      "C",
+      "Only if other is declared a friend"
+     ],
+     [
+      "D",
+      "Only because add is a const function"
+     ]
+    ],
+    "reveal": [
+     "B — it compiles.",
+     "Access control asks which code is naming the member. add() is a member of Account, so it may name balance_ on any Account.",
+     "That is how copy constructors and operator== read the other object's private fields.",
+     "It also shows that private protects the class's code boundary, not individual objects."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Full example",
+    "title": "The example",
+    "intro": "A pass-through setter, an invariant-enforcing interface, and proof that private is not a memory barrier:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: what private does and doesn't do",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Is private a security mechanism?",
+    "No. It is a compile-time name check; code with a pointer and knowledge of the layout can still read the bytes, which is undefined behavior but unchecked at run time."
+   ],
+   [
+    "Why is a getter/setter pair for every field poor encapsulation?",
+    "A setter that stores whatever it is given enforces no invariant and exposes the same surface as a public field."
+   ],
+   [
+    "Who can access protected members?",
+    "The class itself, its friends, and every class that derives from it — now and in the future."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Access specifiers and layout",
+     "hint": "no effect on size; ordering rules changed in C++11 and C++23",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: hiding representation",
+     "hint": "swapping double for integer cents without breaking callers",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "abstraction",
+    "classes-basics",
+    "pat-pimpl"
+   ]
+  },
+  "interview": {
+   "think": "Say who performs the check and when it happens.",
+   "advancedTitle": "Advanced follow-up: member order across access specifiers"
+  },
+  "recall": [
+   [
+    "What does friend do to encapsulation?",
+    "It grants one named function or class full access to the private members — a deliberate, narrow hole in the boundary."
+   ],
+   [
+    "Does making a member private change sizeof?",
+    "No. Access specifiers never change an object's size or alignment."
+   ],
+   [
+    "What is the real payoff of encapsulation?",
+    "Changing the internal representation without breaking any client code, and keeping invariants true."
+   ]
+  ]
+ },
+ "abstraction": {
+  "orientation": {
+   "what": "Abstraction: exposing a stable 'what' (an interface) while hiding the changeable 'how' — with abstract base classes at run time and the pimpl idiom at compile time.",
+   "why": "Abstraction is what lets one part of a large system change without every caller changing or recompiling. It is also often confused with encapsulation in interviews.",
+   "outcomes": [
+    "Tell abstraction from encapsulation",
+    "Program against an abstract base class",
+    "Explain how pimpl works as a compilation firewall, and what it costs",
+    "Know compile-time alternatives (templates, concepts)"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~25–30 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: two kinds of wall",
+    "intro": "Where abstraction hides the 'how':",
+    "stages": [
+     {
+      "name": "Abstract base class",
+      "io": "run-time wall",
+      "note": "Callers use Shape& and call area(); which override runs is decided by the object's dynamic type."
+     },
+     {
+      "name": "pimpl",
+      "io": "compile-time wall",
+      "note": "The header forward-declares struct Impl; the real fields live in the .cpp file, so changing them recompiles one file."
+     },
+     {
+      "name": "Templates / concepts",
+      "io": "compile-time, no dispatch",
+      "note": "The interface is checked at compile time and calls are direct; no swapping at run time."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Abstraction exposes what a component does and hides how it does it.",
+     "An abstract base class hides the concrete type at run time: printArea(const Shape&) works for shapes written later.",
+     "pimpl hides even the private data: callers of widget.h never see Impl's fields, so changing them doesn't recompile callers."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Pedals and a steering wheel over any drivetrain",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "// widget.h\n#include <memory>\nclass Widget {\npublic:\n    Widget();\n    ~Widget() = default;   // defaulted right here, in the header\nprivate:\n    struct Impl;           // only declared\n    std::unique_ptr<Impl> p_;\n};\n\n// main.cpp\n#include \"widget.h\"\nint main() { Widget w; }",
+    "q": "Does main.cpp compile?",
+    "options": [
+     [
+      "A",
+      "Yes"
+     ],
+     [
+      "B",
+      "No: Widget has no default constructor"
+     ],
+     [
+      "C",
+      "No: unique_ptr can't delete the incomplete Impl"
+     ],
+     [
+      "D",
+      "It compiles but leaks Impl"
+     ]
+    ],
+    "reveal": [
+     "C — it doesn't compile.",
+     "~Widget() defaulted in the header destroys p_ right there, and unique_ptr's deleter needs Impl's complete type.",
+     "GCC and Clang both report: invalid application of 'sizeof' to incomplete type 'Widget::Impl'.",
+     "Declare ~Widget(); in the header and define it (even as = default) in widget.cpp, after Impl is defined."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Full example",
+    "title": "The example",
+    "intro": "An abstract Shape interface and a pimpl Widget header:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: two abstraction walls",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What is the difference between encapsulation and abstraction?",
+    "Encapsulation is the mechanism (bundling and access control); abstraction is the design goal (a stable 'what' that hides the 'how')."
+   ],
+   [
+    "Why can printArea(const Shape&) work with a Shape class written next year?",
+    "It only uses Shape's interface; the call is dispatched through the object's vptr to whatever override it has."
+   ],
+   [
+    "What does pimpl hide that an abstract base class doesn't?",
+    "The concrete class's private data: with pimpl, no private field appears in the public header at all."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "What each kind of abstraction costs",
+     "hint": "a vptr and indirect call, or a heap allocation and indirection",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: backends and ABI-stable libraries",
+     "hint": "audio backends, Qt's d-pointer",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "encapsulation",
+    "abstract-classes",
+    "pat-pimpl",
+    "concepts"
+   ]
+  },
+  "interview": {
+   "think": "Name the mechanism, then the goal it serves.",
+   "advancedTitle": "Advanced follow-up: pimpl as a compilation firewall"
+  },
+  "recall": [
+   [
+    "Why must a pimpl class declare its destructor in the header but define it in the .cpp file?",
+    "unique_ptr<Impl> needs Impl's complete type where it is destroyed, and only the .cpp file has it."
+   ],
+   [
+    "Is an interface with only one implementation good abstraction?",
+    "Usually not: it adds indirection and complexity without decoupling anything."
+   ],
+   [
+    "How can you get abstraction without virtual calls?",
+    "Templates or C++20 concepts: the interface is checked at compile time and calls are direct and inlinable."
+   ]
+  ]
+ },
+ "inheritance": {
+  "orientation": {
+   "what": "Inheritance: deriving a class from a base, and how public, protected and private inheritance change what the outside world can see.",
+   "why": "Only public inheritance means 'is-a'. Using it just to reuse code exposes the whole base interface and breaks substitutability; the other two forms are implementation reuse.",
+   "outcomes": [
+    "Predict member access under public, protected and private inheritance",
+    "Explain when public inheritance is correct (Liskov substitution)",
+    "Re-expose a single base member with using",
+    "Choose between private inheritance and composition"
+   ],
+   "firstPass": "~20–25 min",
+   "laterPass": "~25–30 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: the inheritance keyword caps access",
+    "intro": "What Base's public pub() and protected prot() become:",
+    "stages": [
+     {
+      "name": "class D : public Base",
+      "io": "unchanged",
+      "note": "pub stays public, prot stays protected. D is-a Base to everyone."
+     },
+     {
+      "name": "class D : protected Base",
+      "io": "capped at protected",
+      "note": "pub becomes protected. Only D and its descendants see the Base part."
+     },
+     {
+      "name": "class D : private Base",
+      "io": "capped at private",
+      "note": "pub and prot become private to D. Outsiders and D's own subclasses can't use them."
+     },
+     {
+      "name": "Base's private members",
+      "io": "never accessible",
+      "note": "Always part of the object, but no derived class can name them."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "The inheritance keyword caps the access of inherited members: public keeps it, protected caps at protected, private caps at private.",
+     "Only public inheritance models is-a: a Derived can be used wherever a Base is expected (Liskov substitution).",
+     "Private inheritance is implementation reuse, close to composition; prefer composition unless you need to override a virtual or reach protected members."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A public surname versus private family recipes",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <vector>\n\nclass Stack : private std::vector<int> {\npublic:\n    using std::vector<int>::push_back;\n};\n\nint main() {\n    Stack s;\n    s.push_back(1);   // (1)\n    return s.size();  // (2)\n}",
+    "q": "Which lines compile?",
+    "options": [
+     [
+      "A",
+      "Both"
+     ],
+     [
+      "B",
+      "Only (1)"
+     ],
+     [
+      "C",
+      "Only (2)"
+     ],
+     [
+      "D",
+      "Neither"
+     ]
+    ],
+    "reveal": [
+     "B — only (1).",
+     "Private inheritance makes every vector member private in Stack.",
+     "The using-declaration re-exposes push_back as public, so (1) is fine.",
+     "size() stays private, so (2) is an error: 'size() const' is inaccessible within this context."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Full example",
+    "title": "The example",
+    "intro": "The three inheritance keywords side by side:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: how the compiler applies the access rules",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Which inheritance keyword gives an is-a relationship?",
+    "Only public inheritance; protected and private inheritance hide the relationship from outside code."
+   ],
+   [
+    "Can a derived class access its base's private members?",
+    "No, not by name, though they are still part of every derived object."
+   ],
+   [
+    "When would you choose private inheritance over composition?",
+    "When you need to override the base's virtual functions or use its protected members (or want the empty base optimization before C++20)."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Where the base lives in the object",
+     "hint": "usually offset 0 — with one ABI exception",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: polymorphic hierarchies and EBO",
+     "hint": "GUI and exception hierarchies; empty deleters",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "composition",
+    "polymorphism",
+    "object-slicing",
+    "multiple-inheritance"
+   ]
+  },
+  "interview": {
+   "think": "Start from whether the relationship really is is-a.",
+   "advancedTitle": "Advanced follow-up: private inheritance and the empty base optimization",
+   "followUp": "q009"
+  },
+  "recall": [
+   [
+    "What is the fragile 'Stack inherits publicly from vector' problem?",
+    "Callers get every vector operation, such as insert in the middle, which breaks the stack's one-end invariant."
+   ],
+   [
+    "What does passing a Derived by value to a Base parameter do?",
+    "It slices: only the Base part is copied, and the virtual behavior of Derived is lost."
+   ],
+   [
+    "Are constructors inherited?",
+    "Not by default; using Base::Base; opts into inheriting them."
+   ]
+  ]
+ },
+ "composition": {
+  "orientation": {
+   "what": "Composition: a class that owns other objects as members (has-a), with their lifetimes tied to its own — and why it is usually preferred over inheritance for reuse.",
+   "why": "'Favor composition over inheritance' comes up in every design interview. Composition couples classes more loosely, can swap behavior at run time, and avoids the fragile base class problem.",
+   "outcomes": [
+    "Explain has-a versus is-a",
+    "Predict member construction and destruction order",
+    "Choose between a value member and an owning pointer",
+    "Explain the fragile base class problem"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~25–30 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: parts built and scrapped with the whole",
+    "intro": "struct Car { Engine e; Wheels w; }:",
+    "stages": [
+     {
+      "name": "Car c;",
+      "io": "members first",
+      "note": "e then w are constructed, in declaration order, before Car's constructor body."
+     },
+     {
+      "name": "Using c",
+      "io": "owned parts",
+      "note": "The parts live inside the car (by value) or are owned through unique_ptr."
+     },
+     {
+      "name": "End of scope",
+      "io": "reverse order",
+      "note": "~Car() body runs, then w, then e are destroyed."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Composition means a class owns its parts: they are created with it and destroyed with it, and never shared.",
+     "Own parts by value when the type is fixed; own them through std::unique_ptr to an interface when the implementation is chosen at run time.",
+     "Use public inheritance only for genuine is-a substitutability; use composition for code reuse and has-a."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A car and its engine",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <iostream>\nstruct Engine { Engine() { std::cout << \"E \"; } ~Engine() { std::cout << \"~E \"; } };\nstruct Wheels { Wheels() { std::cout << \"W \"; } ~Wheels() { std::cout << \"~W \"; } };\nstruct Car {\n    Engine e;\n    Wheels w;\n    Car()  { std::cout << \"Car \"; }\n    ~Car() { std::cout << \"~Car \"; }\n};\n\nint main() { Car c; }",
+    "q": "What does this print?",
+    "options": [
+     [
+      "A",
+      "Car E W ~Car ~E ~W"
+     ],
+     [
+      "B",
+      "E W Car ~Car ~W ~E"
+     ],
+     [
+      "C",
+      "E W Car ~E ~W ~Car"
+     ],
+     [
+      "D",
+      "Car E W ~W ~E ~Car"
+     ]
+    ],
+    "reveal": [
+     "B — E W Car ~Car ~W ~E.",
+     "Members are constructed before the constructor body runs, in declaration order.",
+     "Destruction is the exact reverse: the destructor body first, then members last-declared-first.",
+     "So a member can safely use members declared before it, in both its constructor and destructor."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Full example",
+    "title": "The example",
+    "intro": "Composition with an injected, swappable engine:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: building and destroying a Car",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What is the difference between composition and inheritance?",
+    "Composition is has-a (a Car has an Engine); public inheritance is is-a (a Car is a Vehicle)."
+   ],
+   [
+    "When should a composed part be a unique_ptr instead of a value member?",
+    "When the concrete type is chosen at run time, the part is optional, or it must be created lazily."
+   ],
+   [
+    "In what order are members destroyed?",
+    "In reverse declaration order, after the destructor body has run."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Value versus pointer composition",
+     "hint": "inline bytes versus a heap allocation",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: favor composition",
+     "hint": "vector's internals, pluggable renderers",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "aggregation",
+    "pat-strategy",
+    "ownership"
+   ]
+  },
+  "interview": {
+   "think": "Ask whether the relationship is about substitutability or about reuse.",
+   "advancedTitle": "Advanced follow-up: the fragile base class problem",
+   "followUp": "q009"
+  },
+  "recall": [
+   [
+    "Why is inheriting from Logger to get log() a smell?",
+    "It exposes log() as part of your class's public interface and forces multiple inheritance as soon as you need a second helper; a Logger member does the job."
+   ],
+   [
+    "Does composition remove all coupling?",
+    "No: the class still depends on its part's public interface — just not on its layout or protected members."
+   ],
+   [
+    "What pattern does composing an interface pointer enable?",
+    "The Strategy pattern: behavior chosen and swapped at run time."
+   ]
+  ]
+ },
+ "aggregation": {
+  "orientation": {
+   "what": "Aggregation: a has-a relationship where the container refers to objects it doesn't own — they are created elsewhere, may be shared, and outlive it.",
+   "why": "Mixing up owning and non-owning relationships causes the two classic lifetime bugs: deleting something someone else still uses, and holding a pointer to something already destroyed.",
+   "outcomes": [
+    "Tell aggregation from composition by ownership",
+    "Choose the C++ type that expresses each relationship",
+    "Spot a dangling aggregation pointer",
+    "Use weak_ptr when the aggregated object may disappear"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~20–25 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: who is responsible for the lifetime?",
+    "intro": "Professor alice and two departments:",
+    "stages": [
+     {
+      "name": "main()",
+      "io": "owns alice",
+      "note": "alice is created and destroyed by main, independently of any department."
+     },
+     {
+      "name": "cs, math",
+      "io": "observe alice",
+      "note": "Each stores a non-owning Professor*; both refer to the same object."
+     },
+     {
+      "name": "~Department()",
+      "io": "touches nothing",
+      "note": "The departments never delete alice."
+     },
+     {
+      "name": "If alice dies first",
+      "io": "dangling",
+      "note": "Any department still holding &alice now has a pointer to a destroyed object.",
+      "err": "use-after-free: undefined behavior"
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Aggregation is has-a without ownership: the part has its own lifetime and may be shared.",
+     "Express composition with value members or unique_ptr; express aggregation with non-owning raw pointers, references, or weak_ptr.",
+     "The type must make ownership obvious — a raw pointer says nothing, so document it or use weak_ptr, which can also check whether the object still exists."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A department and its professors",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "Department d;\n{\n    Professor p(\"Ann\");\n    d.addProfessor(&p);\n}               // p is destroyed here\nd.printNames();  // reads every stored Professor*",
+    "q": "What happens at d.printNames()?",
+    "options": [
+     [
+      "A",
+      "It prints Ann"
+     ],
+     [
+      "B",
+      "Compile error: &p outlives p"
+     ],
+     [
+      "C",
+      "Undefined behavior: d holds a dangling pointer"
+     ],
+     [
+      "D",
+      "It prints nothing: the pointer was cleared"
+     ]
+    ],
+    "reveal": [
+     "C — undefined behavior.",
+     "The department only observes p; p's owner (the inner block) destroyed it.",
+     "Nothing clears d's stored pointer, and C++ doesn't check lifetimes at compile time.",
+     "If the professor were owned by a shared_ptr and the department held a weak_ptr, lock() would return empty instead."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "One professor aggregated by two departments:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: independent lifetimes",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What is the defining difference between aggregation and composition?",
+    "Ownership: composition owns the part and destroys it; aggregation only refers to a part owned elsewhere."
+   ],
+   [
+    "Does a pointer member always mean aggregation?",
+    "No: a pointer the class allocates and deletes itself is ownership — composition implemented by hand."
+   ],
+   [
+    "How does weak_ptr improve on a raw aggregation pointer?",
+    "It states non-ownership in the type and lock() tells you whether the object is still alive."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Shared, not copied",
+     "hint": "two departments, one professor in memory",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: registries and listeners",
+     "hint": "teams, players, event buses",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "weak-ptr",
+    "ownership",
+    "dangling-pointers"
+   ]
+  },
+  "interview": {
+   "think": "Ask who creates the object and who is responsible for destroying it.",
+   "advancedTitle": "Advanced follow-up: weak_ptr for aggregation",
+   "followUp": "q009"
+  },
+  "recall": [
+   [
+    "What happens if an aggregating class deletes its pointers in its destructor?",
+    "It destroys objects someone else owns, causing double frees or use-after-free elsewhere."
+   ],
+   [
+    "Does UML's open diamond mean anything to the C++ compiler?",
+    "No: the distinction exists only in your choice of types and in documentation."
+   ],
+   [
+    "What must you do with the result of weak_ptr::lock()?",
+    "Check it: it is an empty shared_ptr if the object has already been destroyed."
+   ]
+  ]
+ },
+ "polymorphism": {
+  "orientation": {
+   "what": "The three kinds of polymorphism in C++ — overloading, templates and virtual functions — and when each one is resolved.",
+   "why": "'Explain polymorphism' is an interview staple, and 'virtual functions' is only a third of the answer. Knowing when each is resolved explains their performance and design trade-offs.",
+   "outcomes": [
+    "Name ad-hoc, parametric and subtype polymorphism",
+    "Say which are resolved at compile time and which at run time",
+    "Predict when overload resolution uses the static type",
+    "Choose templates or virtual dispatch for a design"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~25–30 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: when is the call decided?",
+    "intro": "Three calls, three moments of decision:",
+    "stages": [
+     {
+      "name": "print(42)",
+      "io": "compile time",
+      "note": "Overloading (ad-hoc): the compiler picks print(int) from the argument's static type."
+     },
+     {
+      "name": "add(1.5, 2.5)",
+      "io": "compile time",
+      "note": "Templates (parametric): the compiler generates add<double> and calls it directly."
+     },
+     {
+      "name": "s.area()",
+      "io": "run time",
+      "note": "Virtual functions (subtype): the object's vptr selects the override on every call."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "C++ has three kinds of polymorphism: overloading (ad-hoc), templates (parametric) and virtual functions (subtype).",
+     "Overloading and templates are resolved at compile time from static types; virtual calls are resolved at run time from the object's dynamic type.",
+     "Templates give inlining and speed at the cost of code size; virtual dispatch gives one copy of code and run-time flexibility at the cost of an indirect call."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Custom-cut printing plates versus a universal printer",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <iostream>\nstruct Base {};\nstruct Derived : Base {};\n\nvoid f(Base&)    { std::cout << \"f(Base)\"; }\nvoid f(Derived&) { std::cout << \"f(Derived)\"; }\n\nint main() {\n    Derived d;\n    Base& r = d;\n    f(r);\n}",
+    "q": "What does this print?",
+    "options": [
+     [
+      "A",
+      "f(Derived)"
+     ],
+     [
+      "B",
+      "f(Base)"
+     ],
+     [
+      "C",
+      "Ambiguous call: compile error"
+     ],
+     [
+      "D",
+      "It depends on whether Base has a virtual function"
+     ]
+    ],
+    "reveal": [
+     "B — f(Base).",
+     "Overload resolution happens at compile time and only sees r's static type, Base&.",
+     "The object really is a Derived, but choosing between overloads never looks at the dynamic type.",
+     "Only a virtual member function call dispatches on the dynamic type; adding virtuals to Base doesn't change this overload choice."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Full example",
+    "title": "The example",
+    "intro": "All three kinds of polymorphism:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: three ways a call is resolved",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Name the three kinds of polymorphism in C++.",
+    "Ad-hoc (function and operator overloading), parametric (templates) and subtype (virtual functions)."
+   ],
+   [
+    "Which kinds are resolved at compile time?",
+    "Overloading and templates. Only virtual function calls are resolved at run time."
+   ],
+   [
+    "Why can a member function template not be virtual?",
+    "A vtable needs a fixed set of slots, but a template can be instantiated for an open-ended set of types."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Code size versus indirection",
+     "hint": "instantiations versus one shared copy",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: std::sort versus plugins",
+     "hint": "compile-time speed, run-time flexibility",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "virtual-functions",
+    "function-templates",
+    "crtp",
+    "vfunc-overhead"
+   ]
+  },
+  "interview": {
+   "think": "For each kind, say when the decision is made and from which type.",
+   "advancedTitle": "Advanced follow-up: templates versus virtual dispatch",
+   "followUp": "q006"
+  },
+  "recall": [
+   [
+    "Why does std::sort usually beat qsort?",
+    "std::sort's comparator is a template parameter the compiler can inline; qsort calls through a function pointer on every comparison."
+   ],
+   [
+    "When do you need virtual dispatch rather than templates?",
+    "When the concrete type is only known at run time: heterogeneous containers, plugins, or a stable ABI boundary."
+   ],
+   [
+    "Can the compiler remove a virtual call?",
+    "Sometimes: devirtualization when it can prove the dynamic type (for example with final classes)."
+   ]
+  ]
+ },
+ "virtual-functions": {
+  "orientation": {
+   "what": "Virtual functions: member functions whose call is resolved at run time from the object's dynamic type, through the vptr and vtable.",
+   "why": "Virtual functions are the core of run-time polymorphism. Their rules — override, hiding, calls during construction, slicing — are frequent interview and code-review topics.",
+   "outcomes": [
+    "Predict which function a call through a base pointer runs",
+    "Use override to catch signature mistakes",
+    "Explain the cost of a virtual call",
+    "Know the construction, destruction and slicing pitfalls"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~20–25 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: a call through data",
+    "intro": "What s->draw() does when draw is virtual:",
+    "stages": [
+     {
+      "name": "Load vptr",
+      "io": "from the object",
+      "note": "Every polymorphic object carries a hidden pointer to its class's vtable."
+     },
+     {
+      "name": "Load slot",
+      "io": "vtable[draw]",
+      "note": "draw's slot number is fixed at compile time."
+     },
+     {
+      "name": "Indirect call",
+      "io": "the override",
+      "note": "The function pointer in that slot is Circle::draw for a Circle — whatever the pointer's static type."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "A virtual call is resolved from the object's dynamic type; a non-virtual call from the pointer's static type.",
+     "Write override on every override: a signature mismatch then becomes a compile error instead of a silent new function.",
+     "A polymorphic base needs a virtual destructor, and virtual calls in constructors and destructors don't reach derived overrides."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A job title, resolved by the company directory",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <iostream>\nstruct B { void f() { std::cout << \"B\"; } };\nstruct D : B { void f() { std::cout << \"D\"; } };\n\nint main() {\n    B* p = new D;\n    p->f();\n    delete p;\n}",
+    "q": "What does this print?",
+    "options": [
+     [
+      "A",
+      "D"
+     ],
+     [
+      "B",
+      "B"
+     ],
+     [
+      "C",
+      "BD"
+     ],
+     [
+      "D",
+      "Compile error: f is not virtual"
+     ]
+    ],
+    "reveal": [
+     "B — it prints B.",
+     "f is not virtual, so p->f() is resolved from p's static type, B*.",
+     "D::f hides B::f for calls made through a D, but doesn't override it.",
+     "Make B::f virtual (and write override on D::f) and it prints D."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "A virtual call through a pointer and a reference:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: a virtual call",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What decides which override a virtual call runs?",
+    "The dynamic type of the object, via its vptr — not the type of the pointer or reference."
+   ],
+   [
+    "What does the override keyword buy you?",
+    "The compiler checks that the function really overrides a base virtual; a typo or mismatched const becomes an error."
+   ],
+   [
+    "Why is a virtual call usually slower than a direct one?",
+    "It adds two loads and an indirect call, and above all it usually prevents inlining."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "The object and its vtable",
+     "hint": "simplified, and the real Itanium/MSVC layouts",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: where virtual dispatch lives",
+     "hint": "widgets, entities, plugins, interfaces",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "vtable",
+    "vptr",
+    "virtual-destructor",
+    "override-specifier"
+   ]
+  },
+  "interview": {
+   "think": "Say which type — static or dynamic — the call is resolved from, and why.",
+   "advancedTitle": "Advanced follow-up: virtual calls from constructors",
+   "followUp": "q006"
+  },
+  "recall": [
+   [
+    "Is a function overriding a virtual function virtual even without the keyword?",
+    "Yes: an override is implicitly virtual; writing override makes the intent checked."
+   ],
+   [
+    "What is object slicing?",
+    "Copying a derived object into a base object by value: only the base part is kept, so virtual calls reach the base versions."
+   ],
+   [
+    "What does final on a virtual function do?",
+    "Forbids further overriding, which can also let the compiler devirtualize calls."
+   ]
+  ]
+ },
+ "vtable": {
+  "orientation": {
+   "what": "The vtable: the per-class table of function pointers that virtual calls index into, and how overriding fills its slots.",
+   "why": "Knowing that the vtable is per class (and the vptr per object) explains virtual dispatch's real memory and time costs, and why changing virtual functions breaks ABI.",
+   "outcomes": [
+    "Explain what a vtable contains and where it lives",
+    "Predict slot contents for overridden and inherited functions",
+    "Count vtables and vptrs in a hierarchy",
+    "Explain thunks in multiple inheritance"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~25–30 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: one table per class",
+    "intro": "Base declares f and g; Derived overrides only f:",
+    "stages": [
+     {
+      "name": "Base's vtable",
+      "io": "[Base::f, Base::g, ~Base]",
+      "note": "Built once by the compiler, stored in the binary."
+     },
+     {
+      "name": "Derived's vtable",
+      "io": "[Derived::f, Base::g, ~Derived]",
+      "note": "A new table: slot 0 replaced, slot 1 copied through unchanged."
+     },
+     {
+      "name": "Each object",
+      "io": "one vptr",
+      "note": "Every Derived object points at the one shared Derived vtable."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "A vtable is a per-class array of function pointers, one slot per virtual function, generated by the compiler.",
+     "A derived class gets its own vtable: overridden slots point to its overrides, others keep the base's functions.",
+     "Objects only hold a vptr, so the vtable's size never scales with the number of objects."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "One menu board per restaurant branch",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <iostream>\nstruct Base {\n    virtual void f() { std::cout << \"Base::f \"; }\n    virtual void g() { std::cout << \"Base::g \"; }\n    virtual ~Base() = default;\n};\nstruct Derived : Base {\n    void f() override { std::cout << \"Derived::f \"; }\n};\n\nint main() {\n    Base* b = new Derived;\n    b->f();\n    b->g();\n    delete b;\n}",
+    "q": "What does this print?",
+    "options": [
+     [
+      "A",
+      "Base::f Base::g"
+     ],
+     [
+      "B",
+      "Derived::f Base::g"
+     ],
+     [
+      "C",
+      "Derived::f Derived::g"
+     ],
+     [
+      "D",
+      "Compile error: Derived doesn't override g"
+     ]
+    ],
+    "reveal": [
+     "B — Derived::f Base::g.",
+     "b's vptr points at Derived's vtable.",
+     "Slot 0 (f) was replaced by Derived::f; slot 1 (g) still holds Base::g, because Derived didn't override it.",
+     "Not overriding a virtual function is fine: the derived vtable just carries the base's pointer forward."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "Two vtables, one overridden slot:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: building and using the tables",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Is a vtable per object or per class?",
+    "Per class. Each object holds only a vptr pointing to its class's vtable."
+   ],
+   [
+    "What is in a derived class's slot for a virtual function it doesn't override?",
+    "The base class's function address."
+   ],
+   [
+    "Why does adding a virtual function to a library base class break binary compatibility?",
+    "It can renumber vtable slots, so already-compiled code calls through the wrong slot."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Where vtables and vptrs live",
+     "hint": "read-only data versus inside each object",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: dispatch and ABI stability",
+     "hint": "exceptions, UI events, plugins",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "vptr",
+    "multiple-inheritance",
+    "abi-basics",
+    "vfunc-overhead"
+   ]
+  },
+  "interview": {
+   "think": "Separate what exists once per class from what exists once per object.",
+   "advancedTitle": "Advanced follow-up: multiple inheritance and thunks",
+   "followUp": "q010"
+  },
+  "recall": [
+   [
+    "What does a thunk do?",
+    "Adjusts this from a non-first base subobject back to the full object, then jumps to the real override."
+   ],
+   [
+    "What does an Itanium-ABI vtable hold before the function slots?",
+    "An offset-to-top value and a pointer to the class's type_info (used by dynamic_cast and typeid)."
+   ],
+   [
+    "Can an ODR violation affect vtables?",
+    "Yes: inconsistent class definitions across translation units can produce incompatible vtables for 'the same' class — undefined behavior."
+   ]
+  ]
+ },
+ "vptr": {
+  "orientation": {
+   "what": "The vptr: the hidden per-object pointer to the vtable, and how constructors and destructors rewrite it level by level.",
+   "why": "The vptr explains the most-tested virtual-function gotcha — calls from constructors and destructors don't reach derived overrides — and the exact per-object cost of polymorphism.",
+   "outcomes": [
+    "Explain what the vptr is and where it lives",
+    "Trace the vptr through construction and destruction",
+    "Predict virtual calls made from constructors and destructors",
+    "Know sizeof's cost of the first virtual function"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~20–25 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: the vptr follows construction",
+    "intro": "Constructing a Derived d;:",
+    "stages": [
+     {
+      "name": "Base::Base() starts",
+      "io": "vptr → Base's vtable",
+      "note": "Virtual calls inside Base's constructor reach Base's versions."
+     },
+     {
+      "name": "Derived::Derived() starts",
+      "io": "vptr → Derived's vtable",
+      "note": "From here on, the object dispatches as a Derived."
+     },
+     {
+      "name": "~Derived() ends, ~Base() starts",
+      "io": "vptr → Base's vtable",
+      "note": "During ~Base(), virtual calls again reach Base's versions."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "The vptr is a hidden per-object pointer to the class's vtable, usually at offset 0.",
+     "Each constructor sets it to its own class's vtable, so an object only behaves as derived as its construction has progressed; destructors undo this in reverse.",
+     "The first virtual function adds one pointer to sizeof; more virtual functions add nothing per object."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Name badges issued stage by stage",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <iostream>\nstruct Base {\n    virtual void hello() { std::cout << \"Base \"; }\n    virtual ~Base() { hello(); }\n};\nstruct Derived : Base {\n    void hello() override { std::cout << \"Derived \"; }\n};\n\nint main() {\n    Derived d;\n}   // d is destroyed here",
+    "q": "What does this print?",
+    "options": [
+     [
+      "A",
+      "Derived"
+     ],
+     [
+      "B",
+      "Base"
+     ],
+     [
+      "C",
+      "Derived Base"
+     ],
+     [
+      "D",
+      "Nothing"
+     ]
+    ],
+    "reveal": [
+     "B — it prints Base.",
+     "~Derived() runs first and finishes; then ~Base() starts and sets the vptr back to Base's vtable.",
+     "The virtual call in ~Base() therefore reaches Base::hello.",
+     "The same rule applies to constructors: virtual calls there don't reach derived overrides."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "A virtual call from a constructor, and sizeof with and without a vptr:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: the vptr during construction",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Why doesn't a virtual call in a base constructor reach the derived override?",
+    "When the base constructor runs, the vptr points to the base's vtable; the derived constructor hasn't run yet to change it."
+   ],
+   [
+    "How much does adding a third virtual function add to sizeof?",
+    "Nothing: only the first virtual function adds the vptr; later ones only grow the shared vtable."
+   ],
+   [
+    "What is the fix when setup needs derived behavior?",
+    "Two-phase initialization: fully construct the object, then call an init() function, often from a factory."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "The first virtual function's cost",
+     "hint": "sizeof 1 versus 8",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: the template-method constructor trap",
+     "hint": "and how static analysis catches it",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "vtable",
+    "virtual-destructor",
+    "abstract-classes"
+   ]
+  },
+  "interview": {
+   "think": "Trace what the vptr points to at the exact moment the call runs.",
+   "advancedTitle": "Advanced follow-up: vptr writes in a three-level hierarchy"
+  },
+  "recall": [
+   [
+    "Is calling a pure virtual function from a constructor safe?",
+    "No: it is undefined behavior. When the call really is dispatched at run time (for example through another member function), GCC and Clang abort with 'pure virtual method called'."
+   ],
+   [
+    "Can user code portably read the vptr?",
+    "No: its location and format are implementation-defined, and reading it through casts is undefined behavior."
+   ],
+   [
+    "Does a class with only a virtual destructor get a vptr?",
+    "Yes: any virtual function, including the destructor, adds one."
+   ]
+  ]
+ },
+ "virtual-destructor": {
+  "orientation": {
+   "what": "Why a base class that is deleted through a base pointer needs a virtual destructor, and when a protected non-virtual destructor is the better choice.",
+   "why": "Deleting a derived object through a base pointer with a non-virtual destructor is undefined behavior that compiles cleanly and often just leaks — a classic production bug and interview question.",
+   "outcomes": [
+    "Explain exactly what goes wrong without a virtual destructor",
+    "Know which smart pointers do and don't save you",
+    "Choose between a virtual public and a protected non-virtual destructor",
+    "Know the compiler warnings that catch it"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~20–25 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: delete looks at the pointer's type",
+    "intro": "delete p; where Base* p points to a Derived:",
+    "stages": [
+     {
+      "name": "~Base() not virtual",
+      "io": "static choice",
+      "note": "The compiler picks ~Base() from p's static type.",
+      "err": "undefined behavior: ~Derived() is skipped in practice"
+     },
+     {
+      "name": "~Base() virtual",
+      "io": "dynamic choice",
+      "note": "The vtable selects ~Derived(), which then runs ~Base()."
+     },
+     {
+      "name": "Deallocation",
+      "io": "right size",
+      "note": "With a virtual destructor, the memory is also freed as the right (Derived) object."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "If objects will be deleted through a Base*, Base's destructor must be virtual; otherwise the delete is undefined behavior.",
+     "In practice ~Derived() is skipped, so everything Derived owns leaks — silently.",
+     "If a base should never be deleted polymorphically, make its destructor protected and non-virtual instead."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Disposing of a box by its outer label",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <iostream>\n#include <memory>\nstruct Base    { ~Base()    { std::cout << \"~Base \"; } };   // NOT virtual\nstruct Derived : Base { ~Derived() { std::cout << \"~Derived \"; } };\n\nint main() {\n    { std::shared_ptr<Base> s = std::make_shared<Derived>(); }\n    std::cout << \"| \";\n    { std::unique_ptr<Base> u = std::make_unique<Derived>(); }\n}",
+    "q": "What does this print?",
+    "options": [
+     [
+      "A",
+      "~Base | ~Base"
+     ],
+     [
+      "B",
+      "~Derived ~Base | ~Derived ~Base"
+     ],
+     [
+      "C",
+      "~Derived ~Base | ~Base (and the second is undefined behavior)"
+     ],
+     [
+      "D",
+      "Compile error: Base has no virtual destructor"
+     ]
+    ],
+    "reveal": [
+     "C — shared_ptr gets it right; unique_ptr doesn't.",
+     "make_shared<Derived> creates a control block that remembers how to destroy a Derived, even after conversion to shared_ptr<Base>.",
+     "unique_ptr<Base>'s default deleter just does delete on a Base*: undefined behavior, and only ~Base runs.",
+     "Don't rely on shared_ptr's quirk — give polymorphic bases a virtual destructor."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Full example",
+    "title": "The example",
+    "intro": "The bug and the fix side by side:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: static versus virtual destruction",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What happens when you delete a Derived through a Base* whose destructor isn't virtual?",
+    "Undefined behavior. In practice only ~Base() runs, so Derived's members and resources are never cleaned up."
+   ],
+   [
+    "Does making only ~Derived() virtual fix it?",
+    "No: the destructor must be virtual in the class used in the delete expression — the base."
+   ],
+   [
+    "When is a non-virtual destructor the right design for a base class?",
+    "When the class must never be deleted through itself (for example a CRTP base): make it protected and non-virtual."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "The cost of a virtual destructor",
+     "hint": "one vptr if the class had none",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: factories and containers of base pointers",
+     "hint": "why every interface has one",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "pure-virtual",
+    "abstract-classes",
+    "crtp",
+    "shared-ptr"
+   ]
+  },
+  "interview": {
+   "think": "Say which type the delete expression uses to choose the destructor.",
+   "advancedTitle": "Advanced follow-up: does every base class need one?",
+   "followUp": "q006"
+  },
+  "recall": [
+   [
+    "Which warnings catch deleting a polymorphic type with a non-virtual destructor?",
+    "GCC's -Wdelete-non-virtual-dtor and Clang's -Wdelete-non-abstract-non-virtual-dtor, both in -Wall."
+   ],
+   [
+    "Does an abstract class with pure virtual functions automatically get a virtual destructor?",
+    "No: the destructor must be declared virtual separately."
+   ],
+   [
+    "What is the usual idiom for an interface's destructor?",
+    "virtual ~IThing() = default;"
+   ]
+  ]
+ },
+ "pure-virtual": {
+  "orientation": {
+   "what": "Pure virtual functions (= 0): declaring an interface function that derived classes must implement, which makes the class abstract.",
+   "why": "Pure virtual functions let the compiler reject 'using an interface as if it were a concrete class'. The details — they can have bodies, and a pure virtual destructor needs one — are common interview questions.",
+   "outcomes": [
+    "Declare a pure virtual function and explain what = 0 means",
+    "Predict when a derived class becomes concrete",
+    "Explain why a pure virtual function can still have a body",
+    "Know the rule for pure virtual destructors"
+   ],
+   "firstPass": "~10–15 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: = 0 creates an obligation",
+    "intro": "virtual double area() const = 0; in Shape:",
+    "stages": [
+     {
+      "name": "Shape",
+      "io": "abstract",
+      "note": "It can't be instantiated, but Shape* and Shape& are fine."
+     },
+     {
+      "name": "Derived without area()",
+      "io": "still abstract",
+      "note": "The obligation passes down until someone implements it."
+     },
+     {
+      "name": "Circle with area()",
+      "io": "concrete",
+      "note": "Every pure virtual is implemented, so Circle objects can be created."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "= 0 marks a virtual function pure: the class becomes abstract and can't be instantiated.",
+     "A derived class is concrete only when every pure virtual in its hierarchy has been overridden.",
+     "A pure virtual function may still have a body, callable with a qualified name (Base::f()); a pure virtual destructor must have one."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A job posting with nobody hired yet",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "struct I {\n    virtual ~I() = 0;   // pure virtual destructor, no body anywhere\n};\nstruct C : I {};\n\nint main() {\n    C c;\n}",
+    "q": "You compile and link this. What happens?",
+    "options": [
+     [
+      "A",
+      "It builds and runs"
+     ],
+     [
+      "B",
+      "Compile error: C is abstract"
+     ],
+     [
+      "C",
+      "Link error: undefined reference to I::~I()"
+     ],
+     [
+      "D",
+      "Run-time crash: pure virtual call"
+     ]
+    ],
+    "reveal": [
+     "C — a link error.",
+     "C's implicit destructor overrides ~I, so C is concrete and compiles.",
+     "But every derived destructor calls the base destructor, so I::~I() must exist.",
+     "Add I::~I() = default; (or {}) outside the class. A pure virtual destructor is the one pure virtual that always needs a body."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "An abstract Shape and a concrete Circle:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: from abstract to concrete",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What does = 0 mean on a virtual function?",
+    "It is pure: the class becomes abstract, and derived classes must override it to become instantiable."
+   ],
+   [
+    "Can you declare a pointer to an abstract class?",
+    "Yes; pointers and references to abstract types are how polymorphic code is written."
+   ],
+   [
+    "Can a pure virtual function have a body?",
+    "Yes. Derived overrides can call it with a qualified name, such as Shape::area()."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Bodies for pure virtual functions",
+     "hint": "a default the derived class opts into",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: interfaces and test doubles",
+     "hint": "Serializable, Drawable, mocks",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "abstract-classes",
+    "interface-design"
+   ]
+  },
+  "interview": {
+   "think": "Separate 'the class is abstract' from 'the function has no body'.",
+   "advancedTitle": "Advanced follow-up: pointers to abstract types"
+  },
+  "recall": [
+   [
+    "Why declare a destructor pure virtual?",
+    "To make a class abstract when it has no other natural pure virtual function — but you still have to define it."
+   ],
+   [
+    "What happens if a derived class forgets one pure virtual?",
+    "It stays abstract, and trying to create an object of it is a compile error."
+   ],
+   [
+    "What runs if a pure virtual function is called virtually during construction?",
+    "Undefined behavior; if the call is dispatched through the vtable, GCC and Clang land in __cxa_pure_virtual, which prints 'pure virtual method called' and aborts."
+   ]
+  ]
+ },
+ "abstract-classes": {
+  "orientation": {
+   "what": "Abstract classes: classes with at least one pure virtual function — non-instantiable, but free to have constructors, data and ordinary member functions.",
+   "why": "Abstract classes are how C++ expresses interfaces and partial implementations. A common misconception is that they can't hold state or constructors — they can.",
+   "outcomes": [
+    "Say exactly what makes a class abstract",
+    "Explain what an abstract class may still contain",
+    "Build an intermediate partial-implementation layer",
+    "Avoid calling pure virtuals during construction"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~20–25 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: a normal class with one missing piece",
+    "intro": "What Shape can contain:",
+    "stages": [
+     {
+      "name": "Constructor and data",
+      "io": "allowed",
+      "note": "Shape(int id) runs as part of every Circle's construction and sets id_."
+     },
+     {
+      "name": "Concrete functions",
+      "io": "allowed",
+      "note": "describe() is fully implemented and shared by every shape."
+     },
+     {
+      "name": "area() = 0",
+      "io": "the missing piece",
+      "note": "One pure virtual makes the whole class non-instantiable."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "A class is abstract if it has at least one pure virtual function, declared or inherited and not yet overridden.",
+     "Otherwise it is an ordinary class: it can have constructors, data members, a destructor and concrete functions.",
+     "An intermediate class can implement some pure virtuals and leave others, giving leaf classes shared code."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A job requisition that already has policies and an ID",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "struct Shape {\n    virtual double area() const = 0;\n    virtual double perimeter() const = 0;\n    virtual ~Shape() = default;\n};\nstruct Hexagon : Shape {\n    double perimeter() const override { return 6.0; }\n};\n\nHexagon h;          // (1)\nShape* s = nullptr; // (2)",
+    "q": "Which lines compile?",
+    "options": [
+     [
+      "A",
+      "Both"
+     ],
+     [
+      "B",
+      "Only (1)"
+     ],
+     [
+      "C",
+      "Only (2)"
+     ],
+     [
+      "D",
+      "Neither"
+     ]
+    ],
+    "reveal": [
+     "C — only (2).",
+     "Hexagon overrides perimeter() but not area(), so it is still abstract, and (1) is an error.",
+     "A pointer to an abstract type is always fine.",
+     "Hexagon is a perfectly good intermediate class; a leaf class that adds area() becomes concrete."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Full example",
+    "title": "The example",
+    "intro": "An abstract class with a constructor, data and concrete functions:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: what the compiler checks",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Can an abstract class have a constructor?",
+    "Yes. It runs as part of constructing every derived object."
+   ],
+   [
+    "Can an abstract class have data members?",
+    "Yes. Only a pure-interface convention avoids them — the language doesn't."
+   ],
+   [
+    "When does an abstract class's derived class become concrete?",
+    "When no pure virtual function remains un-overridden anywhere in its hierarchy."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "The pure slot in the vtable",
+     "hint": "__cxa_pure_virtual and _purecall",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: interfaces with shared state",
+     "hint": "drivers, visitors, backends",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "interface-design",
+    "pure-virtual",
+    "pat-strategy"
+   ]
+  },
+  "interview": {
+   "think": "State the single rule that makes a class abstract, then list what it may still contain.",
+   "advancedTitle": "Advanced follow-up: partial implementations"
+  },
+  "recall": [
+   [
+    "Is it safe for an abstract class's constructor to call its pure virtual function?",
+    "No: during base construction the vptr points at the abstract class's vtable, so the call is undefined behavior."
+   ],
+   [
+    "Does being abstract make the destructor virtual?",
+    "No; declare it virtual separately if objects are deleted through the abstract base."
+   ],
+   [
+    "What happens across a codebase when an interface gains a new pure virtual?",
+    "Every implementing class stops compiling until it implements it — a loud, safe failure."
+   ]
+  ]
+ },
+ "interface-design": {
+  "orientation": {
+   "what": "Designing interfaces in C++: pure abstract classes with only pure virtual functions and a virtual destructor, kept small (interface segregation).",
+   "why": "C++ has no interface keyword, so good interfaces are a convention. Fat interfaces force every implementer to write stubs and couple unrelated capabilities.",
+   "outcomes": [
+    "Write a C++ interface class",
+    "Split a fat interface into focused ones",
+    "Explain why multiple inheritance of pure interfaces is safe",
+    "Know the costs: extra vptrs and this-adjusting thunks"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~20–25 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: small capabilities, combined",
+    "intro": "A lamp and a soundbar:",
+    "stages": [
+     {
+      "name": "IPowerable",
+      "io": "powerOn()",
+      "note": "Everything that turns on implements this."
+     },
+     {
+      "name": "IDimmable / IVolumeControl",
+      "io": "one capability each",
+      "note": "Only devices that support them implement them."
+     },
+     {
+      "name": "BetterLamp",
+      "io": "IPowerable + IDimmable",
+      "note": "No stubs for volume or eject — the lamp only promises what it can do."
+     },
+     {
+      "name": "Client code",
+      "io": "depends on one interface",
+      "note": "turnOn(IPowerable&) works for every device, present or future."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "A C++ interface is a class with only pure virtual functions and a virtual destructor, and no data.",
+     "Keep interfaces small and focused (interface segregation): a fat interface forces every implementer to stub functions it can't support.",
+     "Inheriting several pure interfaces is safe — no data to duplicate — and costs only extra vptrs and this-adjusting thunks."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "One fifty-button remote versus several small ones",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "struct IPowerable { virtual void powerOn() = 0; virtual ~IPowerable() = default; };\nstruct IDimmable  { virtual void setBrightness(int) = 0; virtual ~IDimmable() = default; };\nstruct Lamp : IPowerable, IDimmable {\n    void powerOn() override {}\n    void setBrightness(int) override {}\n};\n\nLamp lamp;\nIPowerable* a = &lamp;\nIDimmable*  b = &lamp;\nbool same = (void*)a == (void*)b;",
+    "q": "What is same?",
+    "options": [
+     [
+      "A",
+      "true: both point at lamp"
+     ],
+     [
+      "B",
+      "false: they point at different subobjects"
+     ],
+     [
+      "C",
+      "It doesn't compile"
+     ],
+     [
+      "D",
+      "Undefined behavior"
+     ]
+    ],
+    "reveal": [
+     "B — false.",
+     "Each interface base is its own subobject with its own vptr, so the second one sits at an offset (8 bytes on x86-64 with GCC and Clang).",
+     "Converting &lamp to IDimmable* adjusts the address.",
+     "That offset is why calls through b to Lamp's overrides go through a small this-adjusting thunk."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Full example",
+    "title": "The example",
+    "intro": "A fat interface, then the same devices with segregated interfaces:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: depending on capabilities",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "How do you write an interface in C++?",
+    "A class with only pure virtual functions and a virtual destructor, and no data members."
+   ],
+   [
+    "What is interface segregation?",
+    "Preferring several small, focused interfaces over one large one, so implementers only promise what they support."
+   ],
+   [
+    "Why is multiple inheritance of pure interfaces considered safe?",
+    "They carry no data, so there is nothing to duplicate or disambiguate; only mechanical costs remain."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "N interfaces, N vptrs",
+     "hint": "the layout of a multi-interface object",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: COM and engine mixins",
+     "hint": "IUnknown, IRenderable, ICollidable",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "multiple-inheritance",
+    "pat-strategy",
+    "pat-dependency-injection"
+   ]
+  },
+  "interview": {
+   "think": "Start from what each implementer is forced to write.",
+   "advancedTitle": "Advanced follow-up: why pure-interface multiple inheritance is safe"
+  },
+  "recall": [
+   [
+    "What goes wrong when you add a method to a fat interface?",
+    "Every implementer across the codebase must add it, even as a stub, or the build breaks."
+   ],
+   [
+    "What reintroduces the dangers of multiple inheritance into interfaces?",
+    "Adding data members (state) to what was meant to be a pure interface."
+   ],
+   [
+    "Is the I prefix meaningful to the compiler?",
+    "No, it is only a naming convention for readers."
    ]
   ]
  }
