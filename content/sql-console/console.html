@@ -297,6 +297,19 @@ pre.code{border:1px solid var(--code-border);border-radius:8px;}
 .cs-syn{margin:0;background:var(--code-bg);color:var(--code-text);font-family:var(--mono);font-size:12.5px;line-height:1.6;padding:10px 14px;white-space:pre-wrap;overflow-wrap:anywhere;border:0;border-radius:0;}
 .cs-mean{padding:10px 14px;font-size:14px;line-height:1.6;color:var(--text);overflow-wrap:anywhere;}
 .ls-gotchas .trap-list li{overflow-wrap:anywhere;}
+.cs-cat{margin:0 0 24px;}
+.cs-cat-h{font-size:14px;font-weight:700;color:var(--text);margin:0 0 10px;display:flex;align-items:baseline;gap:8px;}
+.cs-cat-n{font-size:12px;font-weight:500;color:var(--text-faint);}
+.cs-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
+.cs-grid > .cs-card:last-child:nth-child(odd){grid-column:1 / -1;}
+@media(max-width:760px){.cs-grid{grid-template-columns:1fr;gap:10px;}}
+.cs-card{display:flex;flex-direction:column;gap:8px;text-align:left;font:inherit;color:var(--text);background:var(--bg-card);border:1px solid var(--border-soft);border-radius:var(--radius-lg);padding:16px 18px;cursor:pointer;min-width:0;transition:border-color .12s ease,background .12s ease;}
+.cs-card:hover{border-color:var(--accent);}
+.cs-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+.cs-card-title{font-size:15px;font-weight:650;line-height:1.35;color:var(--text);overflow-wrap:anywhere;}
+.cs-card-sum{font-size:13px;line-height:1.55;color:var(--text-muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.cs-card-meta{margin-top:auto;display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;font-size:12px;color:var(--text-faint);font-variant-numeric:tabular-nums;}
+.cs-card-go{margin-left:auto;color:var(--accent);font-weight:600;}
 @media(max-width:760px){.cs-row{grid-template-columns:1fr;}.cs-mean{padding-top:8px;}}
 
 /* execution reasoning */
@@ -20201,14 +20214,19 @@ VIEWS.cheatsheets = function(params){
   }
 
   const cats = Array.from(new Set(CHEAT_SHEETS.map(s=>s.category)));
-  return viewHeader('Cheat Sheets', CHEAT_SHEETS.length+' sheets &middot; '+CHEAT_SHEETS.reduce((a,s)=>a+s.blocks.reduce((x,b)=>x+b.lines.length,0),0)+' reference lines. Syntax and semantics for Oracle Database 19c; anything release-gated says so.') +
-    cats.map(c=>
-      '<div style="margin-bottom:18px"><div class="section-title">'+escapeHtml(c)+'</div>'+
-      '<div class="card"><div class="checklist" style="max-height:none">'+
-      CHEAT_SHEETS.filter(s=>s.category===c).map(s=>
-        '<div class="check-row link" role="button" tabindex="0" data-action="open-sheet" data-id="'+escapeHtml(s.id)+'"><div class="row-main"><div class="row-title">'+escapeHtml(s.title)+'</div>'+
-        '<div class="row-meta"><span>'+s.blocks.length+' sections</span><span>'+s.blocks.reduce((x,b)=>x+b.lines.length,0)+' lines</span><span>'+s.gotchas.length+' gotchas</span></div></div><span class="row-arrow">Open &rarr;</span></div>').join('')+
-      '</div></div></div>').join('');
+  const lineCount = s => s.blocks.reduce((x,b)=>x+b.lines.length,0);
+  return viewHeader('Cheat Sheets', CHEAT_SHEETS.length+' sheets &middot; '+CHEAT_SHEETS.reduce((a,s)=>a+lineCount(s),0)+' reference lines. Syntax and semantics for Oracle Database 19c; anything release-gated says so.') +
+    cats.map(c=>{
+      const sheets = CHEAT_SHEETS.filter(s=>s.category===c);
+      return '<section class="cs-cat"><h2 class="cs-cat-h">'+escapeHtml(c)+'<span class="cs-cat-n">'+sheets.length+(sheets.length===1?' sheet':' sheets')+'</span></h2>'+
+        '<div class="cs-grid">'+sheets.map(s=>
+          '<button type="button" class="cs-card" data-action="open-sheet" data-id="'+escapeHtml(s.id)+'">'+
+            '<span class="cs-card-title">'+escapeHtml(s.title)+'</span>'+
+            '<span class="cs-card-sum">'+escapeHtml(s.summary)+'</span>'+
+            '<span class="cs-card-meta"><span>'+s.blocks.length+' sections</span><span>'+lineCount(s)+' lines</span><span>'+s.gotchas.length+' gotchas</span><span class="cs-card-go">Open &rarr;</span></span>'+
+          '</button>').join('')+
+        '</div></section>';
+    }).join('');
 };
 
 /* ================= ORACLE ERROR REFERENCE ================= */
