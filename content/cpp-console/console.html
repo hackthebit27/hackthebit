@@ -1565,7 +1565,7 @@ DEEP_CONTENT['object-slicing'] = {
   def:"Object slicing happens when a derived-class object is copied into a base-class-by-value context — the derived-only data (and the vptr pointing to the derived vtable) is 'sliced off', leaving just the base part.",
   why:"C++ lets you assign/copy a `Derived` into a `Base` because a `Derived` *is-a* `Base`, but a plain `Base` variable is only ever big enough to hold a `Base` — there is nowhere for the extra derived state to go, so it's silently discarded instead of raising an error.",
   analogy:"It's like photocopying a business card that has a fold-out insert. The photocopier (the base-class copy constructor) only knows how to reproduce a standard card — the fold-out extra content simply doesn't make it onto the copy.",
-  code:`class Animal { public: virtual std::string speak() const { return "..."; } std::string name; };\nclass Dog : public Animal {\npublic:\n    Dog() { name = "Rex"; }\n    std::string speak() const override { return "Woof"; }\n    std::string breed = "Labrador";\n};\n\nvoid printAnimal(Animal a) { std::cout << a.speak(); }  // pass-by-value slices too\n\nint main() {\n    Dog d;\n    Animal a = d;              // SLICED: a is a plain Animal now\n    std::cout << a.speak();    // prints "..." NOT "Woof" — vptr was sliced away\n    printAnimal(d);            // prints "..."\n}`,
+  code:`#include <iostream>\n#include <string>\n\nclass Animal { public: virtual std::string speak() const { return "..."; } std::string name; };\nclass Dog : public Animal {\npublic:\n    Dog() { name = "Rex"; }\n    std::string speak() const override { return "Woof"; }\n    std::string breed = "Labrador";\n};\n\nvoid printAnimal(Animal a) { std::cout << a.speak(); }  // pass-by-value slices too\n\nint main() {\n    Dog d;\n    Animal a = d;              // SLICED: a is a plain Animal now\n    std::cout << a.speak();    // prints "..." NOT "Woof" — vptr was sliced away\n    printAnimal(d);            // prints "..."\n}`,
   steps:[
     "`Animal a = d;` invokes `Animal`'s copy constructor (not `Dog`'s), because the declared type of `a` is `Animal`.",
     "Only the `Animal` subobject's fields are copied; `Dog::breed` and the `Dog` vtable pointer never make it into `a`.",
@@ -1583,7 +1583,7 @@ DEEP_CONTENT['crtp'] = {
   def:"CRTP (Curiously Recurring Template Pattern) is a technique where a class `Derived` inherits from a template instantiated with itself: `class Derived : public Base<Derived>`, giving the base compile-time access to the derived type without virtual dispatch.",
   why:"It gives you polymorphism-like code reuse ('the base implements the algorithm, the derived supplies the specifics') with zero runtime cost — no vtable, no virtual call indirection, because everything is resolved and can be inlined at compile time.",
   analogy:"Regular inheritance with virtual functions is like calling a company's general support line and getting routed to whoever's on duty — flexible, but there's a routing delay every time. CRTP is like having the direct extension memorized at compile time: the compiler already knows exactly who it's calling, so it can skip the switchboard entirely (and often inline the whole conversation).",
-  code:`template <typename Derived>\nclass Shape {\npublic:\n    double area() const {\n        return static_cast<const Derived*>(this)->areaImpl();\n    }\n};\nclass Circle : public Shape<Circle> {\npublic:\n    double areaImpl() const { return 3.14159 * r * r; }\n    double r = 2.0;\n};\n\nint main() {\n    Circle c;\n    std::cout << c.area();   // resolved entirely at compile time, no vtable\n}`,
+  code:`#include <iostream>\n\ntemplate <typename Derived>\nclass Shape {\npublic:\n    double area() const {\n        return static_cast<const Derived*>(this)->areaImpl();\n    }\n};\nclass Circle : public Shape<Circle> {\npublic:\n    double areaImpl() const { return 3.14159 * r * r; }\n    double r = 2.0;\n};\n\nint main() {\n    Circle c;\n    std::cout << c.area();   // resolved entirely at compile time, no vtable\n}`,
   steps:[
     "`Shape<Circle>::area()` calls `static_cast<const Circle*>(this)->areaImpl()` — a `static_cast`, checked at compile time, not a virtual dispatch.",
     "Since the compiler knows at compile time that `this` is really pointing at a `Circle` (that's the whole point of the template parameter), it can resolve `areaImpl` directly and even inline it into `area()`.",
@@ -2471,7 +2471,7 @@ DEEP_CONTENT['virtual-inheritance'] = {
     "The shared virtual base subobject is constructed by the MOST-DERIVED class in the hierarchy (not by the intermediate classes B or C) -- this is a distinctive, often-tested rule: D's constructor is directly responsible for initializing the shared A, even though A is not D's DIRECT base (it's B and C's base).",
     "This has a real, sometimes-surprising consequence: intermediate classes' (B's and C's) own constructors' attempts to initialize A in their own initializer lists are IGNORED if D is ultimately the most-derived class being constructed -- only D's own initializer list's mention of A actually takes effect, which is a genuinely tricky rule to internalize."
   ],
-  memory:"Virtual inheritance adds real runtime overhead compared to non-virtual inheritance -- accessing the shared virtual base typically requires an extra level of indirection (via a virtual base pointer/offset stored in the object), unlike ordinary non-virtual base subobjects, which sit at a fixed, compile-time-known offset within the derived object.",
+  memory:"Virtual inheritance adds real runtime overhead compared to non-virtual inheritance -- accessing the shared virtual base typically requires an extra level of indirection (on the Itanium ABI used by GCC and Clang, the base's offset is read from the object's vtable; MSVC instead stores a separate virtual-base-table pointer, vbptr, in the object), unlike ordinary non-virtual base subobjects, which sit at a fixed, compile-time-known offset within the derived object.",
   realWorld:"True diamond-shaped inheritance hierarchies needing virtual inheritance are relatively rare in well-designed modern C++ (which generally favors composition over deep multiple-inheritance hierarchies specifically to avoid this complexity) -- but understanding it thoroughly remains a strong signal in interviews of genuinely deep C++ object-model knowledge, and it does appear in some real domains (e.g. certain GUI framework class hierarchies, or interface-heavy designs mixing multiple capability interfaces that happen to share a common ancestor).",
   mistake:"Forgetting that the MOST-DERIVED class is responsible for initializing a virtual base, and instead assuming an intermediate class's initializer-list mention of that virtual base will actually take effect when constructing objects of a further-derived type -- it won't, silently, unless that further-derived class ALSO explicitly initializes the virtual base itself.",
   interviewQ:{q:"In a diamond inheritance hierarchy (D inherits from B and C, both of which inherit from A), why does the compiler complain about ambiguous access to A's members unless the inheritance is declared virtual?", a:"Without virtual inheritance, D contains TWO completely separate, independent A subobjects -- one contributed via its B base, and a distinct one contributed via its C base. An unqualified reference to an A member through a D object is genuinely ambiguous because there are two different, equally-valid A subobjects it COULD refer to, and the compiler has no way to guess which one you mean without you either qualifying it explicitly (`d.B::value` vs `d.C::value`) or declaring the inheritance from A as virtual in both B and C, which collapses the two copies into a single, shared A subobject that any unqualified access unambiguously refers to."},
@@ -2482,7 +2482,7 @@ DEEP_CONTENT['diamond-problem'] = {
   def:"The diamond problem is the ambiguity that arises when a class inherits from two base classes that both, in turn, inherit from the SAME common base class -- without virtual inheritance, the most-derived class ends up with two separate, disconnected copies of that common base, and unqualified access to its members becomes ambiguous.",
   why:"This is the canonical, most-tested example of a genuine structural pitfall of multiple inheritance -- understanding it deeply (not just 'use virtual inheritance to fix it') is what demonstrates real object-model fluency, since the FIX itself (virtual inheritance) introduces its own new set of rules and costs that are just as important to understand as the original problem.",
   analogy:"The diamond problem is like two different departments in a company both claiming to maintain 'the' master customer list, each having independently copied it from the same original source at some point in the past -- without an explicit decision to make them share ONE actual master list (virtual inheritance), you end up with two increasingly-diverging 'master' lists and genuine ambiguity about which one is authoritative when someone just asks for 'the customer list.'",
-  code:`struct Animal { std::string name; };\nstruct Bird : Animal {};\nstruct Fish : Animal {};\n// A (hypothetical) mythical creature inheriting from both:\nstruct FlyingFish : Bird, Fish {};\n\nint main() {\n    FlyingFish ff;\n    // ff.name;           // COMPILE ERROR: ambiguous -- Bird::Animal::name or Fish::Animal::name?\n    ff.Bird::name = "a";  // must disambiguate explicitly\n    ff.Fish::name = "b";  // this is a genuinely DIFFERENT Animal::name from the one above\n}`,
+  code:`#include <string>\n\nstruct Animal { std::string name; };\nstruct Bird : Animal {};\nstruct Fish : Animal {};\n// A (hypothetical) mythical creature inheriting from both:\nstruct FlyingFish : Bird, Fish {};\n\nint main() {\n    FlyingFish ff;\n    // ff.name;           // COMPILE ERROR: ambiguous -- Bird::Animal::name or Fish::Animal::name?\n    ff.Bird::name = "a";  // must disambiguate explicitly\n    ff.Fish::name = "b";  // this is a genuinely DIFFERENT Animal::name from the one above\n}`,
   steps:[
     "Without virtual inheritance, FlyingFish contains two ENTIRELY separate Animal subobjects -- one embedded via its Bird base, one via its Fish base -- each with its own independent `name` member that can hold a completely different value from the other.",
     "Any attempt to access `name` (or any other Animal member) through an unqualified FlyingFish object is a compile ERROR (not merely a warning) due to the genuine ambiguity -- the compiler requires you to explicitly disambiguate via `ff.Bird::name` or `ff.Fish::name`, forcing you to acknowledge which of the two copies you actually mean.",
@@ -2499,16 +2499,16 @@ DEEP_CONTENT['multiple-inheritance'] = {
   def:"Multiple inheritance is a class inheriting directly from more than one base class simultaneously (`class D : public B1, public B2`) -- fully supported in C++ (unlike many other mainstream OOP languages), with real power for combining independent capabilities, but genuine complexity around ambiguity, the diamond problem, and construction/destruction order.",
   why:"Multiple inheritance is one of C++'s most debated features precisely because it's genuinely useful for a specific, narrow purpose (combining multiple independent, unrelated abstract interfaces into one concrete class) while being genuinely risky for a different purpose (combining multiple CONCRETE, data-bearing classes), and knowing which situation you're in is a real, testable design judgment.",
   analogy:"Multiple inheritance is like a person holding two entirely separate professional certifications from two different unrelated fields (say, a pilot's license AND a medical degree) -- combining independent, non-overlapping capabilities works cleanly. It gets messy specifically when the two certifications actually overlap or reference the same underlying shared credential (the diamond problem), which is when you need to explicitly resolve which shared credential you actually mean.",
-  code:`// Clean use: combining independent, non-overlapping interfaces\nclass Printable { public: virtual void print() const = 0; virtual ~Printable()=default; };\nclass Serializable { public: virtual std::string serialize() const = 0; virtual ~Serializable()=default; };\n\nclass Document : public Printable, public Serializable {\n    void print() const override { /* ... */ }\n    std::string serialize() const override { return "..."; }\n};\n// Document can be used polymorphically as EITHER a Printable* or a Serializable*`,
+  code:`#include <string>\n\n// Clean use: combining independent, non-overlapping interfaces\nclass Printable { public: virtual void print() const = 0; virtual ~Printable()=default; };\nclass Serializable { public: virtual std::string serialize() const = 0; virtual ~Serializable()=default; };\n\nclass Document : public Printable, public Serializable {\n    void print() const override { /* ... */ }\n    std::string serialize() const override { return "..."; }\n};\n// Document can be used polymorphically as EITHER a Printable* or a Serializable*`,
   steps:[
     "Base classes are constructed in the ORDER THEY'RE LISTED in the derived class's inheritance list (left to right), NOT the order they happen to appear in the derived constructor's initializer list -- a common, genuinely-tested gotcha, since writing the initializer list in a different order from the inheritance list doesn't change the actual construction order, only (at best) triggers a compiler warning about the mismatch.",
     "Destruction happens in the exact REVERSE of construction order -- last-listed base destroyed first, first-listed base destroyed last -- consistent with the general C++ rule that teardown mirrors setup in reverse.",
     "When combining two base classes that happen to share a common ancestor (forming a diamond) or that happen to have a member/method with the SAME NAME, the resulting ambiguity must be explicitly resolved (via virtual inheritance for a genuine shared-single-instance need, or via explicit qualification like `Base1::method()` for a genuine name collision between otherwise-unrelated bases) -- the compiler will not silently guess."
   ],
-  memory:"A class inheriting from multiple bases contains each base's data laid out sequentially within the derived object (subject to alignment) -- there is a real, if usually small, memory-layout cost to each additional non-empty base, though EMPTY base classes (stateless tag, policy or mixin classes with no data and no virtual functions) typically incur zero extra size via empty base optimization -- pure-interface bases are NOT empty in this sense, since each one carries its own vptr.",
+  memory:"A class inheriting from multiple bases contains each base's data laid out sequentially within the derived object (subject to alignment) -- there is a real, if usually small, memory-layout cost to each additional non-empty base, though EMPTY base classes (stateless tag, policy or mixin classes with no data and no virtual functions) typically incur zero extra size via empty base optimization on GCC and Clang (MSVC by default applies it only to the first empty base in a multiple-inheritance list, unless the class is marked __declspec(empty_bases)) -- pure-interface bases are NOT empty in this sense, since each one carries its own vptr.",
   realWorld:"The 'mixin' pattern (combining several small, focused, often near-stateless base classes to compose a final class's behavior -- e.g. combining separate `Comparable`, `Printable`, and `Serializable` capability interfaces into one concrete class) is the most common, well-regarded real-world use of multiple inheritance in modern C++, deliberately avoiding the riskier pattern of combining multiple large, DATA-bearing concrete classes.",
   mistake:"Combining multiple CONCRETE, data-bearing base classes via multiple inheritance simply because both happen to have useful functionality, without considering whether COMPOSITION (holding instances of those classes as members instead) would achieve the same reuse with less structural risk (ambiguity, diamond problems, unclear construction order dependencies between the bases).",
-  interviewQ:{q:"In what order are multiple base classes constructed, and is that order affected by how you write the derived class's constructor initializer list?", a:"Base classes are always constructed in the order they appear in the derived class's INHERITANCE LIST (e.g. `class D : public B1, public B2` constructs B1 before B2), regardless of what order you happen to list them in the constructor's member-initializer list. Writing the initializer list in a different order doesn't change the actual construction order at all -- most compilers will emit a warning (e.g. -Wreorder) if your initializer list's order doesn't match the actual construction order, precisely because this mismatch is a common source of confusion, especially if one base's construction is assumed (incorrectly) to happen before another's based solely on initializer-list ordering."},
+  interviewQ:{q:"In what order are multiple base classes constructed, and is that order affected by how you write the derived class's constructor initializer list?", a:"Base classes are always constructed in the order they appear in the derived class's INHERITANCE LIST (e.g. `class D : public B1, public B2` constructs B1 before B2), regardless of what order you happen to list them in the constructor's member-initializer list. Writing the initializer list in a different order doesn't change the actual construction order at all -- GCC (-Wreorder) and Clang (-Wreorder-ctor) warn under -Wall if your initializer list's order doesn't match the actual construction order, precisely because this mismatch is a common source of confusion, especially if one base's construction is assumed (incorrectly) to happen before another's based solely on initializer-list ordering."},
   advancedQ:{q:"What is the 'mixin' pattern and why is it considered a safer application of multiple inheritance than combining multiple data-bearing concrete classes?", a:"A mixin is typically a small, often stateless (or nearly stateless) class providing one focused, self-contained capability (comparison operators, serialization, logging) meant to be combined via inheritance with other similarly-focused mixins to compose a final class's full behavior. Because mixins are usually small, largely independent of each other, and rarely share a common data-bearing ancestor, combining several of them via multiple inheritance tends to avoid the genuine risks of multiple inheritance (diamond-shaped ambiguity, unclear shared-state semantics, construction-order dependencies BETWEEN the bases) that arise specifically when combining large, stateful, potentially-overlapping concrete classes -- the mixin pattern captures 'the good part' of multiple inheritance (composing independent capabilities) while sidestepping most of its well-known pitfalls."},
   traps:["Assuming constructor initializer-list order controls actual base-class construction order -- it does not; inheritance-list order does.","Combining multiple large, stateful concrete classes via inheritance when composition (holding them as members) would achieve the same code reuse with less structural risk."]
 };
@@ -3466,7 +3466,7 @@ DEEP_CONTENT['op-arithmetic'] = {
   why:"Without overloading, combining user-defined types (vectors, complex numbers, big integers, money amounts) would require ugly named functions (`add(a, b)`) instead of natural `a + b` syntax — but getting the implementation pattern right (non-member, symmetric, built on the compound-assignment operator) matters for correctness and consistency with how built-in types behave.",
   code:`class Vec2 {\n    double x, y;\npublic:\n    Vec2(double x, double y) : x(x), y(y) {}\n    Vec2& operator+=(const Vec2& rhs){ x += rhs.x; y += rhs.y; return *this; }  // MEMBER\n    friend Vec2 operator+(Vec2 lhs, const Vec2& rhs);   // NON-MEMBER, built on +=\n};\ninline Vec2 operator+(Vec2 lhs, const Vec2& rhs){   // lhs taken BY VALUE (a copy)\n    lhs += rhs;      // reuse the compound-assignment logic - no duplication\n    return lhs;       // return the modified COPY - original operands untouched\n}\n\nVec2 a(1,2), b(3,4);\nVec2 c = a + b;    // a and b are UNCHANGED - operator+ never modifies its operands`,
   steps:[
-    "Taking the left-hand operand BY VALUE in the non-member `operator+` is a deliberate, idiomatic choice: it gives you a free, disposable copy to mutate and return, and lets the compiler apply copy elision, avoiding an extra explicit copy compared to taking `const Vec2&` and manually copying inside the function.",
+    "Taking the left-hand operand BY VALUE in the non-member `operator+` is a deliberate, idiomatic choice: it gives you a free, disposable copy to mutate and return, and lets the compiler elide the copy of the ARGUMENT when the caller passes a temporary (as in a + b + c), avoiding an extra explicit copy compared to taking `const Vec2&` and manually copying inside the function. The return itself is not elided (a function parameter is never an NRVO candidate) but lhs is implicitly moved out.",
     "Implementing `operator+` in terms of `operator+=` (rather than duplicating the addition logic in both) is the standard idiom — it means there's only ONE place the actual addition logic lives, reducing the chance of the two operators drifting out of sync as the class evolves.",
     "Making `operator+` a non-member (rather than a member) function is essential for SYMMETRY: a member `operator+` would only support `vec + otherType` if `otherType` converts implicitly to `Vec2` on the RIGHT side, but `otherType + vec` would fail to compile since the left operand determines which class's member function set is even considered — a non-member function, found via argument-dependent lookup, works symmetrically for both operand orders as long as an appropriate overload/conversion exists."
   ],
@@ -3481,7 +3481,7 @@ DEEP_CONTENT['op-arithmetic'] = {
 DEEP_CONTENT['op-comparison'] = {
   def:"Overloading comparison operators (`== != < > <= >=`) lets user-defined types be compared for equality/ordering — since C++20, defining `operator==` and `operator<=>` (the 'spaceship' operator) can often generate ALL SIX comparison operators automatically via `= default`, eliminating the historical need to hand-write all six consistently.",
   why:"Before C++20, hand-writing six separate, mutually-consistent comparison operators was tedious and error-prone (it's easy to define `<` and `==` in subtly inconsistent ways) — the spaceship operator lets the compiler derive the other five from one three-way comparison, guaranteeing consistency by construction.",
-  code:`// Pre-C++20 style: every operator hand-written, MUST stay mutually consistent\nclass Point {\n    int x, y;\npublic:\n    bool operator==(const Point& o) const { return x==o.x && y==o.y; }\n    bool operator!=(const Point& o) const { return !(*this == o); }         // built on ==\n    bool operator<(const Point& o) const { return std::tie(x,y) < std::tie(o.x,o.y); }\n    bool operator>(const Point& o) const { return o < *this; }              // built on <\n    bool operator<=(const Point& o) const { return !(o < *this); }\n    bool operator>=(const Point& o) const { return !(*this < o); }\n};\n\n// C++20: ONE declaration generates all six, correctly and consistently:\nclass Point20 {\n    int x, y;\npublic:\n    bool operator==(const Point20&) const = default;   // generates ==  and !=\n    auto operator<=>(const Point20&) const = default;   // generates <, >, <=, >=\n};\n// p1 <=> p2 returns a comparison category (e.g., std::strong_ordering) that\n// encodes 'less/equal/greater', and the compiler synthesizes the other four\n// relational operators FROM that single three-way result automatically.`,
+  code:`#include <compare>\n#include <tuple>\n\n// Pre-C++20 style: every operator hand-written, MUST stay mutually consistent\nclass Point {\n    int x, y;\npublic:\n    bool operator==(const Point& o) const { return x==o.x && y==o.y; }\n    bool operator!=(const Point& o) const { return !(*this == o); }         // built on ==\n    bool operator<(const Point& o) const { return std::tie(x,y) < std::tie(o.x,o.y); }\n    bool operator>(const Point& o) const { return o < *this; }              // built on <\n    bool operator<=(const Point& o) const { return !(o < *this); }\n    bool operator>=(const Point& o) const { return !(*this < o); }\n};\n\n// C++20: a defaulted operator<=> alone gives all six -- it also implicitly declares a\n// defaulted operator==. The explicit == line below is optional, shown for clarity:\nclass Point20 {\n    int x, y;\npublic:\n    bool operator==(const Point20&) const = default;   // generates ==  and !=\n    auto operator<=>(const Point20&) const = default;   // generates <, >, <=, >=\n};\n// p1 <=> p2 returns a comparison category (e.g., std::strong_ordering) that\n// encodes 'less/equal/greater', and the compiler synthesizes the other four\n// relational operators FROM that single three-way result automatically.`,
   steps:[
     "WHAT WAS ERROR-PRONE PRE-C++20: hand-writing `<` using one field ordering and `==` using a subtly different notion of equality (e.g., comparing floating-point fields with different tolerance logic in each) could produce a class where `a < b` and `!(b < a)` disagree with `a == b`'s own answer — an inconsistency that breaks sorting/set/map behavior in surprising ways.",
     "HOW SPACESHIP FIXES IT: `operator<=>` returns a comparison category type (commonly `std::strong_ordering`, `std::weak_ordering`, or `std::partial_ordering`, depending on the semantics) representing 'less, equal, or greater' as a single, structured result — the compiler then mechanically derives `<`, `>`, `<=`, `>=` from that ONE result, guaranteeing they can never disagree with each other by construction.",
@@ -3498,7 +3498,7 @@ DEEP_CONTENT['op-comparison'] = {
 DEEP_CONTENT['op-assignment'] = {
   def:"`operator=` (copy assignment, and its move-assignment sibling) defines what happens when an ALREADY-EXISTING object is assigned a new value via `a = b;` — unlike a constructor, it must correctly handle the object's PRE-EXISTING state (releasing old resources) before taking on the new state, and must correctly handle self-assignment (`a = a;`).",
   why:"Assignment is fundamentally different from construction: the target object already exists and may already own resources (heap memory, file handles) that must be properly released before — or safely interleaved with — acquiring the new object's resources, and getting this wrong is one of the most common sources of memory leaks, double-frees, and self-assignment corruption in hand-written C++ classes.",
-  code:`class Buffer {\n    int* data; size_t size;\npublic:\n    Buffer& operator=(const Buffer& other){\n        if (this == &other) return *this;         // SELF-ASSIGNMENT CHECK - critical!\n        int* newData = new int[other.size];        // 1. acquire NEW resource FIRST\n        std::copy(other.data, other.data + other.size, newData);\n        delete[] data;                              // 2. THEN release old resource\n        data = newData; size = other.size;          // 3. THEN update state\n        return *this;                                // ALWAYS return *this, by reference\n    }\n};\n// WHY 'acquire new, then release old' order matters: if 'new int[...]' throws\n// (out of memory) BEFORE the old 'data' is deleted, the object is left in its\n// ORIGINAL, valid state - this is the copy-and-swap-adjacent strong exception\n// guarantee pattern, versus the BROKEN alternative of deleting 'data' FIRST\n// and then having 'new' throw, leaving 'data' as a dangling pointer permanently.`,
+  code:`#include <algorithm>\n#include <cstddef>\n\nclass Buffer {\n    int* data; std::size_t size;\npublic:\n    explicit Buffer(std::size_t n) : data(new int[n]), size(n) {}\n    ~Buffer() { delete[] data; }\n    Buffer& operator=(const Buffer& other){\n        if (this == &other) return *this;         // SELF-ASSIGNMENT CHECK - critical!\n        int* newData = new int[other.size];        // 1. acquire NEW resource FIRST\n        std::copy(other.data, other.data + other.size, newData);\n        delete[] data;                              // 2. THEN release old resource\n        data = newData; size = other.size;          // 3. THEN update state\n        return *this;                                // ALWAYS return *this, by reference\n    }\n};\n// WHY 'acquire new, then release old' order matters: if 'new int[...]' throws\n// (out of memory) BEFORE the old 'data' is deleted, the object is left in its\n// ORIGINAL, valid state - this is the copy-and-swap-adjacent strong exception\n// guarantee pattern, versus the BROKEN alternative of deleting 'data' FIRST\n// and then having 'new' throw, leaving 'data' as a dangling pointer permanently.`,
   steps:[
     "WHAT CAN GO WRONG without a self-assignment check: `a = a;` would, in a naive implementation that deletes old data BEFORE copying from 'other', actually delete `a`'s own data first — but since `other` IS `a`, the source data being copied from has ALSO just been deleted, leading to copying from freed memory (use-after-free) or crashing outright.",
     "WHAT CAN GO WRONG with the wrong ORDER of acquire/release: if the new resource is allocated AFTER releasing the old one, and that allocation throws (e.g., `std::bad_alloc`), the object is left in a broken half-state — its old data is gone, and it never got new data — violating even the basic exception guarantee that objects remain in SOME valid state after an exception.",
@@ -3549,11 +3549,11 @@ DEEP_CONTENT['op-increment'] = {
 DEEP_CONTENT['op-subscript'] = {
   def:"`operator[]` lets a class support array-like indexing syntax (`obj[i]`) — conventionally provided in BOTH a non-const overload (returning a mutable reference, usable as an lvalue: `obj[i] = 5;`) and a const overload (returning a const reference or a value, for read-only access on const objects), mirroring exactly how built-in arrays and `std::vector`/`std::map` behave.",
   why:"Providing only a non-const `operator[]` means the class becomes unusable for reading through a `const` reference/parameter at all — a huge, often-surprising usability gap, since 'pass by const reference' is one of the most common parameter-passing conventions in C++, and code receiving a `const MyContainer&` would find `[]` completely unavailable.",
-  code:`class SimpleArray {\n    std::vector<int> data;\npublic:\n    SimpleArray(size_t n) : data(n) {}\n    int& operator[](size_t i) { return data[i]; }               // NON-CONST: mutable access\n    const int& operator[](size_t i) const { return data[i]; }    // CONST: read-only access\n};\n\nvoid readOnly(const SimpleArray& arr){\n    int x = arr[0];        // calls the CONST overload - fine\n    // arr[0] = 5;         // COMPILE ERROR if only the non-const overload existed at all,\n}                          // this line WOULD be a compile error anyway since arr is const -\n                           // but WITHOUT the const overload, even the READ 'int x = arr[0];'\n                           // would fail to compile, because there'd be NO applicable operator[]\n                           // for a const object at all.\n\nvoid mutate(SimpleArray& arr){\n    arr[0] = 99;            // calls the NON-CONST overload - returns int&, usable as lvalue\n}`,
+  code:`#include <cstddef>\n#include <vector>\n\nclass SimpleArray {\n    std::vector<int> data;\npublic:\n    SimpleArray(size_t n) : data(n) {}\n    int& operator[](size_t i) { return data[i]; }               // NON-CONST: mutable access\n    const int& operator[](size_t i) const { return data[i]; }    // CONST: read-only access\n};\n\nvoid readOnly(const SimpleArray& arr){\n    int x = arr[0];        // calls the CONST overload - fine\n    // arr[0] = 5;         // COMPILE ERROR if only the non-const overload existed at all,\n}                          // this line WOULD be a compile error anyway since arr is const -\n                           // but WITHOUT the const overload, even the READ 'int x = arr[0];'\n                           // would fail to compile, because there'd be NO applicable operator[]\n                           // for a const object at all.\n\nvoid mutate(SimpleArray& arr){\n    arr[0] = 99;            // calls the NON-CONST overload - returns int&, usable as lvalue\n}`,
   steps:[
     "WHAT GOES WRONG WITH ONLY ONE OVERLOAD: providing only the non-const `int& operator[](size_t)` means any function receiving the class by `const` reference (an extremely common, idiomatic parameter style) cannot call `operator[]` on it AT ALL — not even for reading — because the non-const member function isn't callable on a const object; this silently breaks a large, important category of usage.",
     "HOW THE PAIR FIXES IT: providing both overloads lets the compiler pick the CONST version automatically when called through a const object/reference (yielding a const reference, preventing accidental mutation through it) and the NON-CONST version when called through a non-const object/reference (yielding a mutable reference, usable as an lvalue) — exactly mirroring how `std::vector::operator[]` itself is overloaded.",
-    "AVOIDING DUPLICATION: for many real implementations, the const and non-const bodies are IDENTICAL apart from the return type's constness — a common idiom is implementing the non-const version normally, then implementing the const version by calling the non-const version via `const_cast` tricks (or, more simply and safely, just delegating to the same underlying storage access both ways) to avoid duplicating the actual indexing logic in two places."
+    "AVOIDING DUPLICATION: for many real implementations, the const and non-const bodies are IDENTICAL apart from the return type's constness — a common idiom is implementing the CONST version normally, then implementing the non-const version by calling the const version and const_cast-ing the result (the safe direction, as the advanced answer explains; the reverse direction would call a non-const function on a possibly-const object) — or, more simply, just delegating to the same underlying storage access both ways, or in C++23 writing one function with an explicit object parameter ('deducing this') to avoid duplicating the actual indexing logic in two places."
   ],
   memory:"No special layout implications — this is purely about providing a complete, usable API surface. The const-correctness distinction is a compile-time-only concern; both overloads typically compile down to identical or near-identical machine code differing only in whether the resulting reference is treated as mutable by the type system.",
   realWorld:"Every custom container type (a fixed-size array wrapper, a sparse matrix, a custom string class) needs this const/non-const pair to be genuinely usable the way standard containers are — omitting the const overload is a common, easy-to-miss gap that only surfaces later when someone tries to use the type through a const reference/parameter and hits a confusing compile error.",
@@ -7274,10 +7274,10 @@ DEEP_CONTENT['final-specifier'] = {
   def: "'final' is a C++11 CONTEXTUAL keyword (not a reserved word — it only carries special meaning in the two specific syntactic positions the compiler recognizes, and remains perfectly legal as an ordinary identifier everywhere else) usable in two distinct places: after a virtual member function's declaration ('void f() override final;') to forbid any further-derived class from overriding that one specific function again, or after a class name ('class Leaf final : public Base {};') to forbid ANY class from inheriting from that class at all. Beyond its design-intent role, 'final' unlocks a genuine, measurable compiler optimization called devirtualization: when the compiler can PROVE, from the static type of an expression at a specific call site, that 'final' rules out the possibility of any further override existing, it can replace the normally-indirect vtable-lookup-and-call with a direct call, and potentially inline it entirely, recovering some or all of virtual dispatch's usual performance cost.",
   why: "'final' gives both a hard design guarantee (stopping fragile-base-class-style misuse: nobody downstream can silently reinterpret or extend a class/method the author explicitly closed off) and a concrete, compiler-verifiable optimization opportunity that virtual functions don't otherwise get for free — understanding exactly WHEN devirtualization can actually kick in (only when the compiler can statically prove the concrete type at that specific call site) versus when it can't (calling through the general base interface type) is what distinguishes a candidate who understands 'final' as a real performance lever from one who thinks of it as purely a stylistic annotation.",
   analogy: "'final' is like stamping 'THIS IS THE LAST WORD — NO FURTHER APPEALS' on a legal ruling. Once stamped, everyone downstream — including the compiler itself — can safely stop checking whether some future, higher, or later authority might override this specific ruling, and can act immediately on it as written; a court clerk (the compiler) reading a case where the ruling in question is provably this exact, stamped, final one can skip the usual step of first consulting a lookup table of possible appeals (the vtable indirection) and act directly on the known outcome, exactly as if there had never been any possibility of an appeal in the first place.",
-  code: "class Shape {\npublic:\n    virtual double area() const = 0;\n    virtual ~Shape() = default;\n};\nclass Circle final : public Shape {   // 'final' on the CLASS -- no one may derive from Circle at all\npublic:\n    double area() const override { return 3.14159 * r_ * r_; }\nprivate:\n    double r_ = 1.0;\n};\n// class Square : public Circle {};   // ERROR: 'Circle' declared 'final', cannot be a base class\n\n// 'final' on ONE method only -- stops overriding just that method, class itself stays inheritable:\nclass Middle : public Shape {\npublic:\n    double area() const override final { return 0.0; }   // no FURTHER class may override area()\n};\n// class Leaf2 : public Middle { double area() const override {...} };  // ERROR: area() is final in Middle\n\nvoid computeDirect(const Circle& c) {\n    // The compiler KNOWS c's dynamic type must be EXACTLY Circle (nothing can derive from a final class),\n    // so it can devirtualize this call -- emit a direct call to Circle::area(), skip the vtable lookup:\n    std::cout << c.area();\n}\nvoid computeIndirect(const Shape& s) {\n    // s's static type is the non-final Shape -- ANY subclass could be bound here,\n    // so the compiler CANNOT devirtualize this call even if, at runtime, s happens to be a Circle:\n    std::cout << s.area();\n}",
+  code: "#include <iostream>\n\nclass Shape {\npublic:\n    virtual double area() const = 0;\n    virtual ~Shape() = default;\n};\nclass Circle final : public Shape {   // 'final' on the CLASS -- no one may derive from Circle at all\npublic:\n    double area() const override { return 3.14159 * r_ * r_; }\nprivate:\n    double r_ = 1.0;\n};\n// class Square : public Circle {};   // ERROR: 'Circle' declared 'final', cannot be a base class\n\n// 'final' on ONE method only -- stops overriding just that method, class itself stays inheritable:\nclass Middle : public Shape {\npublic:\n    double area() const override final { return 0.0; }   // no FURTHER class may override area()\n};\n// class Leaf2 : public Middle { double area() const override {...} };  // ERROR: area() is final in Middle\n\nvoid computeDirect(const Circle& c) {\n    // The compiler KNOWS c's dynamic type must be EXACTLY Circle (nothing can derive from a final class),\n    // so it can devirtualize this call -- emit a direct call to Circle::area(), skip the vtable lookup:\n    std::cout << c.area();\n}\nvoid computeIndirect(const Shape& s) {\n    // s's static type is the non-final Shape -- ANY subclass could be bound here,\n    // so the compiler CANNOT devirtualize this call even if, at runtime, s happens to be a Circle:\n    std::cout << s.area();\n}",
   steps: [
     "The compiler compiles computeDirect's parameter as 'const Circle&' and observes that Circle is marked final — it concludes the dynamic type of anything bound to that reference must be EXACTLY Circle, since the language forbids any class from deriving from a final class.",
-    "Because the dynamic type is now provably fixed at compile time for that call site, the compiler looks up area()'s actual implementation statically: Circle::area() (since Circle overrode it and nothing can ever override it further) — and emits a direct call instruction instead of the usual vptr-load-then-index-then-indirect-call sequence.",
+    "Because the dynamic type is now provably fixed at compile time for that call site, the compiler looks up area()'s actual implementation statically: Circle::area() (since Circle overrode it and nothing can ever override it further) — and emits a direct call instruction instead of the usual vptr-load-then-index-then-indirect-call sequence. (The standard permits this but doesn't require it; GCC 13 and Clang 18 at -O2 both emit a direct jump to Circle::area for computeDirect and an indirect jump through the vtable for computeIndirect.)",
     "If Circle::area() is small enough, the compiler may go one step further and inline the call entirely, eliminating even the function-call overhead, something that is essentially never possible across a genuine virtual dispatch boundary.",
     "computeIndirect's parameter is 'const Shape&' — Shape is NOT final, so any subclass (Circle, or any future one) could legally be bound there; the compiler has no static guarantee about the dynamic type at that call site and must emit the ordinary vtable-based indirect call, even in a build where the ONLY Shape subclass that happens to exist anywhere in the program is Circle."
   ],
@@ -7302,9 +7302,9 @@ DEEP_CONTENT['final-specifier'] = {
 
 DEEP_CONTENT['override-specifier'] = {
   def: "'override' is a C++11 contextual keyword placed after a member function's parameter list (e.g. 'void draw() const override;') that acts as a COMPILER-CHECKED ASSERTION — it does not itself make a function virtual; it tells the compiler 'I intend this function to override some virtual function inherited from a base class', and the compiler then verifies that a base-class virtual function exists with an EXACTLY matching signature (name, parameter types and count, cv-qualification, ref-qualification, and a compatible return type for covariant returns), emitting a hard COMPILE ERROR if no such matching function is found anywhere in the base classes. This single check converts an entire category of previously silent runtime polymorphism bugs into compile-time errors caught before the program ever runs.",
-  why: "Without 'override', a derived-class member function that was INTENDED to override a base virtual, but whose signature differs by even one small detail (a missing 'const' qualifier, 'int' vs 'const int&', a subtly typo'd parameter type, or an extra default argument changing the effective overload set), does NOT override the base function at all — it silently creates a brand-new, completely unrelated, non-overriding OVERLOAD in the derived class that merely hides the base class's name via ordinary name-hiding rules; this compiles cleanly with ZERO warning on default settings, meaning polymorphic dispatch quietly breaks (calling through a Base* pointer keeps invoking the OLD base implementation forever, while calling directly on the concrete derived type invokes the new, unrelated function instead), and the bug is often completely invisible until a specific code path that dispatches through a base pointer actually exercises it and observably does the wrong thing.",
+  why: "Without 'override', a derived-class member function that was INTENDED to override a base virtual, but whose signature differs by even one small detail (a missing 'const' qualifier, 'int' vs 'const int&', a subtly typo'd parameter type, or an extra default argument changing the effective overload set), does NOT override the base function at all — it silently creates a brand-new, completely unrelated, non-overriding OVERLOAD in the derived class that merely hides the base class's name via ordinary name-hiding rules; this compiles cleanly with ZERO warning on default settings (GCC 13+ and Clang do flag the hidden base function under -Wall, via -Woverloaded-virtual), meaning polymorphic dispatch quietly breaks (calling through a Base* pointer keeps invoking the OLD base implementation forever, while calling directly on the concrete derived type invokes the new, unrelated function instead), and the bug is often completely invisible until a specific code path that dispatches through a base pointer actually exercises it and observably does the wrong thing.",
   analogy: "'override' is like formally signing a legally binding statement: 'I am replacing clause 4 of this existing contract.' A notary (the compiler) is then REQUIRED to go find clause 4 in the original contract and confirm it actually exists with the exact wording you claim to be replacing, refusing to notarize your document at all if no matching clause 4 exists anywhere in the contract. Without that signed statement, if you simply write a NEW paragraph that superficially resembles clause 4 but differs in some small, legally material way (a typo'd term, a missing condition), nobody checks it against the original at all — you've merely added an unrelated new paragraph sitting alongside the untouched original clause 4, and anyone still relying on 'the contract' as originally written (calling through a base pointer) keeps receiving the original, unmodified clause 4 forever, with no one ever having flagged the discrepancy.",
-  code: "class Shape {\npublic:\n    virtual double area() const { return 0.0; }\n    virtual ~Shape() = default;\n};\nclass Circle : public Shape {\npublic:\n    // BUG: missing 'const' -- this is a NEW, UNRELATED overload, not an override at all!\n    double area() { return 3.14159 * r_ * r_; }\nprivate:\n    double r_ = 1.0;\n};\n\nvoid demo() {\n    Shape* s = new Circle();\n    std::cout << s->area();   // silently prints 0 -- dispatches to Shape::area(), NOT Circle's version,\n                              // because Circle::area() (non-const) never overrode Shape::area() (const);\n                              // they are simply two DIFFERENT functions that happen to share a name.\n    delete s;\n}\n\n// THE FIX: add 'override' -- now the SAME const-qualifier typo becomes a hard compile error\nclass CircleFixed : public Shape {\npublic:\n    double area() const override { return 3.14159 * r_ * r_; }   // correctly matches and overrides\n    // double area() override { ... }   // if written like this, 'override' makes THIS a compile\n                                          // error immediately, instead of a silent runtime mismatch\nprivate:\n    double r_ = 1.0;\n};",
+  code: "#include <iostream>\n\nclass Shape {\npublic:\n    virtual double area() const { return 0.0; }\n    virtual ~Shape() = default;\n};\nclass Circle : public Shape {\npublic:\n    // BUG: missing 'const' -- this is a NEW, UNRELATED overload, not an override at all!\n    double area() { return 3.14159 * r_ * r_; }\nprivate:\n    double r_ = 1.0;\n};\n\nvoid demo() {\n    Shape* s = new Circle();\n    std::cout << s->area();   // silently prints 0 -- dispatches to Shape::area(), NOT Circle's version,\n                              // because Circle::area() (non-const) never overrode Shape::area() (const);\n                              // they are simply two DIFFERENT functions that happen to share a name.\n    delete s;\n}\n\n// THE FIX: add 'override' -- now the SAME const-qualifier typo becomes a hard compile error\nclass CircleFixed : public Shape {\npublic:\n    double area() const override { return 3.14159 * r_ * r_; }   // correctly matches and overrides\n    // double area() override { ... }   // if written like this, 'override' makes THIS a compile\n                                          // error immediately, instead of a silent runtime mismatch\nprivate:\n    double r_ = 1.0;\n};",
   steps: [
     "WITHOUT 'override': the compiler compiles Circle::area() (non-const) as an entirely ordinary member function, independent of anything in Shape — it separately notes that Shape declares a DIFFERENT area() (const) as virtual, but const-qualification is part of a member function's signature, so these are two genuinely unrelated functions that merely happen to share the name 'area'.",
     "Circle::area() (non-const) simply hides Shape::area() (const) for name lookup performed directly on a Circle object, but it does NOT occupy or replace Shape's vtable slot for area() — that slot in Circle's own vtable is left pointing, unchanged, at Shape::area().",
@@ -7313,7 +7313,7 @@ DEEP_CONTENT['override-specifier'] = {
     "WITH 'override' present on an INCORRECTLY-matching signature (e.g. still missing 'const'): step 3's search finds no matching virtual function anywhere in the base classes, and the compiler emits a hard error at that exact declaration line, immediately, long before the program can ever be built and run — converting what was previously a silent runtime dispatch bug into an unmissable compile-time failure."
   ],
   memory: "'override' has absolutely zero runtime or memory footprint of its own — it exists purely as a compile-time signature-matching verification step performed once during compilation. The actual runtime effect (whether the derived function's vtable slot correctly replaces the base's slot) is entirely determined by whether the signatures genuinely match, exactly as it always was even before the keyword existed in C++11 — 'override' adds only the VERIFICATION, it changes nothing whatsoever about the underlying dispatch mechanics themselves.",
-  realWorld: "Virtually every modern C++ style guide (Google's, LLVM's, the C++ Core Guidelines) MANDATES 'override' on every derived-class function intended to override a base virtual, specifically because this exact silent-new-overload bug has caused real production incidents in practice — a base class's virtual function signature changes in a library upgrade (a parameter type changes, or a method gains 'const' correctness), and every derived class across a large downstream codebase that wasn't using 'override' silently stops overriding anything at all, with zero build errors anywhere, until someone eventually notices the observable behavior has regressed. Static analyzers and compiler warnings like GCC/Clang's '-Wsuggest-override' exist specifically to help retrofit this safety net onto legacy code written before the keyword was available.",
+  realWorld: "Virtually every modern C++ style guide (Google's, LLVM's, the C++ Core Guidelines) MANDATES 'override' on every derived-class function intended to override a base virtual, specifically because this exact silent-new-overload bug has caused real production incidents in practice — a base class's virtual function signature changes in a library upgrade (a parameter type changes, or a method gains 'const' correctness), and every derived class across a large downstream codebase that wasn't using 'override' silently stops overriding anything at all, with zero build errors anywhere, until someone eventually notices the observable behavior has regressed. Static analyzers and compiler warnings exist specifically to help retrofit this safety net onto legacy code written before the keyword was available: GCC's opt-in -Wsuggest-override flags every override missing the keyword, and Clang's -Winconsistent-missing-override (on by default) fires when a class marks some overrides but not others.",
   mistake: "Omitting 'override' on derived virtual function declarations out of habit or legacy style, relying purely on getting the signature exactly right by eye — this is precisely the situation where a base class's signature changing later, even somewhere unrelated in a large codebase or inside a third-party library header being upgraded, can silently orphan what was meant to be an override into an unrelated new overload, with the resulting bug surfacing only as a behavioral regression through base-pointer dispatch, frequently far away from — and much later than — the actual signature change that originally caused it.",
   interviewQ: {
     q: "What specifically does the 'override' keyword do, and what compile-time error does it protect against?",
@@ -22402,6 +22402,2127 @@ const GUIDED_LESSONS = {
    [
     "Is the I prefix meaningful to the compiler?",
     "No, it is only a naming convention for readers."
+   ]
+  ]
+ },
+ "multiple-inheritance": {
+  "orientation": {
+   "what": "Multiple inheritance: a class deriving from more than one base, the construction order rules, and when it is a good idea (interfaces, mixins) versus a risky one (stateful bases).",
+   "why": "C++ fully supports multiple inheritance, unlike most mainstream languages. Using it well means knowing its construction order and when composition is the safer choice.",
+   "outcomes": [
+    "Predict base construction and destruction order",
+    "Resolve a name collision between two bases",
+    "Tell a safe use (interfaces, mixins) from a risky one",
+    "Know the memory cost of each extra base"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~20–25 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: bases are built in the order they are listed",
+    "intro": "class D : public B2, public B1:",
+    "stages": [
+     {
+      "name": "B2",
+      "io": "first listed",
+      "note": "Constructed first — whatever order the initializer list uses."
+     },
+     {
+      "name": "B1",
+      "io": "second listed",
+      "note": "Constructed next."
+     },
+     {
+      "name": "D's members, then body",
+      "io": "last",
+      "note": "Then D's own members, then its constructor body."
+     },
+     {
+      "name": "Destruction",
+      "io": "exact reverse",
+      "note": "D, then B1, then B2."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "A class can inherit from several bases; each base is a separate subobject inside it.",
+     "Bases are constructed in the order they are listed in the class head, never in initializer-list order, and destroyed in reverse.",
+     "Combining small interfaces or stateless mixins is the safe use; combining several data-bearing classes invites ambiguity and diamonds — prefer composition there."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Two independent professional certifications",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <iostream>\nstruct B1 { B1() { std::cout << \"B1 \"; } };\nstruct B2 { B2() { std::cout << \"B2 \"; } };\n\nstruct D : B2, B1 {\n    D() : B1(), B2() { std::cout << \"D\"; }\n};\n\nint main() { D d; }",
+    "q": "What does this print?",
+    "options": [
+     [
+      "A",
+      "B1 B2 D"
+     ],
+     [
+      "B",
+      "B2 B1 D"
+     ],
+     [
+      "C",
+      "D B1 B2"
+     ],
+     [
+      "D",
+      "It depends on the compiler"
+     ]
+    ],
+    "reveal": [
+     "B — B2 B1 D.",
+     "Bases are constructed in the order they appear after the colon in the class head: B2, then B1.",
+     "The initializer list's order (B1(), B2()) is ignored; GCC and Clang warn about the mismatch under -Wall.",
+     "This is standard behavior, the same on every compiler."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "A class combining two independent interfaces:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: order and ambiguity",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "In what order are multiple bases constructed?",
+    "In the order they are listed in the class definition's base list, left to right."
+   ],
+   [
+    "Two bases both declare log(). How do you call one of them?",
+    "Qualify it: Base1::log(); or bring one in with a using-declaration."
+   ],
+   [
+    "What is a mixin?",
+    "A small, focused (often stateless) class that adds one capability, meant to be combined with others through inheritance."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Each base takes space",
+     "hint": "and where empty bases don't — with an MSVC caveat",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: mixins and interfaces",
+     "hint": "Printable, Serializable, Comparable",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "diamond-problem",
+    "interface-design",
+    "composition"
+   ]
+  },
+  "interview": {
+   "think": "Look at the class head, not the constructor, to decide the order.",
+   "advancedTitle": "Advanced follow-up: why mixins are the safe use",
+   "followUp": "q007"
+  },
+  "recall": [
+   [
+    "Does multiple inheritance of pure interfaces risk the diamond problem's data duplication?",
+    "No: interfaces carry no data, so there is nothing to duplicate."
+   ],
+   [
+    "Why can a Document* be converted to either Printable* or Serializable*?",
+    "It contains both base subobjects; the second conversion adjusts the address to that subobject."
+   ],
+   [
+    "When is composition better than multiple inheritance?",
+    "When you are combining classes that carry their own state and you mainly want their functionality."
+   ]
+  ]
+ },
+ "diamond-problem": {
+  "orientation": {
+   "what": "The diamond problem: inheriting from two classes that share a common base gives you two copies of that base, and ambiguous access to it.",
+   "why": "It is the classic multiple-inheritance pitfall, and the fix — virtual inheritance — brings rules of its own.",
+   "outcomes": [
+    "Draw the object layout of a diamond",
+    "Predict which accesses and conversions are ambiguous",
+    "Disambiguate with qualified names",
+    "Choose between virtual inheritance and composition"
+   ],
+   "firstPass": "~10–15 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: two paths, two copies",
+    "intro": "struct FlyingFish : Bird, Fish, where both derive from Animal:",
+    "stages": [
+     {
+      "name": "Bird part",
+      "io": "its own Animal",
+      "note": "Contains one Animal subobject with its own name."
+     },
+     {
+      "name": "Fish part",
+      "io": "another Animal",
+      "note": "Contains a second, independent Animal subobject."
+     },
+     {
+      "name": "ff.name",
+      "io": "ambiguous",
+      "note": "Two members named name exist, so the compiler refuses to guess.",
+      "err": "error: request for member 'name' is ambiguous"
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Without virtual inheritance, a diamond gives the most-derived class two separate copies of the shared base.",
+     "Unqualified member access and conversion to the shared base are ambiguous compile errors; qualify the path (ff.Bird::name) to choose.",
+     "If there should be one shared base, use virtual inheritance; often composition is simpler still."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Two departments with separate copies of 'the' customer list",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <string>\nstruct Animal { std::string name; };\nstruct Bird : Animal {};\nstruct Fish : Animal {};\nstruct FlyingFish : Bird, Fish {};\n\nFlyingFish ff;\nff.Bird::name = \"a\";   // (1)\nAnimal* p = &ff;       // (2)",
+    "q": "Which lines compile?",
+    "options": [
+     [
+      "A",
+      "Both"
+     ],
+     [
+      "B",
+      "Only (1)"
+     ],
+     [
+      "C",
+      "Only (2)"
+     ],
+     [
+      "D",
+      "Neither"
+     ]
+    ],
+    "reveal": [
+     "B — only (1).",
+     "(1) picks the Animal inside the Bird part explicitly, so it is unambiguous.",
+     "(2) fails: there are two Animal subobjects, so converting &ff to Animal* is ambiguous (GCC: 'Animal' is an ambiguous base of 'FlyingFish').",
+     "Animal* p = static_cast<Bird*>(&ff); picks one path explicitly."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "A diamond without virtual inheritance:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: where the ambiguity comes from",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "How many Animal subobjects does FlyingFish have without virtual inheritance?",
+    "Two: one inside Bird and one inside Fish."
+   ],
+   [
+    "Why won't the compiler just pick one path?",
+    "The two copies are genuinely different objects that can hold different values; guessing would silently read or write the wrong one."
+   ],
+   [
+    "What are the two ways out?",
+    "Virtual inheritance (one shared base) or composition (hold an Animal member instead of inheriting it)."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Composition instead of a diamond",
+     "hint": "one Animal member, no ambiguity",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In practice: where diamonds appear",
+     "hint": "shared utility bases under several interfaces",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "virtual-inheritance",
+    "composition"
+   ]
+  },
+  "interview": {
+   "think": "Count the subobjects first; the ambiguity follows from that.",
+   "advancedTitle": "Advanced follow-up: redesigning with composition",
+   "followUp": "q007"
+  },
+  "recall": [
+   [
+    "Is the diamond ambiguity a warning or an error?",
+    "An error: the compiler refuses to compile ambiguous access or conversion."
+   ],
+   [
+    "Is a diamond of pure interfaces a problem?",
+    "Much less so: with no data there are no conflicting copies, though conversion to the shared base can still be ambiguous."
+   ],
+   [
+    "What does ff.Fish::name refer to?",
+    "The name member of the Animal inside the Fish part — a different object from ff.Bird::name."
+   ]
+  ]
+ },
+ "virtual-inheritance": {
+  "orientation": {
+   "what": "Virtual inheritance: sharing one base subobject across all inheritance paths, which fixes the diamond — and the rule that the most-derived class constructs that shared base.",
+   "why": "Virtual inheritance is the standard fix for diamonds, but its construction rule silently ignores intermediate classes' initializers, and it adds an indirection to every base access.",
+   "outcomes": [
+    "Declare a virtual base and predict the resulting layout",
+    "Explain who constructs a virtual base",
+    "Predict which initializer takes effect",
+    "Know the run-time cost and its ABI-specific mechanism"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~20–25 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: one shared A, built by the most-derived class",
+    "intro": "struct D : B, C where B and C both use virtual A:",
+    "stages": [
+     {
+      "name": "D's constructor",
+      "io": "builds A first",
+      "note": "Virtual bases are constructed before any non-virtual base, by the most-derived class."
+     },
+     {
+      "name": "B and C",
+      "io": "skip A",
+      "note": "Their own A(...) initializers are ignored when they are part of a D."
+     },
+     {
+      "name": "d.value",
+      "io": "unambiguous",
+      "note": "There is only one A in the object."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "class B : virtual A means every path to A shares a single A subobject.",
+     "The most-derived class constructs the virtual base, before all other bases; intermediate classes' initializers for it are ignored.",
+     "Reaching a virtual base costs an extra indirection, because its offset is not fixed at compile time."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Two departments sharing one company budget",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <iostream>\nstruct A  { A(int v) { std::cout << v; } };\nstruct B : virtual A { B() : A(1) {} };\nstruct C : virtual A { C() : A(2) {} };\nstruct D : B, C      { D() : A(3) {} };\n\nint main() { D d; }",
+    "q": "What does this print?",
+    "options": [
+     [
+      "A",
+      "1"
+     ],
+     [
+      "B",
+      "2"
+     ],
+     [
+      "C",
+      "3"
+     ],
+     [
+      "D",
+      "123"
+     ]
+    ],
+    "reveal": [
+     "C — it prints 3.",
+     "D is the most-derived class, so it alone constructs the shared A, using A(3).",
+     "B's A(1) and C's A(2) are ignored while building a D.",
+     "If D didn't initialize A and A had no default constructor, D wouldn't compile."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "A diamond fixed with virtual inheritance:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: building a virtual base",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What does virtual inheritance change about the layout?",
+    "All paths share one base subobject instead of each path having its own copy."
+   ],
+   [
+    "Who constructs a virtual base?",
+    "The most-derived class being created, before any non-virtual base."
+   ],
+   [
+    "Why is accessing a virtual base slower?",
+    "Its position varies with the most-derived type, so its offset is looked up at run time."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "The cost of sharing",
+     "hint": "vtable offsets (Itanium) or a vbptr (MSVC)",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In practice: rare but real",
+     "hint": "iostreams and GUI hierarchies",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "object-slicing",
+    "composition"
+   ]
+  },
+  "interview": {
+   "think": "Ask which class is the most-derived one being built.",
+   "advancedTitle": "Advanced follow-up: why the most-derived class constructs it",
+   "followUp": "q007"
+  },
+  "recall": [
+   [
+    "Must both B and C inherit A virtually?",
+    "Yes: a path that inherits A non-virtually contributes its own separate A."
+   ],
+   [
+    "Which standard library classes use virtual inheritance?",
+    "The iostreams: std::iostream derives from istream and ostream, which virtually inherit basic_ios."
+   ],
+   [
+    "What happens to B's A(1) when you create a plain B?",
+    "Then B is the most-derived class, so A(1) is used."
+   ]
+  ]
+ },
+ "object-slicing": {
+  "orientation": {
+   "what": "Object slicing: copying a derived object into a base object by value keeps only the base part, losing derived data and virtual behavior.",
+   "why": "Slicing is legal and silent, so it produces wrong behavior with no error — in by-value parameters, vector<Base>, and catch clauses.",
+   "outcomes": [
+    "Recognize the three common places slicing happens",
+    "Explain why virtual calls stop dispatching after slicing",
+    "Choose references, pointers or smart pointers instead",
+    "Catch exceptions correctly"
+   ],
+   "firstPass": "~10–15 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: a base-sized box",
+    "intro": "Animal a = dog; where Dog adds a breed:",
+    "stages": [
+     {
+      "name": "Copy",
+      "io": "Animal's copy constructor",
+      "note": "Only the Animal part of dog is copied."
+     },
+     {
+      "name": "Derived data",
+      "io": "discarded",
+      "note": "breed has nowhere to go in an Animal."
+     },
+     {
+      "name": "vptr",
+      "io": "Animal's vtable",
+      "note": "a is a real Animal, so a.speak() calls Animal::speak."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Copying a derived object into a base object by value keeps only the base part — slicing.",
+     "The copy is a genuine base object, so virtual calls on it reach the base versions.",
+     "Pass and store polymorphic objects by reference, pointer or smart pointer, and catch exceptions by reference."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Photocopying a card with a fold-out insert",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <iostream>\n#include <stdexcept>\nstruct MyErr : std::runtime_error {\n    using std::runtime_error::runtime_error;\n    const char* what() const noexcept override { return \"MyErr\"; }\n};\n\nint main() {\n    try { throw MyErr(\"boom\"); }\n    catch (std::exception e) { std::cout << e.what(); }\n}",
+    "q": "What does this print (GCC with libstdc++)?",
+    "options": [
+     [
+      "A",
+      "MyErr"
+     ],
+     [
+      "B",
+      "boom"
+     ],
+     [
+      "C",
+      "std::exception"
+     ],
+     [
+      "D",
+      "Nothing: the exception isn't caught"
+     ]
+    ],
+    "reveal": [
+     "C — std::exception.",
+     "catch (std::exception e) catches by value, so the MyErr is sliced into a plain std::exception.",
+     "e.what() then runs std::exception::what(); libstdc++ returns \"std::exception\" (the text is implementation-defined).",
+     "catch (const std::exception& e) keeps the MyErr and prints MyErr."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "Slicing on assignment and on a by-value parameter:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: what gets copied",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Is slicing undefined behavior?",
+    "No, it is legal and well-defined; it is a logic bug — derived data and behavior are lost."
+   ],
+   [
+    "Why does std::vector<Animal> slice?",
+    "Each element is an Animal-sized object; pushing a Dog copies only its Animal part."
+   ],
+   [
+    "How should you catch exceptions?",
+    "By reference, usually const std::exception& or a more specific type."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Before and after the slice",
+     "hint": "the vptr is rebuilt, breed is gone",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: containers of polymorphic objects",
+     "hint": "vector<unique_ptr<Base>>",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "virtual-functions",
+    "smart-pointers-overview",
+    "try-catch-throw"
+   ]
+  },
+  "interview": {
+   "think": "Ask whether the object is being copied into a base-typed object.",
+   "advancedTitle": "Advanced follow-up: is slicing undefined behavior?"
+  },
+  "recall": [
+   [
+    "How do you store different Animal types in one container?",
+    "std::vector<std::unique_ptr<Animal>> (or shared_ptr), not std::vector<Animal>."
+   ],
+   [
+    "How can a base class prevent accidental slicing?",
+    "Make its copy operations protected or deleted, so copying through the base type doesn't compile."
+   ],
+   [
+    "Does passing const Animal& slice?",
+    "No: a reference refers to the whole original object."
+   ]
+  ]
+ },
+ "crtp": {
+  "orientation": {
+   "what": "CRTP (the Curiously Recurring Template Pattern): class Derived : Base<Derived>, giving the base compile-time knowledge of the derived type — static polymorphism with no vtable.",
+   "why": "CRTP gives polymorphism-style reuse with zero dispatch cost and appears in the standard library (enable_shared_from_this) and in high-performance libraries.",
+   "outcomes": [
+    "Write a CRTP base that calls into the derived class",
+    "Explain why no vptr or indirect call is needed",
+    "Know what you give up versus virtual functions",
+    "Spot the wrong-type CRTP bug"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~20–25 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: the base knows its derived type",
+    "intro": "class Circle : public Shape<Circle>:",
+    "stages": [
+     {
+      "name": "Shape<Circle>::area()",
+      "io": "static_cast",
+      "note": "Casts this to const Circle* — the type is a template argument, known at compile time."
+     },
+     {
+      "name": "Call areaImpl()",
+      "io": "direct call",
+      "note": "No vtable; the compiler can inline it."
+     },
+     {
+      "name": "Circle's layout",
+      "io": "no vptr",
+      "note": "The empty base adds nothing; Circle holds only its own data."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "In CRTP, a class passes itself as the template argument of its base: class Circle : public Shape<Circle>.",
+     "The base casts this to the derived type and calls it directly — resolved at compile time, inlinable, no vptr.",
+     "Each Shape<T> is a different type, so CRTP gives no common base pointer for run-time polymorphism."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A memorized direct extension instead of the switchboard",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "template <typename T>\nstruct Shape {\n    double area() const { return static_cast<const T*>(this)->areaImpl(); }\n};\nstruct Circle : Shape<Circle> { double areaImpl() const { return 3.14; } };\n\n// Copy-pasted, but the template argument wasn't updated:\nstruct Square : Shape<Circle> { double side = 2; };\n\nSquare s;\ndouble a = s.area();",
+    "q": "What happens?",
+    "options": [
+     [
+      "A",
+      "Compile error: Square is not a Circle"
+     ],
+     [
+      "B",
+      "It compiles; the call is undefined behavior"
+     ],
+     [
+      "C",
+      "It returns 4"
+     ],
+     [
+      "D",
+      "It returns 3.14, safely"
+     ]
+    ],
+    "reveal": [
+     "B — it compiles, and the call is undefined behavior.",
+     "static_cast<const Circle*> from a Shape<Circle>* is allowed at compile time — the compiler can't know the object is really a Square.",
+     "The code then treats a Square as a Circle.",
+     "Guard against it: give Shape a private constructor and make T a friend, so only T can derive from Shape<T>."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "Static polymorphism with CRTP:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: how the call is resolved",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What does CRTP stand for, and what is its shape?",
+    "Curiously Recurring Template Pattern: class Derived : public Base<Derived>."
+   ],
+   [
+    "Why does CRTP need no vtable?",
+    "The base knows the derived type as a template argument, so it calls it directly after a static_cast."
+   ],
+   [
+    "What can't CRTP do that virtual functions can?",
+    "Store different derived types behind one common base pointer and choose at run time."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "No vptr at all",
+     "hint": "layout identical to a class with no base",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: static polymorphism",
+     "hint": "enable_shared_from_this, Eigen, engines",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "enable-shared-from-this",
+    "class-templates",
+    "vfunc-overhead",
+    "polymorphism"
+   ]
+  },
+  "interview": {
+   "think": "Say what the base knows at compile time, and what that buys and costs.",
+   "advancedTitle": "Advanced follow-up: enable_shared_from_this",
+   "followUp": "q040"
+  },
+  "recall": [
+   [
+    "How do you stop Square : Shape<Circle> from compiling?",
+    "Give Shape a private constructor and declare friend T; — only T can construct the base."
+   ],
+   [
+    "What does C++23 offer instead of CRTP for many uses?",
+    "Explicit object parameters ('deducing this'), which give a member function the actual derived type without the template base."
+   ],
+   [
+    "When is a virtual function the better choice?",
+    "When types are only known at run time or the performance difference doesn't matter; CRTP costs readability."
+   ]
+  ]
+ },
+ "final-specifier": {
+  "orientation": {
+   "what": "final: forbidding further overriding of a virtual function, or any derivation from a class — and how that lets the optimizer devirtualize calls.",
+   "why": "final documents that a class or function is not an extension point, and it is one of the few reliable ways to remove virtual-call overhead at specific call sites.",
+   "outcomes": [
+    "Apply final to a class and to a single virtual function",
+    "Predict which derivations and overrides are rejected",
+    "Explain when final enables devirtualization — and when it doesn't",
+    "Know that final is a contextual keyword"
+   ],
+   "firstPass": "~10–15 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: two places, two locks",
+    "intro": "Where final can go:",
+    "stages": [
+     {
+      "name": "class Circle final : Shape",
+      "io": "no derived classes",
+      "note": "Any class deriving from Circle is a compile error."
+     },
+     {
+      "name": "void f() override final;",
+      "io": "no further overrides",
+      "note": "Classes can still derive, but can't override f again."
+     },
+     {
+      "name": "Call through Circle&",
+      "io": "devirtualizable",
+      "note": "The dynamic type must be exactly Circle, so the compiler can call Circle::area directly."
+     },
+     {
+      "name": "Call through Shape&",
+      "io": "still virtual",
+      "note": "Any subclass might be there, so the call goes through the vtable."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "final after a class name forbids deriving from it; final after a virtual function forbids overriding it further.",
+     "A call through a final class's own type can be devirtualized — turned into a direct, inlinable call.",
+     "Calls through a non-final base type still use the vtable; final is contextual, so it still works as an ordinary identifier."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A ruling stamped 'no further appeals'",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "struct Base { virtual void f(); };\nstruct Mid : Base {\n    void f() override final;\n};\nstruct Leaf : Mid {};            // (1)\nstruct Leaf2 : Mid {\n    void f() override;          // (2)\n};",
+    "q": "Which declaration is an error?",
+    "options": [
+     [
+      "A",
+      "(1) only"
+     ],
+     [
+      "B",
+      "(2) only"
+     ],
+     [
+      "C",
+      "Both"
+     ],
+     [
+      "D",
+      "Neither"
+     ]
+    ],
+    "reveal": [
+     "B — only (2).",
+     "final on Mid::f locks that one function, not the class; Leaf can still derive from Mid.",
+     "Leaf2 tries to override f again, which is rejected (GCC: 'overriding final function').",
+     "To forbid deriving from Mid at all, write struct Mid final : Base."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Full example",
+    "title": "The example",
+    "intro": "final on a class, on one function, and the effect on call sites:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: when the compiler can devirtualize",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What is the difference between final on a class and on a function?",
+    "On a class it forbids any derivation; on a virtual function it forbids further overriding of that one function."
+   ],
+   [
+    "Does marking a class final speed up calls through a base-class pointer?",
+    "No: only calls whose static type is the final class (or a function marked final) can be devirtualized."
+   ],
+   [
+    "Can final be used as a variable name?",
+    "Yes; it is a contextual keyword, special only after a class name or function declarator."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "No layout change",
+     "hint": "final is a promise, not data",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: hot leaf classes",
+     "hint": "and closing classes to extension",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "override-specifier",
+    "vfunc-overhead",
+    "inlining"
+   ]
+  },
+  "interview": {
+   "think": "Look at the static type at the call site.",
+   "advancedTitle": "Advanced follow-up: devirtualization without final"
+  },
+  "recall": [
+   [
+    "Is devirtualization guaranteed when a class is final?",
+    "No, it is permitted, not required; GCC and Clang do it at -O2 for direct calls through the final type."
+   ],
+   [
+    "What does override final together mean?",
+    "This function overrides a base virtual, and no further class may override it."
+   ],
+   [
+    "Why might a library mark a class final?",
+    "To state it is not an extension point, and keep the freedom to change its internals."
+   ]
+  ]
+ },
+ "override-specifier": {
+  "orientation": {
+   "what": "override: asking the compiler to check that a member function really overrides a base virtual — turning silent signature mismatches into compile errors.",
+   "why": "A missing const or a slightly different parameter type silently creates a new function instead of an override, and dispatch through base pointers quietly keeps calling the old one.",
+   "outcomes": [
+    "Explain what override checks, and what it doesn't",
+    "Predict what a signature mismatch does without override",
+    "Know the warnings that help in legacy code",
+    "Know how default arguments interact with overriding"
+   ],
+   "firstPass": "~10–15 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: a checked claim",
+    "intro": "double area() override; in Circle, where Shape has double area() const:",
+    "stages": [
+     {
+      "name": "Without override",
+      "io": "compiles",
+      "note": "The non-const area() is a new function that hides Shape's; the vtable slot keeps Shape::area."
+     },
+     {
+      "name": "Call via Shape*",
+      "io": "base version",
+      "note": "Dispatch still reaches Shape::area — the 'override' never happened."
+     },
+     {
+      "name": "With override",
+      "io": "compile error",
+      "note": "The compiler finds no matching base virtual and stops the build.",
+      "err": "error: 'double Circle::area()' marked 'override', but does not override"
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "override tells the compiler this function must override a base virtual; a mismatched signature becomes an error.",
+     "Without it, a mismatch (missing const, different parameter type) silently creates a new, unrelated function.",
+     "override checks the signature, not behavior — and default arguments are never part of the check."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A notarized claim to replace a specific clause",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <iostream>\nstruct Shape {\n    virtual double area() const { return 0.0; }\n    virtual ~Shape() = default;\n};\nstruct Circle : Shape {\n    double area() { return 3.14; }   // no const, no override\n};\n\nint main() {\n    Shape* s = new Circle;\n    std::cout << s->area();\n    delete s;\n}",
+    "q": "What does this print?",
+    "options": [
+     [
+      "A",
+      "3.14"
+     ],
+     [
+      "B",
+      "0"
+     ],
+     [
+      "C",
+      "Compile error"
+     ],
+     [
+      "D",
+      "Undefined behavior"
+     ]
+    ],
+    "reveal": [
+     "B — it prints 0.",
+     "Circle::area() isn't const, so it doesn't override Shape::area() const — it is a different function.",
+     "The call through Shape* dispatches to the vtable slot, which still holds Shape::area.",
+     "With override on Circle::area the compiler rejects it; GCC 13+ and Clang also warn under -Wall (-Woverloaded-virtual)."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Full example",
+    "title": "The example",
+    "intro": "The silent mismatch and the fix:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: what the compiler does with and without override",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Does override make a function virtual?",
+    "No. It only asserts that the function overrides an existing base virtual, which makes it virtual already."
+   ],
+   [
+    "Name two mismatches override catches.",
+    "A missing or extra const, and a different parameter type (for example int versus long)."
+   ],
+   [
+    "What does override not check?",
+    "Behavior: an override can compile and still break the base class's contract."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "No run-time trace",
+     "hint": "a compile-time check only",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: style guides and warnings",
+     "hint": "-Wsuggest-override, -Winconsistent-missing-override",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "final-specifier",
+    "default-arguments",
+    "virtual-functions"
+   ]
+  },
+  "interview": {
+   "think": "Ask what happens to the vtable slot when the signatures don't match.",
+   "advancedTitle": "Advanced follow-up: when override isn't enough"
+  },
+  "recall": [
+   [
+    "Which default argument is used when an override is called through a base pointer?",
+    "The base's: defaults are chosen from the static type, even though the derived body runs."
+   ],
+   [
+    "Does override prevent further overriding?",
+    "No; add final for that."
+   ],
+   [
+    "Which Clang warning is on by default for override?",
+    "-Winconsistent-missing-override: some overrides in a class use override and others don't."
+   ]
+  ]
+ },
+ "op-arithmetic": {
+  "orientation": {
+   "what": "Overloading + - * / %: the idiom of a member compound operator (+=) plus a non-member binary operator (+) built on it.",
+   "why": "Getting the pattern right keeps operators consistent with built-in types: a + b doesn't change a, and conversions work on both sides.",
+   "outcomes": [
+    "Implement operator+ in terms of operator+=",
+    "Explain why binary operators are usually non-members",
+    "Explain why lhs is taken by value",
+    "Predict which mixed-type expressions compile"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~20–25 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: one place for the logic",
+    "intro": "c = a + b; for Vec2:",
+    "stages": [
+     {
+      "name": "operator+(Vec2 lhs, const Vec2& rhs)",
+      "io": "copy a",
+      "note": "lhs is a fresh copy of a (or the temporary itself, if a is a temporary)."
+     },
+     {
+      "name": "lhs += rhs",
+      "io": "the real work",
+      "note": "The only place the addition logic lives."
+     },
+     {
+      "name": "return lhs",
+      "io": "moved out",
+      "note": "a and b are untouched; the result is returned by value."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Implement the compound operator (+=) as a member that modifies *this and returns *this.",
+     "Implement the binary operator (+) as a non-member that takes lhs by value, applies +=, and returns it.",
+     "A non-member lets implicit conversions work on either side: both v + 5 and 5 + v."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Mixing two bowls into a new one",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "struct Vec2 {\n    double x = 0, y = 0;\n    Vec2(double v) : x(v), y(v) {}            // implicit from double\n    Vec2 operator+(const Vec2& o) const {     // MEMBER operator+\n        return Vec2(x + o.x);\n    }\n};\n\nVec2 v(1);\nVec2 r1 = v + 5;   // (1)\nVec2 r2 = 5 + v;   // (2)",
+    "q": "Which lines compile?",
+    "options": [
+     [
+      "A",
+      "Both"
+     ],
+     [
+      "B",
+      "Only (1)"
+     ],
+     [
+      "C",
+      "Only (2)"
+     ],
+     [
+      "D",
+      "Neither"
+     ]
+    ],
+    "reveal": [
+     "B — only (1).",
+     "In (1) the left operand is a Vec2, so the member is considered and 5 converts to Vec2.",
+     "In (2) the left operand is an int, and member operators are only looked up in the left operand's class.",
+     "Make operator+ a non-member (friend) and both compile."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "The += / + idiom for Vec2:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: why the idiom looks the way it does",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Why build operator+ on top of operator+=?",
+    "So the arithmetic lives in one place and the two operators can't drift apart."
+   ],
+   [
+    "Why is operator+ usually a non-member?",
+    "Symmetry: implicit conversions then work for the left operand too."
+   ],
+   [
+    "Should a + b modify a?",
+    "No. Binary arithmetic operators return a new value and leave both operands unchanged."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "The cost of the by-value idiom",
+     "hint": "one move, usually negligible",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: numeric value types",
+     "hint": "vectors, matrices, money, big integers",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "op-compound",
+    "op-comparison",
+    "op-member-vs-friend"
+   ]
+  },
+  "interview": {
+   "think": "Ask where the member-operator lookup starts: the left operand's class.",
+   "advancedTitle": "Advanced follow-up: 5 + myVec2 with a member operator"
+  },
+  "recall": [
+   [
+    "What should operator+= return?",
+    "A reference to *this (T&)."
+   ],
+   [
+    "Is the returned lhs copied?",
+    "No: it is a parameter, so it can't be elided, but it is implicitly moved out."
+   ],
+   [
+    "What is a hidden friend?",
+    "A friend operator defined inside the class; it is found only via argument-dependent lookup, which keeps overload sets small."
+   ]
+  ]
+ },
+ "op-comparison": {
+  "orientation": {
+   "what": "Comparison operators: hand-writing a consistent set before C++20, and generating them with == and <=> (the spaceship operator) since C++20.",
+   "why": "Sorting, set, map and unordered containers all depend on consistent comparisons. C++20 removes most of the boilerplate — if you know what = default generates.",
+   "outcomes": [
+    "Build the six operators from == and < consistently",
+    "Default operator<=> and operator== in C++20",
+    "Explain strong, weak and partial ordering",
+    "Know when == is and isn't generated"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~20–25 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: two primary operators",
+    "intro": "What the C++20 compiler derives:",
+    "stages": [
+     {
+      "name": "operator==",
+      "io": "equality",
+      "note": "a != b is rewritten as !(a == b)."
+     },
+     {
+      "name": "operator<=>",
+      "io": "three-way",
+      "note": "a < b becomes (a <=> b) < 0; likewise >, <=, >=."
+     },
+     {
+      "name": "= default",
+      "io": "memberwise",
+      "note": "Compares members in declaration order; a defaulted <=> also declares a defaulted ==."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Before C++20, write == and <, and build the other four from them, so they can't disagree.",
+     "In C++20, == and <=> are the primary operators; the compiler rewrites the other four in terms of them.",
+     "A defaulted <=> gives all six operators, but a hand-written <=> gives no == — equality is never derived from <=>."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A photo-finish camera deciding every verdict from one measurement",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <compare>\nstruct Q {\n    int x;\n    auto operator<=>(const Q& o) const { return x <=> o.x; }   // hand-written\n};\n\nQ a{1}, b{2};\nbool lt = a < b;    // (1)\nbool eq = a == b;   // (2)",
+    "q": "Which lines compile (C++20)?",
+    "options": [
+     [
+      "A",
+      "Both"
+     ],
+     [
+      "B",
+      "Only (1)"
+     ],
+     [
+      "C",
+      "Only (2)"
+     ],
+     [
+      "D",
+      "Neither"
+     ]
+    ],
+    "reveal": [
+     "B — only (1).",
+     "a < b is rewritten using the hand-written <=>.",
+     "A hand-written <=> doesn't declare ==, and == is never rewritten in terms of <=>, so (2) fails.",
+     "Add bool operator==(const Q&) const = default; — or default <=> itself, which also declares ==."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Full example",
+    "title": "The example",
+    "intro": "Six hand-written operators, then the C++20 version:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: why consistency matters",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Which comparison operators are primary in C++20?",
+    "== and <=>; != and the four relational operators are rewritten from them."
+   ],
+   [
+    "What does a defaulted <=> compare?",
+    "Each member in declaration order, stopping at the first difference."
+   ],
+   [
+    "Which header does a defaulted operator<=> need?",
+    "<compare>: without it GCC and Clang can't find std::strong_ordering."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "The comparison categories",
+     "hint": "strong, weak and partial ordering",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: keys and sorting",
+     "hint": "map, set, unordered containers, sort",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "spaceship-operator",
+    "map-container",
+    "set-container"
+   ]
+  },
+  "interview": {
+   "think": "Say which operators you write and which the compiler rewrites.",
+   "advancedTitle": "Advanced follow-up: why == is separate from <=>"
+  },
+  "recall": [
+   [
+    "When does <=> return std::partial_ordering?",
+    "When some values can be incomparable, such as floating-point NaN."
+   ],
+   [
+    "Why must < be consistent with == for std::set?",
+    "The set treats !(a < b) && !(b < a) as 'equal'; inconsistency breaks lookups and uniqueness."
+   ],
+   [
+    "When shouldn't you default the comparisons?",
+    "When some members (a cache, a mutex, a counter) shouldn't take part in equality or ordering."
+   ]
+  ]
+ },
+ "op-assignment": {
+  "orientation": {
+   "what": "Writing operator=: releasing the old state, surviving self-assignment, and ordering the steps so an exception leaves the object intact.",
+   "why": "Assignment is where hand-written resource classes most often leak, double-free or corrupt themselves. The order of the steps is the whole difference.",
+   "outcomes": [
+    "Order acquire, release and update correctly",
+    "Handle self-assignment",
+    "Explain the strong exception guarantee",
+    "Return *this by reference"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~20–25 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: acquire, then release, then commit",
+    "intro": "a = b; for a buffer class:",
+    "stages": [
+     {
+      "name": "Acquire",
+      "io": "new int[b.size]",
+      "note": "Allocate and copy first; if this throws, a is untouched."
+     },
+     {
+      "name": "Release",
+      "io": "delete[] a.data",
+      "note": "Only then free the old array."
+     },
+     {
+      "name": "Commit",
+      "io": "a.data = newData",
+      "note": "Update the members, and return *this."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Assignment works on an existing object, so it must release the old resource as well as take the new one.",
+     "Acquire the new resource before releasing the old one: if acquisition throws, the object keeps its old, valid state.",
+     "Handle a = a (a self-check or copy-and-swap), and return *this by reference so assignments chain."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Changing the water in a tank that already has fish",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "Buffer& operator=(const Buffer& other) {\n    delete[] data;                        // release first\n    data = new int[other.size];\n    std::copy(other.data, other.data + other.size, data);\n    size = other.size;\n    return *this;\n}\n\nBuffer a(4);\na = a;",
+    "q": "What does a = a; do?",
+    "options": [
+     [
+      "A",
+      "Nothing unusual"
+     ],
+     [
+      "B",
+      "Undefined behavior: it copies from the array it just freed"
+     ],
+     [
+      "C",
+      "Compile error"
+     ],
+     [
+      "D",
+      "It leaks the old array"
+     ]
+    ],
+    "reveal": [
+     "B — undefined behavior.",
+     "other is a itself, so delete[] data also frees other.data.",
+     "std::copy then reads from freed memory.",
+     "Acquire-first ordering or copy-and-swap fixes it — and also keeps a intact if new throws."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "A copy assignment operator with the safe ordering:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: what can go wrong",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Why acquire the new resource before releasing the old one?",
+    "If the allocation throws, the object still holds its original, valid data."
+   ],
+   [
+    "Where does self-assignment come from in real code?",
+    "Aliasing: arr[i] = arr[j] with i == j, or two references to the same object."
+   ],
+   [
+    "What should operator= return?",
+    "A reference to *this, so a = b = c works as it does for built-in types."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "The ownership handover",
+     "hint": "tear down and take over in one operation",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: prefer members that manage themselves",
+     "hint": "RAII members and the Rule of Zero",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "copy-assignment",
+    "move-assignment",
+    "exception-safety"
+   ]
+  },
+  "interview": {
+   "think": "Walk through the operator with other == *this, then with new throwing.",
+   "advancedTitle": "Advanced follow-up: copy-and-swap"
+  },
+  "recall": [
+   [
+    "Does copy-and-swap need an explicit self-check?",
+    "No: the by-value parameter is already a separate copy."
+   ],
+   [
+    "What guarantee does acquire-then-release give?",
+    "The strong guarantee: on exception, the object is unchanged."
+   ],
+   [
+    "When can you skip writing operator= entirely?",
+    "When every member manages itself (vector, string, unique_ptr): the compiler-generated one is correct."
+   ]
+  ]
+ },
+ "op-compound": {
+  "orientation": {
+   "what": "Compound assignment (+=, -=, *= …): member operators that modify the left operand in place and return a reference to it.",
+   "why": "+= is where the real arithmetic belongs; implementing it through + wastes a temporary, and returning by value breaks chaining semantics.",
+   "outcomes": [
+    "Implement += as a member returning T&",
+    "Build + on top of +=, not the reverse",
+    "Explain why x += y can be cheaper than x = x + y",
+    "Predict what returning by value breaks"
+   ],
+   "firstPass": "~10–15 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: modify in place",
+    "intro": "a += 5; for BigCounter:",
+    "stages": [
+     {
+      "name": "operator+=(5)",
+      "io": "member",
+      "note": "Changes a.value directly — no new object."
+     },
+     {
+      "name": "return *this",
+      "io": "by reference",
+      "note": "The caller gets a itself, like built-in +=."
+     },
+     {
+      "name": "operator+",
+      "io": "built on +=",
+      "note": "Copies, applies +=, returns the copy."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Compound assignment modifies its left operand in place, so it is a member returning *this by reference.",
+     "The binary operator is built on it, not the other way around — the reverse adds a temporary for nothing.",
+     "For heavy types, x += y can avoid the allocation that x = x + y needs."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "The 'add to running total' lever on a cash register",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "struct BigCounter {\n    long value = 0;\n    BigCounter operator+=(long d) {   // returns BY VALUE (a bug)\n        value += d;\n        return *this;\n    }\n};\n\nBigCounter a;\n(a += 1) += 1;",
+    "q": "What is a.value afterwards?",
+    "options": [
+     [
+      "A",
+      "2"
+     ],
+     [
+      "B",
+      "1"
+     ],
+     [
+      "C",
+      "0"
+     ],
+     [
+      "D",
+      "Compile error"
+     ]
+    ],
+    "reveal": [
+     "B — 1.",
+     "The first += changes a, then returns a copy.",
+     "The second += modifies that temporary copy, not a.",
+     "Returning BigCounter& makes it behave like built-in types, and a.value becomes 2."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "+= as the canonical operation, + built on it:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: the direction of the dependency",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Why is += a member but + a non-member?",
+    "+= modifies its left operand, so it belongs to the class; + needs symmetric conversions, which a non-member gives."
+   ],
+   [
+    "Why not implement += as *this = *this + rhs?",
+    "It builds a temporary and then assigns it — the extra work += exists to avoid."
+   ],
+   [
+    "What should += return?",
+    "T&, a reference to *this."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "In-place versus a new object",
+     "hint": "why x += y can be cheaper",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: accumulation",
+     "hint": "numeric types and running totals",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "op-arithmetic",
+    "op-increment"
+   ]
+  },
+  "interview": {
+   "think": "Ask which operator must produce a new object and which must not.",
+   "advancedTitle": "Advanced follow-up: returning by value from +="
+  },
+  "recall": [
+   [
+    "Which compound operators exist?",
+    "+= -= *= /= %= &= |= ^= <<= >>="
+   ],
+   [
+    "Does x = x + y always cost more than x += y?",
+    "For expensive types usually; for simple types the optimizer often produces the same code."
+   ],
+   [
+    "What does (a += b) evaluate to for built-in ints?",
+    "a itself, as an lvalue."
+   ]
+  ]
+ },
+ "op-increment": {
+  "orientation": {
+   "what": "Prefix (++x) and postfix (x++) increment: two different operators, told apart by a dummy int parameter, with different costs.",
+   "why": "Postfix must copy the old value, which is real work for iterators and other non-trivial types — and custom iterators must provide both.",
+   "outcomes": [
+    "Declare prefix and postfix overloads",
+    "Implement postfix in terms of prefix",
+    "Explain why postfix costs a copy",
+    "Know when the difference matters"
+   ],
+   "firstPass": "~10–15 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: the old value must be kept",
+    "intro": "c++ for a Counter:",
+    "stages": [
+     {
+      "name": "Copy",
+      "io": "Counter temp = *this;",
+      "note": "Save the value before the change."
+     },
+     {
+      "name": "Increment",
+      "io": "++(*this);",
+      "note": "Delegate to prefix — the only increment logic."
+     },
+     {
+      "name": "Return",
+      "io": "temp, by value",
+      "note": "The caller gets the old value; ++c would return c itself by reference."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "operator++() is prefix and returns T&; operator++(int) is postfix and returns the old value by value.",
+     "The int parameter is only a marker to tell the overloads apart; its value is meaningless.",
+     "Postfix must copy, so prefer ++it when you don't need the old value."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A ticket dispenser that prints the old number first",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "struct Counter {\n    int v = 0;\n    Counter& operator++() { ++v; return *this; }   // prefix only\n};\n\nCounter c;\nc++;",
+    "q": "What happens?",
+    "options": [
+     [
+      "A",
+      "c.v becomes 1"
+     ],
+     [
+      "B",
+      "Compile error: no postfix operator++(int)"
+     ],
+     [
+      "C",
+      "The compiler synthesizes postfix from prefix"
+     ],
+     [
+      "D",
+      "c.v stays 0"
+     ]
+    ],
+    "reveal": [
+     "B — a compile error.",
+     "x++ calls operator++(int), which this class doesn't declare.",
+     "C++ never synthesizes postfix from prefix (GCC: no 'operator++(int)' declared for postfix '++').",
+     "Add Counter operator++(int) { Counter t = *this; ++*this; return t; }."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "Prefix and postfix, with postfix delegating to prefix:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: why postfix copies",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "How does the compiler tell prefix and postfix overloads apart?",
+    "Postfix has a dummy int parameter: operator++(int)."
+   ],
+   [
+    "What should each form return?",
+    "Prefix returns T& to the incremented object; postfix returns the old value as a T."
+   ],
+   [
+    "Why prefer ++it in loops?",
+    "It avoids postfix's copy, which is real work for non-trivial iterator types."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "The cost of the copy",
+     "hint": "proportional to the iterator's state",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: custom iterators",
+     "hint": "both forms are required",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "iterators",
+    "op-subscript",
+    "op-compound"
+   ]
+  },
+  "interview": {
+   "think": "Say what value each form must produce.",
+   "advancedTitle": "Advanced follow-up: why ++it matters in generic code"
+  },
+  "recall": [
+   [
+    "Does it++ cost anything for int?",
+    "No: for built-in types the compiler removes the unused copy."
+   ],
+   [
+    "Which form does a range-based for loop use?",
+    "Prefix: ++__begin."
+   ],
+   [
+    "What value does the compiler pass for the dummy int?",
+    "0 for an ordinary x++, but the value is never meaningful."
+   ]
+  ]
+ },
+ "op-subscript": {
+  "orientation": {
+   "what": "operator[]: array-style indexing for your types, provided as a const and a non-const overload.",
+   "why": "Without a const overload, code holding a const reference can't even read through []. Getting the pair right mirrors std::vector.",
+   "outcomes": [
+    "Write both overloads of operator[]",
+    "Predict which overload a call uses",
+    "Share one implementation between them safely",
+    "Know the C++23 improvements"
+   ],
+   "firstPass": "~10–15 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: constness picks the overload",
+    "intro": "arr[0] on different kinds of arr:",
+    "stages": [
+     {
+      "name": "SimpleArray& arr",
+      "io": "non-const overload",
+      "note": "Returns int&, so arr[0] = 5 works."
+     },
+     {
+      "name": "const SimpleArray& arr",
+      "io": "const overload",
+      "note": "Returns const int&: reading only."
+     },
+     {
+      "name": "Only non-const defined",
+      "io": "no candidate",
+      "note": "A const object can't call a non-const member.",
+      "err": "error: no viable overloaded operator[] for type 'const Arr'"
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Provide both: T& operator[](size_t) and const T& operator[](size_t) const.",
+     "The object's constness picks the overload: const objects can only use the const one.",
+     "Share the logic by putting it in the const version and const_cast-ing its result in the non-const one — never the reverse."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A guest keycard and a supervisor's peephole card",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "struct Arr {\n    int d[4]{};\n    int& operator[](int i) { return d[i]; }   // non-const only\n};\n\nint first(const Arr& a) {\n    return a[0];   // just reading\n}",
+    "q": "Does first() compile?",
+    "options": [
+     [
+      "A",
+      "Yes: it only reads"
+     ],
+     [
+      "B",
+      "No: there is no operator[] callable on a const Arr"
+     ],
+     [
+      "C",
+      "Yes, with a warning"
+     ],
+     [
+      "D",
+      "Only if Arr is an aggregate"
+     ]
+    ],
+    "reveal": [
+     "B — it doesn't compile.",
+     "a is const, and a non-const member function can't be called on a const object — even just to read.",
+     "Clang: no viable overloaded operator[] for type 'const Arr'.",
+     "Add const int& operator[](int i) const { return d[i]; }."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "A const and non-const operator[] pair:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: choosing the overload",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Why provide a const operator[]?",
+    "So code holding a const reference can read elements; otherwise it has no [] at all."
+   ],
+   [
+    "What should the non-const overload return?",
+    "A non-const reference, so obj[i] = value works."
+   ],
+   [
+    "Which direction of const_cast reuse is safe?",
+    "Non-const calling const and casting the result; the object is known to be non-const there."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Two overloads, one machine code",
+     "hint": "constness is compile-time only",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: custom containers",
+     "hint": "matching std::vector's pair",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "op-call",
+    "const-correctness",
+    "vector"
+   ]
+  },
+  "interview": {
+   "think": "Ask which member functions a const object is allowed to call.",
+   "advancedTitle": "Advanced follow-up: removing the duplication"
+  },
+  "recall": [
+   [
+    "Does std::vector::operator[] check bounds?",
+    "No; at() does, and throws std::out_of_range."
+   ],
+   [
+    "What did C++23 add to operator[]?",
+    "Multiple parameters (m[i, j]), and deducing this can merge the const and non-const overloads."
+   ],
+   [
+    "Why does std::map::operator[] have no const version?",
+    "It inserts a default value when the key is missing, which a const map can't do; use find() or at()."
    ]
   ]
  }
