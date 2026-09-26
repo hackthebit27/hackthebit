@@ -290,6 +290,15 @@ pre.code{border:1px solid var(--code-border);border-radius:8px;}
 .tok-n{color:var(--tok-num);}
 .tok-t{color:var(--tok-type);}
 
+/* cheat sheets: syntax on the left, meaning on the right; stacked on narrow screens */
+.cs-list{border:1px solid var(--code-border);border-radius:10px;overflow:hidden;}
+.cs-row{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);border-top:1px solid var(--code-border);}
+.cs-row:first-child{border-top:0;}
+.cs-syn{margin:0;background:var(--code-bg);color:var(--code-text);font-family:var(--mono);font-size:12.5px;line-height:1.6;padding:10px 14px;white-space:pre-wrap;overflow-wrap:anywhere;border:0;border-radius:0;}
+.cs-mean{padding:10px 14px;font-size:14px;line-height:1.6;color:var(--text);overflow-wrap:anywhere;}
+.ls-gotchas .trap-list li{overflow-wrap:anywhere;}
+@media(max-width:760px){.cs-row{grid-template-columns:1fr;}.cs-mean{padding-top:8px;}}
+
 /* execution reasoning */
 .er-predict{border:1px dashed var(--accent);background:var(--accent-soft);border-radius:10px;padding:14px 18px;margin-bottom:16px;}
 .er-predict .er-label{font-size:11.5px;font-weight:700;letter-spacing:.05em;color:var(--accent);margin-bottom:6px;}
@@ -1224,6 +1233,7 @@ function positionTitle(view, params){
   if(view === 'topicDetail' && TOPICS[params.id]) return TOPICS[params.id].name;
   if(view === 'sqlpractice' && params.id && typeof SQL_PROBLEMS!=='undefined' && SQL_PROBLEMS[params.id]) return SQL_PROBLEMS[params.id].title;
   if(view === 'plsqlpractice' && params.id && typeof PLSQL_PROBLEMS!=='undefined' && PLSQL_PROBLEMS[params.id]) return PLSQL_PROBLEMS[params.id].title;
+  if(view === 'cheatsheets' && params.id && typeof CHEAT_SHEETS!=='undefined'){ const c = CHEAT_SHEETS.find(x=>x.id===params.id); if(c) return c.title; }
   for(const g of NAV) for(const it of g.items) if(it.id === view) return it.label;
   return view;
 }
@@ -19295,6 +19305,7 @@ function handleAction(action, d, e){
     case 'jump': { const el = document.getElementById(d.target); if(el){ el.scrollIntoView({behavior:'smooth', block:'start'}); const h = el.querySelector('h2'); if(h){ h.setAttribute('tabindex','-1'); h.focus({preventScroll:true}); } } return; }
     case 'open-problem': { const K = PRACTICE_KINDS[d.kind]; if(K) navigate(K.view, {id:d.id}); return; }
     case 'nav-view': navigate(d.view, {}); return;
+    case 'open-sheet': navigate('cheatsheets', {id:d.id}); return;
     case 'resume': { const p = STATE.lastPosition; if(p && VIEWS[p.view]) navigate(p.view, p.params||{}); return; }
     case 'set-theme': setThemePreference(d.theme); render(); return;
     case 'open-sync': navigate('settings', {section:'sync'}); setTimeout(()=>{ const el = document.getElementById('syncCard'); if(el) el.scrollIntoView({block:'start'}); }, 0); return;
@@ -19968,8 +19979,8 @@ VIEWS.interview = function(params){
       const att = STATE.questionAttempts[q.id];
       const knownNow = att && att.markedKnown;
       return '<div class="card card-pad" style="margin-bottom:10px">'+
-        '<div style="display:flex;justify-content:space-between;gap:10px"><b style="font-size:13.5px">'+escapeHtml(q.q)+'</b>'+
-        '<span style="display:flex;gap:6px;flex-shrink:0"><span class="chip '+(q.priority==='P0'?'chip-p0':'chip-p1')+'">'+q.priority+'</span><span class="chip chip-neutral">'+escapeHtml(q.category)+'</span></span></div>'+
+        '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><b style="font-size:13.5px;flex:1 1 240px;min-width:0">'+escapeHtml(q.q)+'</b>'+
+        '<span style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start;align-self:flex-start;max-width:100%"><span class="chip '+(q.priority==='P0'?'chip-p0':'chip-p1')+'">'+q.priority+'</span><span class="chip chip-neutral">'+escapeHtml(q.category)+'</span></span></div>'+
         '<div style="margin-top:8px"><button class="btn btn-sm" data-action="reveal-answer" data-id="'+q.id+'">Reveal answer</button> '+
         '<button class="btn btn-sm'+(knownNow?' btn-primary':'')+'" data-action="question-mark-known" data-id="'+q.id+'" data-known="'+(!knownNow)+'">'+(knownNow?'&#10003; Known':'Mark known')+'</button></div>'+
         '<div id="reveal-'+q.id+'" hidden class="detail-box" style="margin-top:10px">'+escapeHtml(q.a)+'</div>'+
@@ -20160,20 +20171,33 @@ VIEWS.cheatsheets = function(params){
   if(CHEAT_SHEETS.length===0) return comingSoon('Cheat Sheets', 'Quick-reference sheets for SQL syntax, PL/SQL syntax, and Oracle-specific idioms.');
 
   if(params.id){
-    const s = CHEAT_SHEETS.find(x=>x.id===params.id);
-    if(!s) return viewHeader('Sheet not found','') + '<div class="empty-state">No such cheat sheet.</div>';
-    return viewHeader(s.title, '<span class="chip chip-neutral">'+escapeHtml(s.category)+'</span>',
-        '<button class="btn" onclick="navigate(\'cheatsheets\',{})">&larr; All sheets</button>')+
-      '<div class="card card-pad"><div style="font-size:13.5px">'+escapeHtml(s.summary)+'</div></div>'+
-      s.blocks.map(b=>
-        '<div class="card card-pad" style="margin-top:12px"><div class="section-title">'+escapeHtml(b.heading)+'</div>'+
-        '<table style="width:100%;border-collapse:collapse;font-size:13px">'+
-        b.lines.map(l=>'<tr>'+
-          '<td style="vertical-align:top;padding:5px 12px 5px 0;white-space:pre-wrap;font-family:var(--mono,monospace);color:var(--text)">'+escapeHtml(l.syntax)+'</td>'+
-          '<td style="vertical-align:top;padding:5px 0;color:var(--text-muted)">'+escapeHtml(l.meaning)+'</td></tr>').join('')+
-        '</table></div>').join('')+
-      '<div class="card card-pad" style="margin-top:12px"><div class="section-title">Gotchas</div><ul style="margin:0;padding-left:18px;font-size:13px">'+
-        s.gotchas.map(g=>'<li style="margin-bottom:6px">'+escapeHtml(g)+'</li>').join('')+'</ul></div>';
+    const pos = CHEAT_SHEETS.findIndex(x=>x.id===params.id);
+    const s = CHEAT_SHEETS[pos];
+    if(!s) return viewHeader('Sheet not found','') + '<div class="empty-state">No such cheat sheet. <span class="link" data-action="nav-view" data-view="cheatsheets">Back to all cheat sheets</span></div>';
+    const prev = CHEAT_SHEETS[pos-1], next = CHEAT_SHEETS[pos+1];
+    const navBtn = (x, dir) => x
+      ? '<button type="button" class="tnav-btn'+(dir==='next'?' next':'')+'" data-action="open-sheet" data-id="'+escapeHtml(x.id)+'"><span class="tnav-label">'+(dir==='next'?'Next &rarr;':'&larr; Previous')+'</span><span class="tnav-name">'+escapeHtml(x.title)+'</span></button>'
+      : '<button type="button" class="tnav-btn'+(dir==='next'?' next':'')+'" disabled><span class="tnav-label">'+(dir==='next'?'Next':'Previous')+'</span><span class="tnav-name">&mdash;</span></button>';
+    const nav = '<div class="topic-navbar">'+navBtn(prev,'prev')+
+      '<div class="tnav-mid"><div class="tnav-phase-progress">Sheet '+(pos+1)+' of '+CHEAT_SHEETS.length+'</div><div class="tnav-overall-progress">'+escapeHtml(s.category)+'</div></div>'+
+      navBtn(next,'next')+'</div>';
+
+    const parts = [];
+    const add = (key, label, html, tag) => { if(html) parts.push({key, label, html:lessonSection(key, label, html, tag)}); };
+    add('summary', 'Overview', renderProse(s.summary));
+    s.blocks.forEach((b,i)=>add('b'+(i+1), b.heading,
+      '<div class="cs-list">'+b.lines.map(l=>
+        '<div class="cs-row"><pre class="cs-syn">'+highlightSQL(String(l.syntax))+'</pre><div class="cs-mean">'+escapeHtml(l.meaning)+'</div></div>').join('')+'</div>',
+      b.lines.length+(b.lines.length===1?' line':' lines')));
+    add('gotchas', 'Gotchas', s.gotchas && s.gotchas.length ? '<div class="callout caution"><ul class="trap-list">'+s.gotchas.map(g=>'<li>'+escapeHtml(g)+'</li>').join('')+'</ul></div>' : '');
+    const toc = '<nav class="lesson-toc" aria-label="On this page"><span class="toc-label">On this page</span>'+
+      parts.map(p=>'<button type="button" data-action="jump" data-target="ls-'+p.key+'">'+escapeHtml(p.label)+'</button>').join('')+'</nav>';
+
+    return '<div class="back-to-topics" data-action="nav-view" data-view="cheatsheets">&larr; All cheat sheets</div>'+
+      viewHeader(s.title, '', '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span class="chip chip-neutral">'+escapeHtml(s.category)+'</span></div>')+
+      nav+
+      '<article class="lesson">'+toc+parts.map(p=>p.html).join('')+'</article>'+
+      (next ? '<div class="next-action-card"><div class="na-title">Next sheet</div><button class="btn btn-primary" data-action="open-sheet" data-id="'+escapeHtml(next.id)+'">'+escapeHtml(next.title)+' &rarr;</button></div>' : '');
   }
 
   const cats = Array.from(new Set(CHEAT_SHEETS.map(s=>s.category)));
@@ -20182,8 +20206,8 @@ VIEWS.cheatsheets = function(params){
       '<div style="margin-bottom:18px"><div class="section-title">'+escapeHtml(c)+'</div>'+
       '<div class="card"><div class="checklist" style="max-height:none">'+
       CHEAT_SHEETS.filter(s=>s.category===c).map(s=>
-        '<div class="check-row link" onclick="navigate(\'cheatsheets\',{id:\''+s.id+'\'})"><div class="row-main"><div class="row-title">'+escapeHtml(s.title)+'</div>'+
-        '<div class="row-meta"><span>'+s.blocks.length+' sections</span><span>'+s.gotchas.length+' gotchas</span></div></div></div>').join('')+
+        '<div class="check-row link" role="button" tabindex="0" data-action="open-sheet" data-id="'+escapeHtml(s.id)+'"><div class="row-main"><div class="row-title">'+escapeHtml(s.title)+'</div>'+
+        '<div class="row-meta"><span>'+s.blocks.length+' sections</span><span>'+s.blocks.reduce((x,b)=>x+b.lines.length,0)+' lines</span><span>'+s.gotchas.length+' gotchas</span></div></div><span class="row-arrow">Open &rarr;</span></div>').join('')+
       '</div></div></div>').join('');
 };
 
