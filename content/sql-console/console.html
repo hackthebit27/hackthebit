@@ -297,6 +297,36 @@ pre.code{border:1px solid var(--code-border);border-radius:8px;}
 .cs-syn{margin:0;background:var(--code-bg);color:var(--code-text);font-family:var(--mono);font-size:12.5px;line-height:1.6;padding:10px 14px;white-space:pre-wrap;overflow-wrap:anywhere;border:0;border-radius:0;}
 .cs-mean{padding:10px 14px;font-size:14px;line-height:1.6;color:var(--text);overflow-wrap:anywhere;}
 .ls-gotchas .trap-list li{overflow-wrap:anywhere;}
+/* interview mode */
+.iq-progress{margin-bottom:12px;}
+.iq-progress-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:13.5px;color:var(--text-muted);margin-bottom:8px;font-variant-numeric:tabular-nums;}
+.iq-progress-top b{color:var(--text);}
+.iq-pct{font-weight:700;color:var(--accent);}
+.iq-toolbar{display:flex;flex-direction:column;gap:10px;margin-bottom:16px;}
+.iq-search{width:100%;font-size:14px;padding:9px 12px;}
+.iq-filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+.iq-filters select{flex:1 1 180px;min-width:0;max-width:100%;}
+.iq-filters .seg{flex:0 0 auto;}
+.iq-toolbar-foot{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px 12px;font-size:12.5px;color:var(--text-faint);font-variant-numeric:tabular-nums;}
+.iq-bulk{display:flex;gap:14px;}
+.link-btn{background:none;border:0;padding:0;font:inherit;font-size:12.5px;color:var(--accent);cursor:pointer;}
+.link-btn:hover{text-decoration:underline;}
+.iq-list{display:flex;flex-direction:column;gap:12px;}
+.iq-card{background:var(--bg-card);border:1px solid var(--border-soft);border-radius:var(--radius-lg);padding:16px 18px;scroll-margin-top:70px;min-width:0;}
+.iq-card.known{border-left:3px solid var(--green);}
+.iq-card.focus{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);}
+.iq-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:8px;}
+.iq-num{font-size:11.5px;font-weight:700;color:var(--text-faint);font-variant-numeric:tabular-nums;margin-right:2px;}
+.iq-known-tag{display:none;margin-left:auto;font-size:11.5px;font-weight:700;color:var(--green);}
+.iq-card.known .iq-known-tag{display:inline;}
+.iq-q{font-size:15px;font-weight:600;line-height:1.5;margin:0 0 12px;color:var(--text);overflow-wrap:anywhere;text-wrap:pretty;}
+.iq-actions{display:flex;flex-wrap:wrap;gap:8px;}
+.iq-answer{margin-top:14px;padding:14px 16px;background:var(--bg-elevated);border-left:3px solid var(--accent-dim);border-radius:0 10px 10px 0;}
+.iq-answer-label{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--accent);margin-bottom:8px;}
+.iq-answer .prose{font-size:14.5px;max-width:80ch;overflow-wrap:anywhere;}
+.iq-card code.inline{background:var(--code-bg);border:1px solid var(--code-border);font-size:.88em;padding:1px 5px;overflow-wrap:anywhere;}
+.iq-tags{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:10px;font-size:12px;color:var(--text-faint);}
+@media(max-width:600px){.iq-card{padding:14px 14px;}.iq-answer{padding:12px 12px;}.iq-filters .seg{flex:1 1 100%;display:flex;}.iq-filters .seg button{flex:1;}}
 .cs-cat{margin:0 0 24px;}
 .cs-cat-h{font-size:14px;font-weight:700;color:var(--text);margin:0 0 10px;display:flex;align-items:baseline;gap:8px;}
 .cs-cat-n{font-size:12px;font-weight:500;color:var(--text-faint);}
@@ -19460,6 +19490,31 @@ function handleAction(action, d, e){
     }
     case 'confirm-reset': resetAllProgress(); closeModal(); navigate('dashboard',{}); return;
     case 'revision-rate': scheduleRevisionRating(d.topic, d.rating); navigate(ROUTE.view, ROUTE.params); return;
+    case 'iq-toggle': { const card = document.getElementById('iq-'+d.id); if(card) iqSetOpen(card, card.querySelector('.iq-answer').hidden); return; }
+    case 'iq-all': { document.querySelectorAll('#iqList .iq-card:not([hidden])').forEach(c=>iqSetOpen(c, d.open==='true')); return; }
+    case 'iq-status': {
+      document.querySelectorAll('.iq-toolbar .seg button').forEach(b=>b.setAttribute('aria-pressed', String(b===e.target.closest('button'))));
+      iqApplyFilters(); return;
+    }
+    case 'iq-known': {
+      const was = !!(STATE.questionAttempts[d.id] && STATE.questionAttempts[d.id].markedKnown);
+      STATE.questionAttempts[d.id] = Object.assign({seen:true}, STATE.questionAttempts[d.id], {markedKnown: !was, lastSeen:todayStr()});
+      requestSave();
+      // Update in place: re-rendering would lose the reader's scroll position and open answers.
+      const card = document.getElementById('iq-'+d.id);
+      if(card){
+        card.classList.toggle('known', !was); card.dataset.known = String(!was);
+        const btn = card.querySelector('.iq-known-btn');
+        btn.classList.toggle('btn-primary', !was); btn.setAttribute('aria-pressed', String(!was));
+        btn.innerHTML = !was ? '&#10003; Known' : 'Mark known';
+      }
+      const k = QUESTION_BANK.filter(q=>STATE.questionAttempts[q.id] && STATE.questionAttempts[q.id].markedKnown).length;
+      const pct = Math.round(k/QUESTION_BANK.length*100);
+      const kEl = document.getElementById('iqKnown'); if(kEl) kEl.textContent = k;
+      const pEl = document.getElementById('iqPct'); if(pEl) pEl.textContent = pct+'%';
+      const bEl = document.getElementById('iqBar'); if(bEl) bEl.style.width = pct+'%';
+      return;
+    }
     case 'question-mark-known': {
       STATE.questionAttempts[d.id] = Object.assign({seen:true}, STATE.questionAttempts[d.id], {markedKnown: d.known==='true', lastSeen:todayStr()});
       requestSave(); navigate(ROUTE.view, ROUTE.params); return;
@@ -19978,28 +20033,91 @@ VIEWS.sqlpractice = function(params){
 VIEWS.interview = function(params){
   params = params||{};
   if(QUESTION_BANK.length===0) return comingSoon('Interview Mode', 'A 250-350 question interview bank plus an explain-as-interview mode, organized by category and difficulty.');
-  const catFilter = params.category || '';
   const cats = Array.from(new Set(QUESTION_BANK.map(q=>q.category))).sort();
-  const list = catFilter ? QUESTION_BANK.filter(q=>q.category===catFilter) : QUESTION_BANK;
-  const known = QUESTION_BANK.filter(q=>STATE.questionAttempts[q.id] && STATE.questionAttempts[q.id].markedKnown).length;
+  const diffs = ['easy','medium','hard'].filter(d=>QUESTION_BANK.some(q=>q.difficulty===d));
+  const catFilter = cats.includes(params.category) ? params.category : '';
+  const isKnown = q => !!(STATE.questionAttempts[q.id] && STATE.questionAttempts[q.id].markedKnown);
+  const known = QUESTION_BANK.filter(isKnown).length;
+  const total = QUESTION_BANK.length;
+  const focus = params.focus || '';
+  if(focus) setTimeout(()=>{
+    const card = document.getElementById('iq-'+focus);
+    if(!card) return;
+    card.classList.add('focus'); iqSetOpen(card, true);
+    card.scrollIntoView({block:'start'});
+  }, 0);
 
-  return viewHeader('Interview Mode', QUESTION_BANK.length+' questions &middot; '+known+' marked known. Click a question to reveal the answer.') +
-    '<div class="card card-pad" style="margin-bottom:14px"><div class="field"><span class="field-label">Category</span>'+
-      '<select onchange="navigate(\'interview\',{category:this.value})"><option value="">All categories ('+QUESTION_BANK.length+')</option>'+
-      cats.map(c=>'<option value="'+escapeHtml(c)+'"'+(catFilter===c?' selected':'')+'>'+escapeHtml(c)+' ('+QUESTION_BANK.filter(q=>q.category===c).length+')</option>').join('')+
-      '</select></div></div>'+
-    list.map(q=>{
-      const att = STATE.questionAttempts[q.id];
-      const knownNow = att && att.markedKnown;
-      return '<div class="card card-pad" style="margin-bottom:10px">'+
-        '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><b style="font-size:13.5px;flex:1 1 240px;min-width:0">'+escapeHtml(q.q)+'</b>'+
-        '<span style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start;align-self:flex-start;max-width:100%"><span class="chip '+(q.priority==='P0'?'chip-p0':'chip-p1')+'">'+q.priority+'</span><span class="chip chip-neutral">'+escapeHtml(q.category)+'</span></span></div>'+
-        '<div style="margin-top:8px"><button class="btn btn-sm" data-action="reveal-answer" data-id="'+q.id+'">Reveal answer</button> '+
-        '<button class="btn btn-sm'+(knownNow?' btn-primary':'')+'" data-action="question-mark-known" data-id="'+q.id+'" data-known="'+(!knownNow)+'">'+(knownNow?'&#10003; Known':'Mark known')+'</button></div>'+
-        '<div id="reveal-'+q.id+'" hidden class="detail-box" style="margin-top:10px">'+escapeHtml(q.a)+'</div>'+
-        '</div>';
-    }).join('');
+  const cards = QUESTION_BANK.map((q,i)=>{
+    const k = isKnown(q);
+    const hay = normalizeSearchStr(q.q+' '+q.category+' '+(q.tags||[]).join(' '));
+    return '<article class="iq-card'+(k?' known':'')+'" id="iq-'+escapeHtml(q.id)+'" data-cat="'+escapeHtml(q.category)+'" data-diff="'+escapeHtml(q.difficulty||'')+'" data-known="'+k+'" data-hay="'+escapeHtml(hay)+'"'+(catFilter && q.category!==catFilter?' hidden':'')+'>'+
+      '<div class="iq-meta"><span class="iq-num">Q'+(i+1)+'</span>'+
+        '<span class="chip chip-'+escapeHtml(String(q.priority||'P3').toLowerCase())+'">'+escapeHtml(q.priority||'')+'</span>'+
+        (q.difficulty ? difficultyChip(q.difficulty) : '')+
+        '<span class="chip chip-neutral">'+escapeHtml(q.category)+'</span>'+
+        '<span class="iq-known-tag" aria-hidden="true">&#10003; Known</span></div>'+
+      '<h3 class="iq-q">'+iqInlineCode(escapeHtml(q.q))+'</h3>'+
+      '<div class="iq-actions">'+
+        '<button type="button" class="btn btn-sm iq-toggle" data-action="iq-toggle" data-id="'+escapeHtml(q.id)+'" aria-expanded="false" aria-controls="iqa-'+escapeHtml(q.id)+'">Show answer</button>'+
+        '<button type="button" class="btn btn-sm iq-known-btn'+(k?' btn-primary':'')+'" data-action="iq-known" data-id="'+escapeHtml(q.id)+'" aria-pressed="'+k+'">'+(k?'&#10003; Known':'Mark known')+'</button>'+
+      '</div>'+
+      '<div class="iq-answer" id="iqa-'+escapeHtml(q.id)+'" hidden><div class="iq-answer-label">Model answer</div>'+iqInlineCode(renderProse(q.a))+
+        (q.tags && q.tags.length ? '<div class="iq-tags">'+q.tags.map(t=>'<span>#'+escapeHtml(t)+'</span>').join('')+'</div>' : '')+
+      '</div>'+
+    '</article>';
+  }).join('');
+
+  const shown = catFilter ? QUESTION_BANK.filter(q=>q.category===catFilter).length : total;
+  return viewHeader('Interview Mode', total+' questions with model answers. Say your answer out loud first, then open the model answer and mark what you can explain confidently.') +
+    '<div class="card card-pad iq-progress"><div class="iq-progress-top"><span><b id="iqKnown">'+known+'</b> of '+total+' marked known</span><span class="iq-pct" id="iqPct">'+Math.round(known/total*100)+'%</span></div>'+
+      '<div class="bar-track"><div class="bar-fill" id="iqBar" style="width:'+Math.round(known/total*100)+'%"></div></div></div>'+
+    '<div class="card card-pad iq-toolbar">'+
+      '<input type="search" id="iqSearch" class="iq-search" placeholder="Filter questions by keyword..." aria-label="Filter questions by keyword" autocomplete="off">'+
+      '<div class="iq-filters">'+
+        '<select id="iqCat" aria-label="Category"><option value="">All categories ('+total+')</option>'+
+          cats.map(c=>'<option value="'+escapeHtml(c)+'"'+(catFilter===c?' selected':'')+'>'+escapeHtml(c)+' ('+QUESTION_BANK.filter(q=>q.category===c).length+')</option>').join('')+'</select>'+
+        '<select id="iqDiff" aria-label="Difficulty"><option value="">Any difficulty</option>'+diffs.map(d=>'<option value="'+d+'">'+d.charAt(0).toUpperCase()+d.slice(1)+'</option>').join('')+'</select>'+
+        '<div class="seg" role="group" aria-label="Status">'+
+          '<button type="button" data-action="iq-status" data-status="" aria-pressed="true">All</button>'+
+          '<button type="button" data-action="iq-status" data-status="false" aria-pressed="false">To review</button>'+
+          '<button type="button" data-action="iq-status" data-status="true" aria-pressed="false">Known</button>'+
+        '</div>'+
+      '</div>'+
+      '<div class="iq-toolbar-foot"><span id="iqCount" aria-live="polite">Showing '+shown+' of '+total+'</span>'+
+        '<span class="iq-bulk"><button type="button" class="link-btn" data-action="iq-all" data-open="true">Expand all</button><button type="button" class="link-btn" data-action="iq-all" data-open="false">Collapse all</button></span></div>'+
+    '</div>'+
+    '<div class="iq-list" id="iqList">'+cards+'</div>'+
+    '<div class="empty-state" id="iqEmpty"'+(shown?' hidden':'')+'>No questions match these filters.</div>';
 };
+/* `code` spans in question-bank text become inline code; <pre> blocks are left alone. */
+function iqInlineCode(html){
+  return String(html).split(/(<pre[\s\S]*?<\/pre>)/).map((part,i)=>i%2 ? part : part.replace(/`([^`\n]+)`/g, '<code class="inline">$1</code>')).join('');
+}
+function iqSetOpen(card, open){
+  const box = card.querySelector('.iq-answer'), btn = card.querySelector('.iq-toggle');
+  if(!box || !btn) return;
+  box.hidden = !open;
+  btn.setAttribute('aria-expanded', String(open));
+  btn.textContent = open ? 'Hide answer' : 'Show answer';
+}
+function iqApplyFilters(){
+  const list = document.getElementById('iqList'); if(!list) return;
+  const q = normalizeSearchStr((document.getElementById('iqSearch')||{}).value);
+  const cat = (document.getElementById('iqCat')||{}).value || '';
+  const diff = (document.getElementById('iqDiff')||{}).value || '';
+  const stBtn = document.querySelector('.iq-toolbar .seg button[aria-pressed="true"]');
+  const st = stBtn ? stBtn.dataset.status : '';
+  let n = 0;
+  list.querySelectorAll('.iq-card').forEach(c=>{
+    const ok = (!cat || c.dataset.cat===cat) && (!diff || c.dataset.diff===diff) && (!st || c.dataset.known===st) && (!q || c.dataset.hay.includes(q));
+    c.hidden = !ok; if(ok) n++;
+  });
+  document.getElementById('iqCount').textContent = 'Showing '+n+' of '+list.children.length;
+  document.getElementById('iqEmpty').hidden = n > 0;
+  if(ROUTE.view==='interview'){ ROUTE.params = Object.assign({}, ROUTE.params, {category:cat||undefined, focus:undefined}); }
+}
+document.addEventListener('input', function(e){ if(e.target && e.target.id==='iqSearch') iqApplyFilters(); });
+document.addEventListener('change', function(e){ if(e.target && (e.target.id==='iqCat' || e.target.id==='iqDiff')) iqApplyFilters(); });
 VIEWS.debugging = function(params){
   params = params||{};
   if(DEBUG_LABS.length===0) return comingSoon('Debugging Lab', 'A 30-exercise ORA-error debugging lab plus a real-world production incident lab.');
