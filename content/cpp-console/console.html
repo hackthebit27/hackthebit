@@ -1600,7 +1600,7 @@ DEEP_CONTENT['raii'] = {
   def:"RAII (Resource Acquisition Is Initialization) ties a resource's lifetime to an object's lifetime: acquire the resource in the constructor, release it in the destructor, so the resource is automatically freed when the object goes out of scope — even via an exception.",
   why:"Manual acquire/release pairs (`lock(); ... unlock();`, `fopen(); ... fclose();`) are fragile: any early return, exception, or `break` skips the cleanup. RAII makes cleanup happen via the language's own stack-unwinding guarantee — a destructor for a stack object *always* runs when that object leaves scope, no matter how it leaves.",
   analogy:"RAII is a hotel key card tied to your room door alarm. The moment you leave the room (scope ends) and the door swings shut (destructor runs), the lights and AC turn off automatically — you don't have to remember to flip a switch on your way out, and it happens even if you leave in a hurry through the fire escape (an exception).",
-  code:`class FileHandle {\n    FILE* fp;\npublic:\n    explicit FileHandle(const char* path) : fp(std::fopen(path, "r")) {\n        if (!fp) throw std::runtime_error("open failed");\n    }\n    ~FileHandle() { if (fp) std::fclose(fp); }   // ALWAYS runs on scope exit\n    FileHandle(const FileHandle&) = delete;       // no accidental double-close\n    FileHandle& operator=(const FileHandle&) = delete;\n};\n\nvoid process() {\n    FileHandle f("data.txt");\n    riskyOperation();      // if this throws, f's destructor STILL runs\n}  // f closed here on every path: normal return, early return, or exception`,
+  code:`#include <cstdio>\n#include <stdexcept>\n\nvoid riskyOperation();\n\nclass FileHandle {\n    FILE* fp;\npublic:\n    explicit FileHandle(const char* path) : fp(std::fopen(path, "r")) {\n        if (!fp) throw std::runtime_error("open failed");\n    }\n    ~FileHandle() { if (fp) std::fclose(fp); }   // ALWAYS runs on scope exit\n    FileHandle(const FileHandle&) = delete;       // no accidental double-close\n    FileHandle& operator=(const FileHandle&) = delete;\n};\n\nvoid process() {\n    FileHandle f("data.txt");\n    riskyOperation();      // if this throws, f's destructor STILL runs\n}  // f closed here on every path: normal return, early return, or exception`,
   steps:[
     "`FileHandle f(\"data.txt\")` opens the file inside the constructor — the resource is acquired at the exact moment of initialization, so there's never a window where `f` exists but the file isn't open.",
     "If `riskyOperation()` throws, the C++ runtime unwinds the stack: every fully-constructed local object in scope (here, `f`) has its destructor invoked, in reverse order of construction, before the exception propagates further.",
@@ -1618,7 +1618,7 @@ DEEP_CONTENT['unique-ptr'] = {
   def:"`std::unique_ptr<T>` is a smart pointer that exclusively owns a heap object and automatically deletes it when the `unique_ptr` itself is destroyed — ownership can be transferred (moved) but never shared (copied).",
   why:"It expresses single ownership directly in the type system: if you see a `unique_ptr<Widget>` parameter, you know exactly one owner exists and the compiler enforces it — the copy constructor is deleted, so accidental aliasing is a compile error, not a runtime bug.",
   analogy:"A `unique_ptr` is like a single physical key to a safety deposit box. You can hand the one key to someone else (move it — now they're the sole owner and you have nothing), but you cannot photocopy it (copy is deleted) — there is only ever one key in existence for that box.",
-  code:`std::unique_ptr<Widget> makeWidget() {\n    return std::make_unique<Widget>(42);   // ownership created here\n}\n\nvoid consume(std::unique_ptr<Widget> w) {   // takes ownership by value\n    w->doSomething();\n}  // w destroyed here -> Widget deleted here\n\nint main() {\n    auto w1 = makeWidget();\n    // auto w2 = w1;           // COMPILE ERROR: copy ctor deleted\n    auto w2 = std::move(w1);   // OK: ownership transferred, w1 is now null\n    consume(std::move(w2));    // ownership transferred into the function\n}`,
+  code:`#include <memory>\n\nstruct Widget {\n    Widget() = default;\n    explicit Widget(int) {}\n    void doSomething() {}\n    void use() {}\n};\n\nstd::unique_ptr<Widget> makeWidget() {\n    return std::make_unique<Widget>(42);   // ownership created here\n}\n\nvoid consume(std::unique_ptr<Widget> w) {   // takes ownership by value\n    w->doSomething();\n}  // w destroyed here -> Widget deleted here\n\nint main() {\n    auto w1 = makeWidget();\n    // auto w2 = w1;           // COMPILE ERROR: copy ctor deleted\n    auto w2 = std::move(w1);   // OK: ownership transferred, w1 is now null\n    consume(std::move(w2));    // ownership transferred into the function\n}`,
   steps:[
     "`make_unique<Widget>(42)` allocates a `Widget` on the heap and wraps the raw pointer in a `unique_ptr` in one exception-safe step.",
     "`std::move(w1)` doesn't copy anything — it casts `w1` to an rvalue reference so the move constructor runs, which just copies the internal raw pointer (one machine word) and sets `w1`'s internal pointer to `nullptr`.",
@@ -1636,7 +1636,7 @@ DEEP_CONTENT['shared-ptr'] = {
   def:"`std::shared_ptr<T>` is a reference-counted smart pointer: multiple `shared_ptr` instances can jointly own the same object, and the object is deleted only when the last owning `shared_ptr` is destroyed.",
   why:"Some designs genuinely need shared ownership — several parts of a program need an object to stay alive and none of them individually knows when the others are done with it. `shared_ptr` automates 'delete when nobody needs this anymore' via a thread-safe reference count.",
   analogy:"A `shared_ptr` is like a library book with a sign-out sheet everyone shares. Each person who checks it out adds their name (increments the count); the book only goes back on the shelf for real (gets destroyed) once the last name is crossed off — no single borrower has to track who else is still reading it.",
-  code:`int main() {\n    auto sp1 = std::make_shared<Widget>(10);   // control block + Widget, refcount = 1\n    {\n        auto sp2 = sp1;                     // refcount = 2 (copy, not move)\n        std::cout << sp1.use_count();       // 2\n    }   // sp2 destroyed -> refcount = 1\n    std::cout << sp1.use_count();           // 1\n}   // sp1 destroyed -> refcount = 0 -> Widget deleted`,
+  code:`#include <iostream>\n#include <memory>\n\nstruct Widget {\n    Widget() = default;\n    explicit Widget(int) {}\n    void doSomething() {}\n    void use() {}\n};\n\nint main() {\n    auto sp1 = std::make_shared<Widget>(10);   // control block + Widget, refcount = 1\n    {\n        auto sp2 = sp1;                     // refcount = 2 (copy, not move)\n        std::cout << sp1.use_count();       // 2\n    }   // sp2 destroyed -> refcount = 1\n    std::cout << sp1.use_count();           // 1\n}   // sp1 destroyed -> refcount = 0 -> Widget deleted`,
   steps:[
     "`make_shared<Widget>(10)` allocates the `Widget` AND its control block (ref counts + deleter) in a single heap allocation, then returns a `shared_ptr` with refcount 1.",
     "`auto sp2 = sp1;` invokes the copy constructor, which atomically increments the shared refcount (atomic because multiple threads might copy/destroy `shared_ptr`s to the same object concurrently) and copies the raw pointer + control-block pointer.",
@@ -1655,7 +1655,7 @@ DEEP_CONTENT['weak-ptr'] = {
   def:"`std::weak_ptr<T>` is a non-owning observer of an object managed by `shared_ptr` — it can check whether the object is still alive and temporarily obtain a `shared_ptr` to it, but it never affects the object's lifetime.",
   why:"It breaks reference cycles between `shared_ptr`s, and it lets code safely 'maybe' hold onto an object without forcing that object to stay alive just because something remembers it exists (think of a cache that shouldn't itself keep entries alive forever).",
   analogy:"If `shared_ptr` is a library card that keeps a book checked out, `weak_ptr` is a sticky note that says 'this book is at call number 823.4' — it tells you where to look, but doesn't itself keep the book off the shelf. When you actually want to read it, you go check if it's still there (`lock()`) — it might have already been returned and re-shelved (destroyed) by everyone else.",
-  code:`int main() {\n    std::shared_ptr<Widget> sp = std::make_shared<Widget>();\n    std::weak_ptr<Widget> wp = sp;      // observes, doesn't extend lifetime\n\n    if (auto locked = wp.lock()) {      // try to get a shared_ptr\n        locked->use();                  // safe: locked keeps it alive for this block\n    } else {\n        std::cout << "already destroyed";\n    }\n\n    sp.reset();                         // Widget destroyed (last shared_ptr gone)\n    assert(wp.expired());               // true\n}`,
+  code:`#include <cassert>\n#include <iostream>\n#include <memory>\n\nstruct Widget {\n    Widget() = default;\n    explicit Widget(int) {}\n    void doSomething() {}\n    void use() {}\n};\n\nint main() {\n    std::shared_ptr<Widget> sp = std::make_shared<Widget>();\n    std::weak_ptr<Widget> wp = sp;      // observes, doesn't extend lifetime\n\n    if (auto locked = wp.lock()) {      // try to get a shared_ptr\n        locked->use();                  // safe: locked keeps it alive for this block\n    } else {\n        std::cout << "already destroyed";\n    }\n\n    sp.reset();                         // Widget destroyed (last shared_ptr gone)\n    assert(wp.expired());               // true\n}`,
   steps:[
     "`weak_ptr<Widget> wp = sp;` increments only the control block's *weak* count, never the strong (ownership) count — the Widget's fate is unaffected.",
     "`wp.lock()` atomically checks the strong count: if it's still > 0, it returns a new `shared_ptr` (incrementing the strong count for as long as `locked` lives); if the strong count already hit 0, it returns an empty `shared_ptr` instead of a dangling one.",
@@ -2091,14 +2091,14 @@ DEEP_CONTENT['dangling-pointers'] = {
   def:"A dangling pointer holds the address of an object whose lifetime has already ended -- the pointer's VALUE (the address) may still look plausible, but dereferencing it is undefined behavior because the pointee no longer exists.",
   why:"This is the single most common root cause behind 'my program sometimes crashes and sometimes doesn't' bug reports -- dereferencing a dangling pointer's behavior is entirely dependent on what, if anything, has since reused that memory, which is why the exact same buggy code can appear to work for months before an unrelated change makes it crash.",
   analogy:"A dangling pointer is a forwarding address to a house that's since been demolished and the lot resold -- the address itself is still a perfectly well-formed piece of paper, but showing up there expecting the old house is undefined by any reasonable standard; whatever is built there now (or nothing at all) has nothing to do with what you're looking for.",
-  code:`int* danglingExample(){\n    int local = 42;\n    return &local;      // returns address of a variable about to be destroyed\n}\n\nint main() {\n    int* p = danglingExample();\n    std::cout << *p;     // UB: local's lifetime ended when danglingExample() returned\n\n    int* p2 = new int(1);\n    delete p2;\n    std::cout << *p2;    // UB: also dangling, via explicit delete this time\n}`,
+  code:`#include <iostream>\n\nint* danglingExample(){\n    int local = 42;\n    return &local;      // returns address of a variable about to be destroyed\n}\n\nint main() {\n    int* p = danglingExample();\n    std::cout << *p;     // UB: local's lifetime ended when danglingExample() returned\n\n    int* p2 = new int(1);\n    delete p2;\n    std::cout << *p2;    // UB: also dangling, via explicit delete this time\n}`,
   steps:[
     "A pointer becomes dangling the moment its pointee's lifetime ends -- this can happen via an object going out of scope (a local variable), an explicit `delete`, a container reallocation invalidating pointers/iterators into it, or a smart pointer's last reference being released.",
     "The pointer's bit pattern (the address value) is unaffected by the pointee's destruction -- nothing about a dangling pointer LOOKS wrong; it's a perfectly valid-looking address that simply no longer refers to a live object.",
     "Whether dereferencing it crashes, silently reads garbage, or appears to 'still work' depends entirely on what, if anything, the allocator has since done with that memory -- which is exactly why dangling-pointer bugs are notoriously nondeterministic and hard to reproduce reliably."
   ],
   memory:"The freed/destroyed memory a dangling pointer refers to remains eligible for reuse by ANY subsequent allocation in the program (on any thread) -- reading through a dangling pointer might get lucky and see old, still-intact data, or might read/corrupt an entirely unrelated object that has since been placed at that address.",
-  realWorld:"Returning a reference or pointer to a local variable, storing a raw pointer/iterator into a container that later reallocates, and using an object after moving it into another owner are all real, extremely common sources of production dangling-pointer bugs -- which is why tools like AddressSanitizer exist specifically to catch this class of error deterministically rather than relying on it happening to crash in testing.",
+  realWorld:"Returning a reference or pointer to a local variable, storing a raw pointer/iterator into a container that later reallocates, and using an object after moving it into another owner are all real, extremely common sources of production dangling-pointer bugs -- which is why tools like AddressSanitizer exist specifically to catch this class of error deterministically rather than relying on it happening to crash in testing. (For the specific case of returning a local's address, GCC warns by default with -Wreturn-local-addr and Clang with -Wreturn-stack-address; both GCC 13 and Clang 18 then compile the function to return a null pointer, so the example's *p crashes deterministically on those compilers -- a compiler choice, not a language guarantee.)",
   mistake:"Assuming that because a program 'ran fine' after a suspected dangling-pointer access, the access must have been safe -- undefined behavior does not require a crash; it can silently produce wrong results, or crash only much later, far from the actual bug.",
   interviewQ:{q:"What are three distinct ways a pointer can become dangling?", a:"(1) The pointee is a local (automatic-storage) variable whose scope has ended -- e.g. returning the address of a local. (2) The pointee was explicitly `delete`d while a raw pointer to it is still held elsewhere. (3) The pointee lived inside a container (like a vector) that reallocated its internal buffer (e.g. due to push_back exceeding capacity), invalidating pointers/references/iterators into the OLD buffer even though the vector object itself is still perfectly valid."},
   advancedQ:{q:"Why can't the compiler simply detect and reject all dangling pointer usage at compile time?", a:"In general, determining whether a given pointer will still be valid at a given point in the program is equivalent to solving the halting problem for arbitrary programs (undecidable in the general case) -- pointer lifetimes can depend on runtime control flow, function calls across translation units the compiler can't fully see into, and dynamic conditions. Modern tooling instead attacks this with a combination of best-effort static analysis (clang static analyzer, lifetime-tracking annotations), runtime instrumentation (AddressSanitizer tracking every allocation/deallocation), and language-level ownership models (smart pointers, borrow-checker-style tools in other languages) that constrain the PATTERNS of pointer usage enough to make the remaining cases tractable, rather than solving the fully general problem."},
@@ -2108,7 +2108,7 @@ DEEP_CONTENT['wild-pointers'] = {
   def:"A wild pointer is one that has never been initialized to point anywhere meaningful at all -- unlike a dangling pointer (which USED to validly point somewhere), a wild pointer's value is simply whatever uninitialized garbage bits happened to occupy its storage.",
   why:"Distinguishing wild from dangling matters because the fix differs: a dangling pointer bug is about a LIFETIME violation (something legitimate became invalid), while a wild pointer bug is about a missing INITIALIZATION in the first place -- the underlying language rule (reading/using it is UB) is the same, but the root cause and the fix (initialize at declaration vs. fix a lifetime issue) are different.",
   analogy:"A wild pointer is a piece of paper with a random, meaningless string of digits scribbled on it that someone is treating as a valid street address -- it never corresponded to a real place to begin with, unlike a dangling pointer's forwarding address to a house that WAS real but has since been demolished.",
-  code:`void f() {\n    int* wild;             // uninitialized LOCAL -- holds indeterminate garbage\n    std::cout << *wild;    // UB: dereferencing a pointer that was never set\n    *wild = 5;             // UB: writing through it can corrupt arbitrary memory\n\n    int* safe = nullptr;   // NOT wild -- explicitly points to "nothing", checkable\n}\n// Note: a pointer at namespace scope (a global) is never wild -- static storage\n// is zero-initialized, so it starts out as nullptr.`,
+  code:`#include <iostream>\n\nvoid f() {\n    int* wild;             // uninitialized LOCAL -- holds indeterminate garbage\n    std::cout << *wild;    // UB: dereferencing a pointer that was never set\n    *wild = 5;             // UB: writing through it can corrupt arbitrary memory\n\n    int* safe = nullptr;   // NOT wild -- explicitly points to "nothing", checkable\n}\n// Note: a pointer at namespace scope (a global) is never wild -- static storage\n// is zero-initialized, so it starts out as nullptr.`,
   steps:[
     "A pointer declared without an initializer (`int* p;`) at automatic storage duration holds an indeterminate value -- the compiler does not zero-initialize it, so it could coincidentally be any address, including one that happens to be currently mapped/writable, making a wild write especially dangerous (it can corrupt memory that looks completely unrelated to the bug).",
     "This differs from a NULL pointer, which is an explicit, well-defined 'points to nothing' value that can be safely CHECKED (`if (p) ...`) before use -- a wild pointer offers no such safety net, since it looks like any other valid-seeming address.",
@@ -2131,7 +2131,7 @@ DEEP_CONTENT['double-delete'] = {
     "The second `delete` on the SAME pointer value operates on memory the allocator now considers free (and may have already handed out to a completely different, unrelated allocation) -- this can corrupt the allocator's free-list metadata, or corrupt whatever new object now legitimately occupies that memory.",
     "The eventual crash (if any) often happens much LATER, during some unrelated allocation/deallocation that stumbles onto the corrupted metadata -- which is exactly why double-delete bugs are notoriously hard to localize from a crash stack trace alone, and why a memory-debugging tool that tracks the ORIGINAL delete site is essential."
   ],
-  memory:"Most allocators do not defend against double-delete by default (checking would add overhead to every single deallocation) -- some debug allocators/sanitizers specifically add 'poisoning' (overwriting freed memory with a recognizable pattern) and tracking specifically to catch this class of bug during testing, at a cost unacceptable for production.",
+  memory:"Allocators cannot fully defend against double-delete (complete checking would add overhead to every deallocation), though some catch the simplest case cheaply: glibc's tcache aborts with 'free(): double free detected in tcache 2' when the same chunk is freed twice in a row. Debug allocators and sanitizers specifically add 'poisoning' (overwriting freed memory with a recognizable pattern) and tracking specifically to catch this class of bug during testing, at a cost unacceptable for production.",
   realWorld:"Double-delete commonly arises from unclear ownership -- two different parts of a codebase (or a raw pointer passed into a function that takes ownership, combined with the original owner ALSO deleting it) both believe they are responsible for freeing the same object; this is precisely the class of bug smart pointers (whose ownership is explicit in the TYPE) are designed to make structurally impossible.",
   mistake:"Passing a raw owning pointer into a function/API without a crystal-clear, DOCUMENTED convention for who is responsible for freeing it afterward -- 'does this function take ownership or just borrow it' ambiguity is the single most common root cause of both double-delete and use-after-free/leak bugs in raw-pointer-heavy codebases.",
   interviewQ:{q:"Why is double-delete often more dangerous in practice than a simple use-after-free read?", a:"Because delete doesn't just access memory -- it actively WRITES to the allocator's own internal bookkeeping structures (free lists, block headers) to mark the memory as available again. Doing this a second time on already-freed memory can corrupt that bookkeeping (or corrupt an unrelated object that has since been allocated at that address), and the resulting crash or corruption often surfaces much LATER, during a completely unrelated allocation, making the bug\'s true origin far harder to trace than a straightforward read of stale data."},
@@ -2142,7 +2142,7 @@ DEEP_CONTENT['ownership'] = {
   def:"Ownership is the design responsibility for deciding WHO is responsible for a resource's lifetime -- specifically, who is responsible for eventually releasing it. In modern C++, ownership should be expressible directly in a variable's TYPE (unique_ptr, shared_ptr, or a value type), not left as an unstated convention.",
   why:"Nearly every C++ memory-safety bug (leak, double-free, use-after-free) is ultimately a symptom of unclear or inconsistently-enforced ownership -- deciding ownership explicitly and encoding it in types is what converts a whole category of runtime bugs into either compile-time enforcement or, at minimum, a self-documenting, greppable convention.",
   analogy:"Ownership is like knowing whose responsibility it is to water a shared office plant -- if it's genuinely unclear (or 'everyone's job'), the plant either gets watered by nobody (a leak: the resource is never released) or watered by three different people who each think they're the only one (a double-free: the resource is released more than once).",
-  code:`// Unclear ownership (raw pointer says nothing about who frees it):\nvoid processLegacy(Widget* w);   // does this take ownership? unclear from the signature\n\n// Explicit ownership via types:\nvoid processOwning(std::unique_ptr<Widget> w);      // TAKES ownership -- caller gives it up\nvoid processObserving(const Widget& w);              // does NOT take ownership -- just looks\nvoid processSharedOwning(std::shared_ptr<Widget> w); // SHARES ownership with the caller`,
+  code:`#include <memory>\n\nstruct Widget {};\n\n// Unclear ownership (raw pointer says nothing about who frees it):\nvoid processLegacy(Widget* w);   // does this take ownership? unclear from the signature\n\n// Explicit ownership via types:\nvoid processOwning(std::unique_ptr<Widget> w);      // TAKES ownership -- caller gives it up\nvoid processObserving(const Widget& w);              // does NOT take ownership -- just looks\nvoid processSharedOwning(std::shared_ptr<Widget> w); // SHARES ownership with the caller`,
   steps:[
     "Single, exclusive ownership (one clear owner responsible for the resource's entire lifetime) should be the DEFAULT design choice, expressed as `unique_ptr<T>` (or, even better, a plain value type when heap allocation isn't needed at all) -- it's free at runtime and forces an explicit statement of who owns what.",
     "Non-owning access (a function/component that needs to USE an object without being responsible for its lifetime) should be expressed as a plain reference or raw pointer/observer -- this is the correct, safe use of raw pointers in modern C++: as non-owning views, never as an ownership-implying handle.",
@@ -2380,7 +2380,7 @@ DEEP_CONTENT['make-unique-shared'] = {
   def:"`std::make_unique<T>(args...)` and `std::make_shared<T>(args...)` construct a T directly and wrap it in the appropriate smart pointer in one step, and are the preferred way to create both kinds of smart pointers over directly calling `new` and passing the result to the smart pointer's constructor.",
   why:"Beyond convenience, `make_shared` specifically provides a genuine, measurable efficiency win (a single combined heap allocation for both the object AND its control block, instead of two separate allocations), and both functions provide a real exception-safety benefit in certain expression contexts that directly using `new` does not.",
   analogy:"Using `new` plus a separate smart pointer constructor is like ordering two separate packages from two separate warehouses that need to arrive and be assembled together perfectly in sync -- if one shipment (allocation) succeeds and the other fails or is delayed, you're left with an orphaned, leaked package. `make_shared`/`make_unique` are like ordering one single combined package from one warehouse -- there's no window where one part could succeed while the other fails.",
-  code:`// Preferred:\nauto up = std::make_unique<Widget>(arg1, arg2);\nauto sp = std::make_shared<Widget>(arg1, arg2);\n\n// Avoid -- has a real exception-safety gap in some contexts, and shared_ptr\n// case does TWO separate allocations instead of one:\nstd::shared_ptr<Widget> sp2(new Widget(arg1, arg2));\n\n// The classic exception-safety hazard this avoids (before C++17 stopped function arguments from interleaving):\n// f(std::shared_ptr<Widget>(new Widget()), mayThrow());\n// if mayThrow() is evaluated between 'new Widget()' and the shared_ptr constructor call,\n// and it throws, the raw Widget* leaks -- make_shared avoids this by construction.`,
+  code:`#include <memory>\n\nstruct Widget { Widget(int, int) {} };\nint arg1 = 1, arg2 = 2;\n\n// Preferred:\nauto up = std::make_unique<Widget>(arg1, arg2);\nauto sp = std::make_shared<Widget>(arg1, arg2);\n\n// Avoid -- has a real exception-safety gap in some contexts, and shared_ptr\n// case does TWO separate allocations instead of one:\nstd::shared_ptr<Widget> sp2(new Widget(arg1, arg2));\n\n// The classic exception-safety hazard this avoids (before C++17 stopped function arguments from interleaving):\n// f(std::shared_ptr<Widget>(new Widget()), mayThrow());\n// if mayThrow() is evaluated between 'new Widget()' and the shared_ptr constructor call,\n// and it throws, the raw Widget* leaks -- make_shared avoids this by construction.`,
   steps:[
     "`make_shared<T>` allocates ONE single block of memory large enough for both the T object AND its control block (the reference-count/weak-count bookkeeping) together -- versus `shared_ptr<T>(new T())`, which allocates the T object in one heap allocation and then the control block in a SEPARATE second allocation internally, meaning make_shared genuinely does less allocator work and produces better memory locality (object and control block are adjacent).",
     "Both make_unique and make_shared avoid a subtle historical exception-safety gap: calling `new T()` as a sub-expression inside a larger function-call expression could, before C++17 (which still leaves argument ORDER unspecified, but requires each argument to be evaluated completely before the next one starts, so the steps of two arguments can no longer interleave), have its resulting raw pointer 'stranded' (leaked) if a DIFFERENT argument to the same outer call threw an exception after the `new` succeeded but before it was safely wrapped in a smart pointer -- make_unique/make_shared perform the allocation and the wrapping as a single, atomic-with-respect-to-exceptions step.",
@@ -2397,11 +2397,11 @@ DEEP_CONTENT['custom-deleters'] = {
   def:"A custom deleter is a callable (function pointer, lambda, or functor) supplied to a smart pointer to be invoked instead of a plain `delete` when the managed resource needs non-default cleanup -- essential for wrapping resources that AREN'T created with `new` at all (file handles, C-API objects, OS handles).",
   why:"Smart pointers were designed to manage ANY resource with an acquire/release pair, not just heap memory allocated via new/delete -- custom deleters are the mechanism that extends RAII's automatic-cleanup guarantee to C-style APIs (`fopen`/`fclose`, `malloc`/`free`, custom library handle types) that the language's built-in delete knows nothing about.",
   analogy:"A custom deleter is like giving a valet a SPECIFIC set of instructions for how to properly shut down and store an unusual vehicle (say, a boat that needs its own particular securing procedure) rather than assuming the valet's default 'park a normal car' procedure will work correctly for it.",
-  code:`// Wrapping a C API resource (FILE*) with a custom deleter:\nauto filePtr = std::unique_ptr<FILE, decltype(&fclose)>(fopen("data.txt","r"), &fclose);\n\n// A lambda deleter for more complex cleanup:\nauto customDeleted = std::unique_ptr<Widget, std::function<void(Widget*)>>(\n    new Widget(), [](Widget* w){ std::cout << "custom cleanup\\n"; delete w; }\n);\n\n// shared_ptr's deleter is NOT part of its type -- more flexible, slightly more overhead:\nstd::shared_ptr<FILE> sp(fopen("data.txt","r"), &fclose);`,
+  code:`#include <cstdio>\n#include <functional>\n#include <iostream>\n#include <memory>\n\nstruct Widget {\n    Widget() = default;\n    explicit Widget(int) {}\n    void doSomething() {}\n    void use() {}\n};\n\n// Wrapping a C API resource (FILE*) with a custom deleter\n// (C++20 makes taking the address of most standard library functions such as\n//  fclose unspecified; a stateless lambda or functor deleter is the portable\n//  choice and, as a bonus, adds no size to the unique_ptr):\nauto filePtr = std::unique_ptr<FILE, decltype(&fclose)>(fopen("data.txt","r"), &fclose);\n\n// A lambda deleter for more complex cleanup:\nauto customDeleted = std::unique_ptr<Widget, std::function<void(Widget*)>>(\n    new Widget(), [](Widget* w){ std::cout << "custom cleanup\\n"; delete w; }\n);\n\n// shared_ptr's deleter is NOT part of its type -- more flexible, slightly more overhead.\n// Careful: unlike unique_ptr, shared_ptr calls its deleter even for a null pointer,\n// and fclose(nullptr) is undefined -- so the deleter must check:\nstd::shared_ptr<FILE> sp(fopen("data.txt","r"), [](FILE* f){ if (f) fclose(f); });`,
   steps:[
     "For `unique_ptr<T, Deleter>`, the deleter type is part of the smart pointer's own TYPE (a second template parameter) -- if the deleter is an empty functor or a capture-less lambda type, the compiler can typically store it at ZERO extra size cost via empty base optimization (a function-pointer deleter type, by contrast, adds a pointer's worth of storage), keeping unique_ptr exactly as lightweight as a raw pointer.",
     "For `shared_ptr<T>`, the deleter is instead type-erased and stored inside the shared control block at CONSTRUCTION time (not part of shared_ptr's own template signature) -- meaning two shared_ptrs to the same type but with completely different deleters are still the exact same TYPE, and can be stored together in one container, something unique_ptr's type-carrying deleter cannot do.",
-    "Whichever smart pointer type you use, the deleter is invoked exactly once, when the reference count reaches zero (shared_ptr) or when the unique_ptr is destroyed/reset -- taking over the ENTIRE cleanup responsibility, so a resource with a non-default acquire/release pair gets the exact same automatic, exception-safe cleanup guarantee as ordinary heap memory does with plain delete."
+    "Whichever smart pointer type you use, the deleter is invoked exactly once, when the reference count reaches zero (shared_ptr -- even if the stored pointer is null) or when the unique_ptr is destroyed/reset (unique_ptr skips the call for a null pointer) -- taking over the ENTIRE cleanup responsibility, so a resource with a non-default acquire/release pair gets the exact same automatic, exception-safe cleanup guarantee as ordinary heap memory does with plain delete."
   ],
   memory:"Choosing between a function pointer deleter (`&fclose`) and a lambda/functor deleter matters for unique_ptr specifically: a plain function pointer deleter still occupies a full pointer's worth of extra storage inside the unique_ptr (function pointers aren't empty types), while a STATELESS lambda (one capturing nothing) is typically empty and can benefit from empty base optimization, keeping the unique_ptr's total size equal to a raw pointer's.",
   realWorld:"Wrapping any C-style API resource (database connection handles, graphics API objects, OS handles like sockets or mutexes from a non-standard library) in a `unique_ptr` with a custom deleter is one of the most common, genuinely practical uses of this feature in real production C++ code that has to interoperate with non-C++-native resource-management conventions.",
@@ -2414,7 +2414,7 @@ DEEP_CONTENT['enable-shared-from-this'] = {
   def:"`std::enable_shared_from_this<T>` is a base class a type inherits from to safely obtain a `shared_ptr<T>` to itself (`this->shared_from_this()`) from within a member function, sharing the SAME control block/reference count as whatever shared_ptr(s) already own the object -- rather than accidentally creating a second, disconnected one.",
   why:"A member function only has access to a raw `this` pointer -- naively wrapping that in a brand new `shared_ptr<T>(this)` creates a completely independent control block unaware of any EXISTING shared_ptr(s) already managing the object, which leads to two separate reference counts both eventually reaching zero and BOTH trying to delete the same object (a double-free) -- enable_shared_from_this exists specifically to prevent this.",
   analogy:"Without enable_shared_from_this, asking 'give me a claim ticket for myself' from inside the object is like a person trying to print their own duplicate library card that isn't linked to the library's actual records -- it might look valid, but the library's real system (the true control block) doesn't know about it, and both the real and the fake card think they're independently responsible for that book.",
-  code:`class Connection : public std::enable_shared_from_this<Connection> {\npublic:\n    void registerCallback(){\n        auto self = shared_from_this();     // shares the SAME control block\n        asyncApi.onEvent([self](){ self->handleEvent(); });  // keeps Connection alive\n    }\n    void handleEvent(){ /* ... */ }\n};\n\nvoid start() {\n    auto conn = std::make_shared<Connection>();  // must ALREADY be owned by a shared_ptr\n    conn->registerCallback();                     // safe to call shared_from_this() here\n}`,
+  code:`#include <functional>\n#include <memory>\n\nstruct AsyncApi { void onEvent(std::function<void()> cb) { /* stores cb; calls it later */ } };\ninline AsyncApi asyncApi;\n\nclass Connection : public std::enable_shared_from_this<Connection> {\npublic:\n    void registerCallback(){\n        auto self = shared_from_this();     // shares the SAME control block\n        asyncApi.onEvent([self](){ self->handleEvent(); });  // keeps Connection alive\n    }\n    void handleEvent(){ /* ... */ }\n};\n\nvoid start() {\n    auto conn = std::make_shared<Connection>();  // must ALREADY be owned by a shared_ptr\n    conn->registerCallback();                     // safe to call shared_from_this() here\n}`,
   steps:[
     "The FIRST shared_ptr ever constructed for an object of a type deriving from enable_shared_from_this quietly initializes a hidden `weak_ptr<T>` member (inherited from the base class) to point back at itself, sharing that first shared_ptr's control block.",
     "Calling `shared_from_this()` later simply LOCKS that stored weak_ptr, producing a new shared_ptr that shares the SAME control block (and thus the same reference count) as every other shared_ptr to that object -- correctly incrementing the existing count rather than starting a disconnected new one.",
@@ -2431,7 +2431,7 @@ DEEP_CONTENT['ref-counting-cycles'] = {
   def:"A reference-counting cycle occurs when two or more objects hold `shared_ptr`s to each other (directly or through a longer chain), so their reference counts can never reach zero purely through mutual references -- even after every EXTERNAL reference to all of them is gone, none is ever destroyed, permanently leaking all of them.",
   why:"This is the single most common way a codebase using shared_ptr 'everywhere' can still leak memory -- shared_ptr's automatic cleanup relies entirely on reference counting, which has a well-known, fundamental blind spot for cycles that no amount of 'just use smart pointers' discipline alone fixes; breaking cycles requires a DESIGN decision (which reference in the cycle should be weak), not just a coding-style rule.",
   analogy:"A reference-counting cycle is like two people each insisting they can't leave a room until the OTHER person leaves first -- from the outside, everyone else has long since left the building (no external references remain), but the two of them will wait for each other forever, since each one's departure condition depends entirely on the other's.",
-  code:`struct B; // forward declaration\nstruct A { std::shared_ptr<B> bPtr; ~A(){ std::cout << "~A\\n"; } };\nstruct B { std::shared_ptr<A> aPtr; ~B(){ std::cout << "~B\\n"; } };\n\nint main() {\n    {\n        auto a = std::make_shared<A>();\n        auto b = std::make_shared<B>();\n        a->bPtr = b;   // A now holds a shared_ptr to B\n        b->aPtr = a;   // B now holds a shared_ptr to A -- CYCLE formed\n    }   // 'a' and 'b' (the local shared_ptrs) go out of scope here...\n    // ...but NEITHER destructor prints! A and B keep each other's count above zero forever.\n}`,
+  code:`#include <iostream>\n#include <memory>\n\nstruct B; // forward declaration\nstruct A { std::shared_ptr<B> bPtr; ~A(){ std::cout << "~A\\n"; } };\nstruct B { std::shared_ptr<A> aPtr; ~B(){ std::cout << "~B\\n"; } };\n\nint main() {\n    {\n        auto a = std::make_shared<A>();\n        auto b = std::make_shared<B>();\n        a->bPtr = b;   // A now holds a shared_ptr to B\n        b->aPtr = a;   // B now holds a shared_ptr to A -- CYCLE formed\n    }   // 'a' and 'b' (the local shared_ptrs) go out of scope here...\n    // ...but NEITHER destructor prints! A and B keep each other's count above zero forever.\n}`,
   steps:[
     "Each object's reference count only reaches zero when EVERY shared_ptr referencing it is gone -- in a cycle, each object's count includes (at least) one shared_ptr held by the OTHER object in the cycle, which itself will never be destroyed as long as ITS count (which includes a reference from the first object) stays above zero.",
     "This mutual dependency means neither object's count can EVER reach zero through the cycle alone -- external references going away (as in the example above) removes the only references that COULD have started the chain of destruction, leaving the cycle self-sustaining and permanently leaked.",
@@ -7434,7 +7434,7 @@ DEEP_CONTENT['smart-pointers-overview'] = {
  traps: [
   "Constructing two independent shared_ptr objects from the same raw pointer (e.g. 'shared_ptr<T> a(rawPtr); shared_ptr<T> b(rawPtr);') -- each gets its OWN control block with its own refcount starting at 1, so when both eventually reach zero the object is destroyed (and deleted) twice.",
   "Calling shared_from_this() on an object that is not yet owned by any shared_ptr (inside its own constructor, or on a stack object) -- it throws std::bad_weak_ptr since C++17 (undefined behavior before) -- or inheriting enable_shared_from_this privately, which silently disables the mechanism so the same call fails at runtime.",
-  "Using 'shared_ptr<T>(new T(...))' out of habit instead of make_shared<T>(...) -- two separate allocations instead of one (worse cache locality) and, for the two-argument constructor form specifically, a narrow exception-safety gap where a thrown exception between the raw allocation and shared_ptr taking ownership can leak.",
+  "Using 'shared_ptr<T>(new T(...))' out of habit instead of make_shared<T>(...) -- two separate allocations instead of one (worse cache locality) and, before C++17, a narrow exception-safety gap in calls like f(shared_ptr<T>(new T), g()): if g() ran between the new and the shared_ptr constructor and threw, the raw object leaked (C++17 no longer lets the evaluation of different arguments interleave).",
   "Storing the result of .get() in a variable that outlives the owning smart pointer -- the raw pointer becomes dangling the moment the last owning smart pointer is destroyed, and nothing about the raw pointer's type warns you."
  ]
 };
@@ -9724,7 +9724,7 @@ QUESTION_BANK.push(
  followups:['Why specifically does calling shared_from_this() in the constructor throw rather than just returning something wrong silently?','What is a real use case where a class needs to hand out shared ownership of itself?'],
  related:['enable-shared-from-this','shared-ptr']},
 {id:'q117',cat:'smartptr',diff:'Medium',q:'Why does `std::unique_ptr` support custom deleters as a TEMPLATE parameter while `std::shared_ptr` supports them at CONSTRUCTION time (not as part of the type)?',
- simple:'unique_ptr\'s deleter is part of its type (`unique_ptr<T, Deleter>`) so the compiler can often store it with zero extra space (if the deleter is stateless, e.g. a plain function pointer to a fixed function) and dispatch to it directly, matching unique_ptr\'s zero-overhead design goal. shared_ptr type-erases the deleter into its control block instead, so two shared_ptr<T> objects with completely different deleters are still the SAME TYPE and can be stored in the same container/passed through the same interface -- flexibility unique_ptr deliberately trades away for its lighter-weight guarantee.',
+ simple:'unique_ptr\'s deleter is part of its type (`unique_ptr<T, Deleter>`) so the compiler can often store it with zero extra space (if the deleter is stateless, e.g. an empty functor or a capture-less lambda type -- a function-pointer deleter type is NOT stateless and adds a pointer\'s worth of storage) and dispatch to it directly, matching unique_ptr\'s zero-overhead design goal. shared_ptr type-erases the deleter into its control block instead, so two shared_ptr<T> objects with completely different deleters are still the SAME TYPE and can be stored in the same container/passed through the same interface -- flexibility unique_ptr deliberately trades away for its lighter-weight guarantee.',
  deep:'This design difference reflects each type\'s different priority: unique_ptr optimizes for being exactly as cheap as a raw pointer when possible (a stateless deleter costs zero extra bytes via empty base optimization), which requires the deleter to be a compile-time, type-level property; shared_ptr already pays for a heap-allocated control block regardless, so type-erasing the deleter into that control block costs relatively little extra and buys real flexibility (e.g. a `std::vector<std::shared_ptr<Base>>` where different elements were created with different custom deleters, which would be impossible with unique_ptr since differing deleter types make differing unique_ptr TYPES).',
  wrong:'"Both smart pointers handle custom deleters the same way, just with different syntax" -- the underlying mechanism (compile-time template parameter vs. runtime type-erased storage) is fundamentally different, with real consequences for storability in homogeneous containers and for the tiny/nonexistent extra memory cost in unique_ptr\'s case.',
  trap:'Trying to store `unique_ptr<T, DeleterA>` and `unique_ptr<T, DeleterB>` in the same container -- they are different types and cannot coexist in a single `std::vector<unique_ptr<T,?>>` without type erasure (e.g. via std::function as the deleter, which reintroduces the overhead unique_ptr was trying to avoid).',
@@ -26664,6 +26664,2143 @@ const GUIDED_LESSONS = {
    [
     "Which side of a parent/child cycle should be weak_ptr?",
     "Usually the back-pointer from child to parent."
+   ]
+  ]
+ },
+ "dangling-pointers": {
+  "orientation": {
+   "what": "Dangling pointers: pointers (and references, iterators, views) that still hold an address after the object there has died.",
+   "why": "Dangling pointers cause the classic 'works for months, then crashes' bugs, because what happens depends on whatever reused the memory.",
+   "outcomes": [
+    "Name the common ways a pointer starts dangling",
+    "Spot container invalidation and view dangling",
+    "Explain why dangling bugs are nondeterministic",
+    "Catch them with AddressSanitizer"
+   ],
+   "firstPass": "~10–15 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: the address outlives the object",
+    "intro": "int* p = &v[0]; v.push_back(4); *p;:",
+    "stages": [
+     {
+      "name": "p = &v[0]",
+      "io": "valid",
+      "note": "p points into v's current buffer."
+     },
+     {
+      "name": "v.push_back(4)",
+      "io": "reallocation",
+      "note": "v moves its elements to a bigger buffer and frees the old one."
+     },
+     {
+      "name": "*p",
+      "io": "dangling",
+      "note": "p still holds the old address; reading it is undefined behavior.",
+      "err": "AddressSanitizer: heap-use-after-free"
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "A pointer dangles when the object it points to has ended its lifetime, but the pointer still holds its address.",
+     "Common causes: returning a local's address, delete while others still point, container reallocation, and views (string_view, span) outliving their data.",
+     "Using it is undefined behavior; the effect depends on what now occupies the memory, so it may seem to work."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A forwarding address to a demolished house",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <vector>\nstd::vector<int> v{1, 2, 3};   // capacity 3 with libstdc++\nint* p = &v[0];\nv.push_back(4);\nint x = *p;",
+    "q": "What is x?",
+    "options": [
+     [
+      "A",
+      "1"
+     ],
+     [
+      "B",
+      "4"
+     ],
+     [
+      "C",
+      "Undefined behavior: p dangles after the reallocation"
+     ],
+     [
+      "D",
+      "0"
+     ]
+    ],
+    "reveal": [
+     "C — undefined behavior.",
+     "push_back needs more capacity, so the vector allocates a new buffer, moves the elements, and frees the old one.",
+     "p still points into the freed buffer. It may still read 1 by luck — that is exactly what makes this bug hard to find.",
+     "Re-take the pointer after the push, reserve() enough capacity first, or store an index."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "Dangling through a returned local and through delete:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: how a pointer starts dangling",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Name three ways a pointer can start dangling.",
+    "Returning the address of a local; deleting the object while other pointers remain; a container reallocating or erasing the element."
+   ],
+   [
+    "Does a dangling pointer look wrong?",
+    "No: its value is an ordinary address; only the object behind it is gone."
+   ],
+   [
+    "Why can a dangling read 'work'?",
+    "The memory may not have been reused yet, so the old bytes are still there — until an unrelated change alters that."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "What the memory holds now",
+     "hint": "reused by any later allocation",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: the usual sources",
+     "hint": "locals, invalidated iterators, moved-from owners",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "wild-pointers",
+    "iterator-invalidation",
+    "string-view",
+    "bug-uaf"
+   ]
+  },
+  "interview": {
+   "think": "Ask what ended the object's lifetime and who still holds its address.",
+   "advancedTitle": "Advanced follow-up: why compilers can't catch them all",
+   "followUp": "q054"
+  },
+  "recall": [
+   [
+    "What does AddressSanitizer report for a dangling read of freed heap memory?",
+    "heap-use-after-free, with the stacks of the allocation, the free and the bad access."
+   ],
+   [
+    "Is a dangling reference any different from a dangling pointer?",
+    "No: it is the same bug, and it can't even be checked for null."
+   ],
+   [
+    "What do GCC and Clang do when a function returns a local's address?",
+    "They warn by default and, in practice, compile it to return a null pointer."
+   ]
+  ]
+ },
+ "wild-pointers": {
+  "orientation": {
+   "what": "Wild pointers: pointers that were never initialized, holding whatever bits happened to be in their storage.",
+   "why": "A wild pointer can point anywhere, including valid memory of another subsystem. The fix is simple and mechanical: always initialize pointers.",
+   "outcomes": [
+    "Tell a wild pointer from a dangling pointer",
+    "Know which pointers start as nullptr automatically",
+    "Always initialize pointers and pointer members",
+    "Know the tools that flag uninitialized use"
+   ],
+   "firstPass": "~10 min",
+   "laterPass": "~10–15 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: never set",
+    "intro": "int* p; *p = 5;:",
+    "stages": [
+     {
+      "name": "int* p;",
+      "io": "indeterminate",
+      "note": "A local pointer without an initializer holds garbage."
+     },
+     {
+      "name": "*p = 5",
+      "io": "write anywhere",
+      "note": "The garbage might be a valid address belonging to something else."
+     },
+     {
+      "name": "int* p = nullptr;",
+      "io": "checkable",
+      "note": "An explicit null can be tested, and faults loudly if dereferenced."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "A wild pointer was never initialized; a dangling pointer was once valid.",
+     "Local (automatic) pointers start indeterminate; globals and statics are zero-initialized to nullptr.",
+     "Initialize every pointer (and every pointer member, in every constructor) to a real address or nullptr."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A made-up street address",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "int* g;          // (1) namespace scope\n\nvoid f() {\n    int* p;      // (2) local, no initializer\n    int* q{};    // (3) local, value-initialized\n}",
+    "q": "Which pointers are wild (indeterminate)?",
+    "options": [
+     [
+      "A",
+      "All three"
+     ],
+     [
+      "B",
+      "(1) and (2)"
+     ],
+     [
+      "C",
+      "Only (2)"
+     ],
+     [
+      "D",
+      "None"
+     ]
+    ],
+    "reveal": [
+     "C — only (2).",
+     "g has static storage, so it is zero-initialized to nullptr before anything runs.",
+     "q{} value-initializes to nullptr.",
+     "Only the local p holds garbage; GCC and Clang flag its use with -Wuninitialized (in -Wall)."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "A wild pointer next to a null-initialized one:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: why wild writes are so dangerous",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What is the difference between wild and dangling?",
+    "Wild was never initialized; dangling was valid once but its object's lifetime ended."
+   ],
+   [
+    "Why prefer nullptr over leaving a pointer uninitialized?",
+    "nullptr can be checked, and dereferencing it usually crashes immediately instead of corrupting memory."
+   ],
+   [
+    "Where do wild pointer members come from?",
+    "A constructor that forgets to initialize the member; a default member initializer (T* p = nullptr;) prevents it."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Why wild writes are worse",
+     "hint": "anywhere in the address space",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In practice: where they still appear",
+     "hint": "C-style and translated code",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "dangling-pointers",
+    "nullptr-kw",
+    "variables"
+   ]
+  },
+  "interview": {
+   "think": "Ask whether the pointer was ever assigned a valid address.",
+   "advancedTitle": "Advanced follow-up: why tools treat it as nearly blocking",
+   "followUp": "q012"
+  },
+  "recall": [
+   [
+    "Which sanitizer finds reads of uninitialized memory?",
+    "MemorySanitizer (Clang, -fsanitize=memory); Valgrind's memcheck also reports them."
+   ],
+   [
+    "Is dereferencing nullptr safe?",
+    "No, it is still undefined behavior — but it usually faults immediately, which makes the bug easy to find."
+   ],
+   [
+    "What does int* p = {}; initialize p to?",
+    "nullptr."
+   ]
+  ]
+ },
+ "double-delete": {
+  "orientation": {
+   "what": "Double delete: freeing the same object twice — how it happens (usually unclear ownership), why it corrupts the allocator, and how to catch it.",
+   "why": "A double delete damages the allocator's own bookkeeping, so the crash often appears far away from the real bug.",
+   "outcomes": [
+    "Explain what the second delete does",
+    "Trace double deletes to unclear ownership",
+    "Know what glibc and AddressSanitizer report",
+    "Prevent it with owning types"
+   ],
+   "firstPass": "~10 min",
+   "laterPass": "~15 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: the allocator's records get corrupted",
+    "intro": "delete p; ... delete p;:",
+    "stages": [
+     {
+      "name": "First delete",
+      "io": "normal",
+      "note": "Destructor runs; the block goes onto a free list."
+     },
+     {
+      "name": "Reuse",
+      "io": "maybe",
+      "note": "A later allocation may already own that block."
+     },
+     {
+      "name": "Second delete",
+      "io": "corruption",
+      "note": "It destroys and frees memory the allocator considers free — or someone else's object.",
+      "err": "free(): double free detected in tcache 2 (glibc)"
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Deleting the same pointer twice is undefined behavior; it can corrupt the allocator or an unrelated object.",
+     "Its usual root cause is unclear ownership: two pieces of code both think they must free it.",
+     "Owning types (unique_ptr, containers) make it impossible; AddressSanitizer reports it precisely."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Returning the same library book twice",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "int* p = new int(5);\n\n// Version A\ndelete p;\ndelete p;\n\n// Version B\ndelete p;\np = nullptr;\ndelete p;",
+    "q": "Which version is undefined behavior?",
+    "options": [
+     [
+      "A",
+      "Only A"
+     ],
+     [
+      "B",
+      "Only B"
+     ],
+     [
+      "C",
+      "Both"
+     ],
+     [
+      "D",
+      "Neither"
+     ]
+    ],
+    "reveal": [
+     "A — only version A.",
+     "Deleting nullptr is defined to do nothing, so B's second delete is harmless.",
+     "A's second delete frees memory the allocator already reclaimed.",
+     "Nulling a pointer after delete only protects that one variable — copies of the pointer elsewhere still dangle."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "A direct double delete, and one caused by unclear ownership:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: what the second delete damages",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Why can a double delete crash much later?",
+    "It corrupts allocator metadata; the damage surfaces during some unrelated allocation."
+   ],
+   [
+    "What is the usual design-level cause?",
+    "Two owners of one raw pointer, often from an undocumented 'does this function take ownership?' convention."
+   ],
+   [
+    "What does AddressSanitizer report?",
+    "attempting double-free, with the stacks of the allocation and both frees."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "How allocators react",
+     "hint": "glibc's tcache check and debug allocators",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: unclear ownership",
+     "hint": "borrowed versus owning pointers",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "ownership",
+    "unique-ptr",
+    "bug-double-free",
+    "asan"
+   ]
+  },
+  "interview": {
+   "think": "Ask who else believes they own this pointer.",
+   "advancedTitle": "Advanced follow-up: catching it reliably"
+  },
+  "recall": [
+   [
+    "Does setting p = nullptr after delete fix double deletes?",
+    "Only through that variable; other copies of the pointer are unaffected."
+   ],
+   [
+    "Which type makes double delete impossible for single ownership?",
+    "std::unique_ptr: it can't be copied."
+   ],
+   [
+    "Is delete on a new[] pointer a form of this bug?",
+    "It is a related mismatch bug; delete[] must be used for new[]."
+   ]
+  ]
+ },
+ "ownership": {
+  "orientation": {
+   "what": "Ownership: deciding who is responsible for releasing a resource, and stating it in types — values, unique_ptr, shared_ptr, and non-owning references.",
+   "why": "Leaks, double frees and use-after-free are almost always ownership bugs. Types that encode ownership make the contract visible and checked.",
+   "outcomes": [
+    "Read ownership from a function signature",
+    "Pick single, shared or no ownership for a design",
+    "Use raw pointers and references only for observing",
+    "Explain why shared_ptr isn't a safe default"
+   ],
+   "firstPass": "~10–15 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: the parameter type is the contract",
+    "intro": "What each signature tells the caller:",
+    "stages": [
+     {
+      "name": "f(const Widget&)",
+      "io": "observes",
+      "note": "Just looks; the caller still owns it."
+     },
+     {
+      "name": "f(std::unique_ptr<Widget>)",
+      "io": "takes ownership",
+      "note": "The caller hands the Widget over and loses it."
+     },
+     {
+      "name": "f(std::shared_ptr<Widget>)",
+      "io": "shares ownership",
+      "note": "f may keep it alive after returning."
+     },
+     {
+      "name": "f(Widget*)",
+      "io": "unclear",
+      "note": "Could mean anything — document it, or prefer one of the above."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Every resource needs a clear owner responsible for releasing it.",
+     "Default to single ownership: a value, or unique_ptr when heap allocation is needed.",
+     "Use references and raw pointers only to observe; use shared_ptr only when no single owner exists."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Who waters the office plant",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "void look(const Widget& w);\nvoid take(std::unique_ptr<Widget> w);\nvoid share(std::shared_ptr<Widget> w);\n\nauto u = std::make_unique<Widget>();\nauto s = std::make_shared<Widget>();\nlook(*u);             // (1)\ntake(std::move(u));   // (2)\nshare(s);             // (3)",
+    "q": "After which call does the caller no longer own its Widget?",
+    "options": [
+     [
+      "A",
+      "(1)"
+     ],
+     [
+      "B",
+      "(2)"
+     ],
+     [
+      "C",
+      "(3)"
+     ],
+     [
+      "D",
+      "(2) and (3)"
+     ]
+    ],
+    "reveal": [
+     "B — only after (2).",
+     "(1) only observes the object.",
+     "(2) moves the unique_ptr into take, which now owns and will destroy the Widget; u is null.",
+     "(3) adds a co-owner: s still owns the Widget, and share may keep it alive longer."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "Signatures that state their ownership:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: choosing an ownership model",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What should a function that only reads an object take?",
+    "const T& (or a raw pointer if 'no object' must be representable)."
+   ],
+   [
+    "What is the default ownership choice?",
+    "Single ownership: a value member, or unique_ptr when it must be on the heap."
+   ],
+   [
+    "When is shared_ptr right?",
+    "When several independent parts must keep the object alive and no single one is guaranteed to outlive the others."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Types as documentation",
+     "hint": "what a reviewer reads from a signature",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: modernizing raw-pointer APIs",
+     "hint": "auditing who frees what",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "raii",
+    "unique-ptr",
+    "shared-ptr"
+   ]
+  },
+  "interview": {
+   "think": "Ask which component's lifetime naturally brackets every use.",
+   "advancedTitle": "Advanced follow-up: single or shared ownership in a new design",
+   "followUp": "q021"
+  },
+  "recall": [
+   [
+    "Why is passing shared_ptr by value to a function that only reads it wasteful?",
+    "It does an atomic increment and decrement, and wrongly suggests the function might keep it."
+   ],
+   [
+    "How do you pass a unique_ptr to a function that should take ownership?",
+    "By value, with std::move at the call site."
+   ],
+   [
+    "Is a raw pointer ever acceptable in modern C++?",
+    "Yes, as a non-owning observer that may be null."
+   ]
+  ]
+ },
+ "raii": {
+  "orientation": {
+   "what": "RAII: tying a resource to an object — acquire in the constructor, release in the destructor — so cleanup happens on every exit path, including exceptions.",
+   "why": "RAII is the core of resource safety in C++: locks, files, memory and sockets are all released automatically without try/finally.",
+   "outcomes": [
+    "Write a simple RAII wrapper",
+    "Explain why cleanup runs during exceptions",
+    "Predict cleanup order for several resources",
+    "Avoid double-release by handling copies"
+   ],
+   "firstPass": "~10–15 min",
+   "laterPass": "~20–25 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: the resource lives exactly as long as the object",
+    "intro": "FileHandle f(\"data.txt\"); riskyOperation();:",
+    "stages": [
+     {
+      "name": "Constructor",
+      "io": "acquire",
+      "note": "Open the file; throw if it fails, so no half-built object exists."
+     },
+     {
+      "name": "Use",
+      "io": "any path",
+      "note": "Normal return, early return, break or exception."
+     },
+     {
+      "name": "Scope exit",
+      "io": "destructor",
+      "note": "Stack unwinding runs ~FileHandle, closing the file on every path."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Acquire the resource in the constructor and release it in the destructor.",
+     "Destructors of local objects run on every scope exit, including stack unwinding after an exception.",
+     "Several RAII objects clean up in reverse order of construction; forbid or define copying so a resource isn't released twice."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A key card that turns the lights off when you leave",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <iostream>\nstruct Guard {\n    const char* n;\n    ~Guard() { std::cout << n; }\n};\n\nvoid f() {\n    Guard a{\"A\"};\n    Guard b{\"B\"};\n    throw 1;\n}\n\nint main() {\n    try { f(); } catch (int) { std::cout << \"C\"; }\n}",
+    "q": "What does this print?",
+    "options": [
+     [
+      "A",
+      "ABC"
+     ],
+     [
+      "B",
+      "BAC"
+     ],
+     [
+      "C",
+      "C"
+     ],
+     [
+      "D",
+      "CBA"
+     ]
+    ],
+    "reveal": [
+     "B — BAC.",
+     "The throw unwinds f's frame, destroying b and then a — reverse order of construction.",
+     "Only after unwinding does control reach the catch handler, which prints C.",
+     "That guaranteed unwinding is the whole of RAII's exception safety."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "An RAII file handle:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: cleanup during an exception",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What does RAII stand for, and what does it mean?",
+    "Resource Acquisition Is Initialization: a resource's lifetime is tied to an object's, acquired in the constructor and released in the destructor."
+   ],
+   [
+    "Why is no finally block needed in C++?",
+    "Destructors of local objects run during stack unwinding, so cleanup code lives in the destructor."
+   ],
+   [
+    "What must an RAII class do about copying?",
+    "Delete copying, or define it so two objects never release the same resource."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "A pattern, not a feature",
+     "hint": "what RAII needs from storage duration",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: RAII everywhere",
+     "hint": "lock_guard, fstream, unique_ptr, vector",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "smart-pointers-overview",
+    "lock-guard",
+    "raii-exception-safety",
+    "pat-raii-pattern"
+   ]
+  },
+  "interview": {
+   "think": "Walk through every way the function can exit.",
+   "advancedTitle": "Advanced follow-up: a destructor that throws during unwinding",
+   "followUp": "q020"
+  },
+  "recall": [
+   [
+    "If a constructor throws halfway, what gets cleaned up?",
+    "Members and bases already constructed are destroyed; the object's own destructor does not run."
+   ],
+   [
+    "Does RAII help for an object created with new?",
+    "Only if something owns it — which is exactly what smart pointers are for."
+   ],
+   [
+    "Name three RAII types in the standard library.",
+    "std::lock_guard (mutex), std::ifstream (file), std::unique_ptr (heap memory)."
+   ]
+  ]
+ },
+ "smart-pointers-overview": {
+  "orientation": {
+   "what": "unique_ptr, shared_ptr and weak_ptr: three RAII wrappers that encode exclusive, shared and observing ownership — and what each costs.",
+   "why": "Choosing the right smart pointer is one of the most common C++ design decisions and interview questions.",
+   "outcomes": [
+    "Pick the right smart pointer for a relationship",
+    "Explain what each one costs in size and time",
+    "Break a cycle with weak_ptr",
+    "Avoid the get() and double-control-block traps"
+   ],
+   "firstPass": "~15–20 min",
+   "laterPass": "~25–30 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: three kinds of key",
+    "intro": "The same Node owned three different ways:",
+    "stages": [
+     {
+      "name": "unique_ptr",
+      "io": "one owner",
+      "note": "Move-only; the size of a raw pointer; deletes on destruction."
+     },
+     {
+      "name": "shared_ptr",
+      "io": "counted owners",
+      "note": "Copies bump an atomic count; the last owner deletes. Two pointers in size."
+     },
+     {
+      "name": "weak_ptr",
+      "io": "observer",
+      "note": "Doesn't keep the object alive; lock() gives a shared_ptr if it still exists."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "unique_ptr is exclusive ownership at zero cost — the default choice.",
+     "shared_ptr is shared ownership through an atomic reference count and a control block.",
+     "weak_ptr observes a shared_ptr-managed object without owning it — for back-references, caches and breaking cycles."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A room key, a timeshare, and a claim ticket",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <cstdio>\n#include <memory>\n\nstd::printf(\"%zu %zu\",\n    sizeof(std::unique_ptr<int>),\n    sizeof(std::shared_ptr<int>));",
+    "q": "What does this print on x86-64 (GCC or Clang with libstdc++)?",
+    "options": [
+     [
+      "A",
+      "8 8"
+     ],
+     [
+      "B",
+      "8 16"
+     ],
+     [
+      "C",
+      "16 16"
+     ],
+     [
+      "D",
+      "16 24"
+     ]
+    ],
+    "reveal": [
+     "B — 8 16.",
+     "unique_ptr with the default deleter is just the pointer — the empty deleter takes no space.",
+     "shared_ptr holds two pointers: one to the object, one to the control block with the counts.",
+     "Adding a function-pointer deleter to unique_ptr makes it 16 bytes."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Full example",
+    "title": "The example",
+    "intro": "All three smart pointers, a cycle broken by weak_ptr, and the get() trap:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: what each operation does",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Which smart pointer should be your default?",
+    "unique_ptr: exclusive ownership at no extra cost."
+   ],
+   [
+    "Why is copying a shared_ptr slower than moving a unique_ptr?",
+    "It atomically increments a shared count, which can bounce a cache line between cores."
+   ],
+   [
+    "What does weak_ptr::lock() return if the object is gone?",
+    "An empty shared_ptr."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Sizes and atomic costs",
+     "hint": "one word, two words, and cache-line traffic",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: pimpl and caches",
+     "hint": "unique_ptr<Impl>, weak_ptr lookups",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "unique-ptr",
+    "shared-ptr",
+    "weak-ptr"
+   ]
+  },
+  "interview": {
+   "think": "Start from the ownership relationship, then pick the type.",
+   "advancedTitle": "Advanced follow-up: cycles and atomic overhead"
+  },
+  "recall": [
+   [
+    "What happens if you create two shared_ptrs from the same raw pointer?",
+    "Two control blocks, two counts, and the object is deleted twice."
+   ],
+   [
+    "Why is storing the result of get() dangerous?",
+    "It dangles as soon as the last owning smart pointer is destroyed."
+   ],
+   [
+    "Is shared_ptr's pointee thread-safe?",
+    "No: only the reference count is; the object still needs its own synchronization."
+   ]
+  ]
+ },
+ "unique-ptr": {
+  "orientation": {
+   "what": "std::unique_ptr: exclusive, move-only ownership of a heap object with zero overhead.",
+   "why": "unique_ptr is the default way to own heap objects in modern C++; its move-only type makes ownership transfers explicit and checked.",
+   "outcomes": [
+    "Create unique_ptrs with make_unique",
+    "Transfer ownership with std::move",
+    "Use unique_ptr<T[]> for arrays",
+    "Know how deleters affect its size"
+   ],
+   "firstPass": "~10–15 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: one key, handed along",
+    "intro": "The life of a unique_ptr:",
+    "stages": [
+     {
+      "name": "make_unique<Widget>(42)",
+      "io": "owner created",
+      "note": "One allocation, immediately owned."
+     },
+     {
+      "name": "auto w2 = std::move(w1)",
+      "io": "handover",
+      "note": "The pointer is copied into w2; w1 becomes null."
+     },
+     {
+      "name": "consume(std::move(w2))",
+      "io": "into a function",
+      "note": "The parameter now owns it."
+     },
+     {
+      "name": "End of consume",
+      "io": "delete",
+      "note": "The Widget is deleted exactly once."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "unique_ptr owns one object exclusively and deletes it when destroyed.",
+     "It can be moved but not copied, so there is never a second owner to double-delete.",
+     "With the default deleter it is the size of a raw pointer; use unique_ptr<T[]> for arrays."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A single physical key",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <memory>\n\nstd::unique_ptr<int>   a(new int[5]);   // (1)\nstd::unique_ptr<int[]> b(new int[5]);   // (2)",
+    "q": "Which declaration is correct?",
+    "options": [
+     [
+      "A",
+      "Both"
+     ],
+     [
+      "B",
+      "Only (1)"
+     ],
+     [
+      "C",
+      "Only (2)"
+     ],
+     [
+      "D",
+      "Neither: unique_ptr can't hold arrays"
+     ]
+    ],
+    "reveal": [
+     "C — only (2).",
+     "unique_ptr<int> calls delete, but new int[5] requires delete[], so (1) is undefined behavior when a is destroyed.",
+     "unique_ptr<int[]> calls delete[] and provides operator[].",
+     "Better still: std::make_unique<int[]>(5), or simply std::vector<int>."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "Creating, moving and consuming a unique_ptr:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: a move",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Why can't a unique_ptr be copied?",
+    "Two copies would both think they own the object and both would delete it."
+   ],
+   [
+    "What state is a unique_ptr in after being moved from?",
+    "Null."
+   ],
+   [
+    "What does release() do?",
+    "Gives up ownership and returns the raw pointer without deleting — you must now free it."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "As small as a raw pointer",
+     "hint": "and when a deleter makes it bigger",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: the default owner",
+     "hint": "factories, pimpl, tree nodes",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "shared-ptr",
+    "custom-deleters",
+    "make-unique-shared"
+   ]
+  },
+  "interview": {
+   "think": "Say what would go wrong if copying were allowed.",
+   "advancedTitle": "Advanced follow-up: custom deleters and size",
+   "followUp": "q115"
+  },
+  "recall": [
+   [
+    "How do you pass a unique_ptr to a function that only uses the object?",
+    "Pass the object by reference (or a raw pointer), not the unique_ptr."
+   ],
+   [
+    "What does reset() do?",
+    "Deletes the current object (if any) and optionally takes a new pointer."
+   ],
+   [
+    "Can a unique_ptr be returned from a function by value?",
+    "Yes; returning a local unique_ptr moves (or elides) it."
+   ]
+  ]
+ },
+ "shared-ptr": {
+  "orientation": {
+   "what": "std::shared_ptr: shared ownership through a reference-counted control block; the last owner deletes the object.",
+   "why": "shared_ptr solves genuine shared-lifetime problems, but it has real costs and classic misuse patterns (raw-pointer double ownership, cycles).",
+   "outcomes": [
+    "Explain the control block and reference counts",
+    "Predict use_count through copies",
+    "Avoid creating two control blocks for one object",
+    "Know what is (and isn't) thread-safe"
+   ],
+   "firstPass": "~15 min",
+   "laterPass": "~20–25 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: one control block, many owners",
+    "intro": "auto sp1 = std::make_shared<Widget>(10);:",
+    "stages": [
+     {
+      "name": "make_shared",
+      "io": "count = 1",
+      "note": "Object and control block in one allocation."
+     },
+     {
+      "name": "auto sp2 = sp1",
+      "io": "count = 2",
+      "note": "Copying atomically increments the count."
+     },
+     {
+      "name": "sp2 destroyed",
+      "io": "count = 1",
+      "note": "Decrement; the object stays."
+     },
+     {
+      "name": "sp1 destroyed",
+      "io": "count = 0",
+      "note": "The last owner deletes the Widget; the control block goes when weak refs are gone too."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "shared_ptr copies share one control block holding a strong count (and a weak count).",
+     "Copies increment and destructions decrement atomically; the last owner deletes the object.",
+     "Never create two shared_ptrs from the same raw pointer — copy an existing shared_ptr instead."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A library book with a shared sign-out sheet",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "Widget* raw = new Widget;\nstd::shared_ptr<Widget> a(raw);\nstd::shared_ptr<Widget> b(raw);\n\n// a.use_count() == ?   and what happens when a and b are destroyed?",
+    "q": "What is a.use_count(), and what happens at the end?",
+    "options": [
+     [
+      "A",
+      "2; the Widget is deleted once"
+     ],
+     [
+      "B",
+      "1; the Widget is deleted twice (undefined behavior)"
+     ],
+     [
+      "C",
+      "2; the Widget leaks"
+     ],
+     [
+      "D",
+      "1; the Widget leaks"
+     ]
+    ],
+    "reveal": [
+     "B — 1, then a double delete.",
+     "Each constructor from a raw pointer creates its own control block, so a and b each count 1.",
+     "Both reach zero and both delete the same Widget.",
+     "Write auto b = a; (sharing a's control block) — or use make_shared from the start."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "Reference counts rising and falling:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: counting owners",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What is in a shared_ptr's control block?",
+    "The strong count, the weak count, and the deleter (and allocator)."
+   ],
+   [
+    "When is the managed object destroyed?",
+    "When the strong count reaches zero."
+   ],
+   [
+    "Is shared_ptr thread-safe?",
+    "The count updates are; accessing the pointee, or one shared_ptr object from several threads, still needs synchronization."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Two pointers and one control block",
+     "hint": "and make_shared's shared allocation",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: genuinely shared lifetimes",
+     "hint": "caches, scene graphs, async callbacks",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "weak-ptr",
+    "ref-counting-cycles",
+    "make-unique-shared",
+    "enable-shared-from-this"
+   ]
+  },
+  "interview": {
+   "think": "Count the control blocks, then count the owners of each.",
+   "advancedTitle": "Advanced follow-up: cycles and weak_ptr",
+   "followUp": "q021"
+  },
+  "recall": [
+   [
+    "Why prefer make_shared?",
+    "One allocation instead of two, better locality, and no raw new."
+   ],
+   [
+    "What does use_count() tell you in multithreaded code?",
+    "Only an approximate, possibly stale value — don't base logic on it."
+   ],
+   [
+    "How can an object safely get a shared_ptr to itself?",
+    "Inherit from std::enable_shared_from_this and call shared_from_this()."
+   ]
+  ]
+ },
+ "weak-ptr": {
+  "orientation": {
+   "what": "std::weak_ptr: a non-owning handle to a shared_ptr-managed object that can tell whether it still exists.",
+   "why": "weak_ptr breaks reference cycles and lets caches and observers refer to objects without keeping them alive.",
+   "outcomes": [
+    "Create and lock a weak_ptr",
+    "Explain why lock() beats expired() plus access",
+    "Know what a weak_ptr keeps alive",
+    "Use weak_ptr for back-references and caches"
+   ],
+   "firstPass": "~10–15 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: ask before you use",
+    "intro": "std::weak_ptr<Widget> wp = sp;:",
+    "stages": [
+     {
+      "name": "Observe",
+      "io": "weak count + 1",
+      "note": "wp doesn't affect the strong count."
+     },
+     {
+      "name": "wp.lock()",
+      "io": "atomic check",
+      "note": "Returns a shared_ptr if the object is alive, empty otherwise."
+     },
+     {
+      "name": "Use the result",
+      "io": "temporarily owned",
+      "note": "The returned shared_ptr keeps the object alive while you use it."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "weak_ptr refers to a shared_ptr-managed object without owning it.",
+     "Access it only through lock(), which atomically checks and returns a shared_ptr (empty if the object is gone).",
+     "A weak_ptr keeps the control block alive, not the object."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A sticky note with a call number",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "auto sp = std::make_shared<Widget>();\nstd::weak_ptr<Widget> wp = sp;\n\nauto held = wp.lock();\nsp.reset();\n\nbool alive = (held != nullptr);\nbool gone  = wp.expired();",
+    "q": "What are alive and gone?",
+    "options": [
+     [
+      "A",
+      "alive = true, gone = true"
+     ],
+     [
+      "B",
+      "alive = true, gone = false"
+     ],
+     [
+      "C",
+      "alive = false, gone = true"
+     ],
+     [
+      "D",
+      "alive = false, gone = false"
+     ]
+    ],
+    "reveal": [
+     "B — alive is true and expired() is false.",
+     "lock() returned a real shared_ptr, so held is a second owner.",
+     "sp.reset() drops one owner, but held keeps the Widget alive.",
+     "The Widget is destroyed only when held goes away too."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "Locking a weak_ptr before and after the owner is reset:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: lock()",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "How do you use the object a weak_ptr refers to?",
+    "Call lock() and check the returned shared_ptr before using it."
+   ],
+   [
+    "Why is 'if (!wp.expired()) use it' unsafe?",
+    "The object can be destroyed between the check and the use; lock() does both atomically."
+   ],
+   [
+    "Does a weak_ptr keep the object alive?",
+    "No, only the control block."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Control block versus object",
+     "hint": "and make_shared's pinned memory",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: back-references and caches",
+     "hint": "observers, parent pointers, weak caches",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "ref-counting-cycles",
+    "enable-shared-from-this",
+    "pat-observer"
+   ]
+  },
+  "interview": {
+   "think": "Look for the window between check and use.",
+   "advancedTitle": "Advanced follow-up: what weak_ptr keeps alive",
+   "followUp": "q043"
+  },
+  "recall": [
+   [
+    "Can you dereference a weak_ptr directly?",
+    "No; it has no operator* or operator->."
+   ],
+   [
+    "What is the typical use of weak_ptr in a tree?",
+    "Children point to their parent with weak_ptr, so the parent isn't kept alive by its children."
+   ],
+   [
+    "Can a weak_ptr be created from a unique_ptr?",
+    "No; only from a shared_ptr (or another weak_ptr)."
+   ]
+  ]
+ },
+ "custom-deleters": {
+  "orientation": {
+   "what": "Custom deleters: telling a smart pointer how to release something that isn't a plain new'd object — FILE*, C library handles, OS resources.",
+   "why": "Custom deleters extend RAII to every C API. The details — deleter in the type for unique_ptr, type-erased for shared_ptr, null handling — matter.",
+   "outcomes": [
+    "Wrap a C handle in unique_ptr with a deleter",
+    "Choose a deleter that adds no size",
+    "Explain the unique_ptr/shared_ptr deleter difference",
+    "Handle the null-pointer case correctly"
+   ],
+   "firstPass": "~10–15 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: who stores the deleter",
+    "intro": "Two ways to attach cleanup:",
+    "stages": [
+     {
+      "name": "unique_ptr<T, D>",
+      "io": "in the type",
+      "note": "A stateless functor or lambda type costs nothing; a function pointer adds 8 bytes."
+     },
+     {
+      "name": "shared_ptr<T>(p, d)",
+      "io": "in the control block",
+      "note": "Type-erased: any deleter, same shared_ptr<T> type."
+     },
+     {
+      "name": "Null pointer",
+      "io": "differs",
+      "note": "unique_ptr skips the deleter for null; shared_ptr still calls it."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "A custom deleter replaces delete with the right release call (fclose, free, CloseHandle…).",
+     "unique_ptr carries the deleter in its type — prefer an empty functor or capture-less lambda so it stays pointer-sized.",
+     "shared_ptr stores the deleter in its control block and calls it even for a null pointer, so the deleter must check."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Special parking instructions for an unusual vehicle",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <cstdio>\n#include <memory>\n\nint main() {\n    {\n        std::shared_ptr<int> s(nullptr, [](int*) { std::puts(\"shared deleter\"); });\n    }\n    {\n        std::unique_ptr<int, void(*)(int*)> u(nullptr, [](int*) { std::puts(\"unique deleter\"); });\n    }\n}",
+    "q": "What does this print?",
+    "options": [
+     [
+      "A",
+      "shared deleter / unique deleter"
+     ],
+     [
+      "B",
+      "shared deleter"
+     ],
+     [
+      "C",
+      "unique deleter"
+     ],
+     [
+      "D",
+      "Nothing"
+     ]
+    ],
+    "reveal": [
+     "B — only 'shared deleter'.",
+     "shared_ptr calls its deleter when the count reaches zero, even when it holds null.",
+     "unique_ptr only calls the deleter if the pointer is non-null.",
+     "So a shared_ptr<FILE> with plain fclose would call fclose(nullptr) after a failed fopen — undefined behavior."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-code",
+    "toc": "Full example",
+    "title": "The example",
+    "intro": "FILE*, a lambda deleter, and a shared_ptr deleter that checks for null:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: where each deleter lives",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Why is a function-pointer deleter more expensive for unique_ptr?",
+    "It must be stored: the unique_ptr grows from 8 to 16 bytes on x86-64."
+   ],
+   [
+    "Why can shared_ptrs with different deleters share a type?",
+    "The deleter lives in the type-erased control block, not in shared_ptr's template arguments."
+   ],
+   [
+    "Are unique_ptr<T> and unique_ptr<T, MyDeleter> interchangeable?",
+    "No; they are different types."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Deleter size",
+     "hint": "empty types versus function pointers",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: wrapping C APIs",
+     "hint": "files, sockets, library handles",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "malloc-free",
+    "raii",
+    "make-unique-shared"
+   ]
+  },
+  "interview": {
+   "think": "Ask where the deleter is stored, and what that costs.",
+   "advancedTitle": "Advanced follow-up: std::function as a deleter",
+   "followUp": "q117"
+  },
+  "recall": [
+   [
+    "What is the portable way to write an fclose deleter?",
+    "A small functor or lambda: [](FILE* f) { if (f) std::fclose(f); } — C++20 doesn't guarantee you can take &fclose."
+   ],
+   [
+    "Why avoid std::function as a unique_ptr deleter?",
+    "It is larger and may allocate, and calls go through type erasure."
+   ],
+   [
+    "Can make_shared take a custom deleter?",
+    "No; use the shared_ptr constructor (or allocate_shared for custom allocators)."
+   ]
+  ]
+ },
+ "ref-counting-cycles": {
+  "orientation": {
+   "what": "Reference-counting cycles: objects that own each other through shared_ptr, so their counts never reach zero — and how weak_ptr breaks them.",
+   "why": "Cycles are the main way code that uses shared_ptr everywhere still leaks. Fixing them is a design decision about which direction really owns.",
+   "outcomes": [
+    "Recognize a shared_ptr cycle",
+    "Explain why reference counting can't break it",
+    "Choose which side becomes weak_ptr",
+    "Verify the fix"
+   ],
+   "firstPass": "~10–15 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: each keeps the other above zero",
+    "intro": "A owns B, and B owns A:",
+    "stages": [
+     {
+      "name": "Locals a, b",
+      "io": "counts = 2 each",
+      "note": "Each object has its local owner plus the other's member."
+     },
+     {
+      "name": "Scope ends",
+      "io": "counts = 1 each",
+      "note": "The locals are gone, but the members remain."
+     },
+     {
+      "name": "Leaked",
+      "io": "never zero",
+      "note": "Neither destructor can start, so neither releases the other."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Two objects holding shared_ptrs to each other keep both counts above zero forever — a leak.",
+     "Pure reference counting can't see cycles; that needs graph tracing, which C++ doesn't do.",
+     "Make the non-owning direction (usually child-to-parent) a weak_ptr."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "Two people each waiting for the other to leave",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "struct B;\nstruct A { std::shared_ptr<B> b; ~A() { std::cout << \"~A \"; } };\nstruct B { std::weak_ptr<A>   a; ~B() { std::cout << \"~B \"; } };   // weak!\n\nint main() {\n    auto a = std::make_shared<A>();\n    auto b = std::make_shared<B>();\n    a->b = b;\n    b->a = a;\n}",
+    "q": "What does this print when main returns?",
+    "options": [
+     [
+      "A",
+      "Nothing: still a cycle"
+     ],
+     [
+      "B",
+      "~A ~B"
+     ],
+     [
+      "C",
+      "~B ~A"
+     ],
+     [
+      "D",
+      "~A only"
+     ]
+    ],
+    "reveal": [
+     "B — ~A ~B.",
+     "b is destroyed first, but B is still owned by A's member, so nothing prints yet.",
+     "Then a is destroyed: A's count drops to zero (the weak back-pointer doesn't count), so ~A runs.",
+     "Destroying A releases its shared_ptr to B, whose count reaches zero: ~B."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "A cycle that leaks:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: why the counts never reach zero",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "Why doesn't shared_ptr detect cycles?",
+    "It only counts references; detecting cycles requires tracing the object graph."
+   ],
+   [
+    "Which side of a parent/child cycle should be weak?",
+    "The child's pointer back to its parent."
+   ],
+   [
+    "Will a compiler or sanitizer warn about a shared_ptr cycle?",
+    "Not in general; LeakSanitizer reports the leaked memory at exit, but finding the cycle is a design task."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Why counting alone can't work",
+     "hint": "the limit of reference counting",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: trees, graphs and observers",
+     "hint": "parent owns, child observes",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "weak-ptr",
+    "memory-leaks",
+    "pat-observer"
+   ]
+  },
+  "interview": {
+   "think": "Draw the ownership arrows and look for a loop.",
+   "advancedTitle": "Advanced follow-up: why parent-owns-child is the right direction"
+  },
+  "recall": [
+   [
+    "Could the parent own its children with unique_ptr instead?",
+    "Yes, if each child has exactly one parent — then the back-pointer can be a plain raw pointer."
+   ],
+   [
+    "How do cycles show up in a leak checker?",
+    "As memory still allocated at exit, with shared_ptr control blocks involved."
+   ],
+   [
+    "Do longer cycles (A→B→C→A) behave the same?",
+    "Yes; any loop of owning pointers leaks the whole loop."
+   ]
+  ]
+ },
+ "make-unique-shared": {
+  "orientation": {
+   "what": "make_unique and make_shared: creating smart pointers without writing new, and the allocation and exception-safety benefits.",
+   "why": "They are the default in every modern style guide; knowing their one real trade-off (make_shared and weak_ptr) is an advanced interview point.",
+   "outcomes": [
+    "Use make_unique and make_shared",
+    "Explain make_shared's single allocation",
+    "Explain the pre-C++17 exception-safety gap",
+    "Know when direct construction is better"
+   ],
+   "firstPass": "~10 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: one call, owned immediately",
+    "intro": "Two ways to create a shared Widget:",
+    "stages": [
+     {
+      "name": "shared_ptr<Widget>(new Widget)",
+      "io": "two allocations",
+      "note": "One for the Widget, one for the control block."
+     },
+     {
+      "name": "make_shared<Widget>()",
+      "io": "one allocation",
+      "note": "Object and control block side by side."
+     },
+     {
+      "name": "With weak_ptrs outliving it",
+      "io": "pinned memory",
+      "note": "make_shared's block can't be freed until the last weak_ptr is gone."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "make_unique and make_shared construct the object and wrap it in one step — no raw new in your code.",
+     "make_shared uses a single allocation for the object and its control block.",
+     "Trade-off: with make_shared, long-lived weak_ptrs keep the object's memory allocated after it is destroyed."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "One combined package instead of two separate shipments",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <memory>\n#include <vector>\n\nauto p = std::make_unique<std::vector<int>>(3, 5);\nauto n = p->size();",
+    "q": "What is n?",
+    "options": [
+     [
+      "A",
+      "2: the elements 3 and 5"
+     ],
+     [
+      "B",
+      "3: three copies of 5"
+     ],
+     [
+      "C",
+      "5: five copies of 3"
+     ],
+     [
+      "D",
+      "Compile error"
+     ]
+    ],
+    "reveal": [
+     "B — 3.",
+     "make_unique forwards its arguments with parentheses, so this is vector<int>(3, 5): three elements, each 5.",
+     "Braces would choose the initializer_list constructor instead ({3, 5}, two elements).",
+     "To get {3, 5}, write std::make_unique<std::vector<int>>(std::initializer_list<int>{3, 5})."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "make_unique, make_shared, and the pattern they replace:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: one allocation and exception safety",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What does make_shared save?",
+    "One heap allocation, with better locality between the object and its counts."
+   ],
+   [
+    "What was the exception-safety problem before C++17?",
+    "In f(shared_ptr<T>(new T), g()), g() could run after new and before the shared_ptr took ownership, leaking if it threw."
+   ],
+   [
+    "When is shared_ptr<T>(new T) preferable?",
+    "When long-lived weak_ptrs would keep a large object's memory pinned, or you need a custom deleter."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "The pinned-memory trade-off",
+     "hint": "object and counts share one block",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: the review rule",
+     "hint": "no new in application code",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "enable-shared-from-this",
+    "shared-ptr",
+    "weak-ptr"
+   ]
+  },
+  "interview": {
+   "think": "Count the allocations in each form.",
+   "advancedTitle": "Advanced follow-up: when not to use make_shared",
+   "followUp": "q052"
+  },
+  "recall": [
+   [
+    "Can make_unique call a private constructor?",
+    "No; it is outside the class. Use a static factory that constructs with new and wraps it."
+   ],
+   [
+    "Is there make_unique for arrays?",
+    "Yes: std::make_unique<T[]>(n) (value-initialized)."
+   ],
+   [
+    "Does make_shared support custom deleters?",
+    "No; use the shared_ptr constructor."
+   ]
+  ]
+ },
+ "enable-shared-from-this": {
+  "orientation": {
+   "what": "enable_shared_from_this: letting a member function get a shared_ptr to its own object that shares the existing control block.",
+   "why": "Async callbacks often need to keep 'this' alive. shared_ptr<T>(this) creates a second control block and a double delete; shared_from_this() doesn't.",
+   "outcomes": [
+    "Use shared_from_this() correctly",
+    "Explain why shared_ptr<T>(this) is a double delete",
+    "Know when shared_from_this() throws",
+    "Use it to keep an object alive for a pending callback"
+   ],
+   "firstPass": "~10–15 min",
+   "laterPass": "~15–20 min"
+  },
+  "core": [
+   {
+    "type": "flow",
+    "id": "gl-mental",
+    "toc": "Mental model",
+    "title": "Mental model: a hidden weak_ptr to itself",
+    "intro": "class Connection : public std::enable_shared_from_this<Connection>:",
+    "stages": [
+     {
+      "name": "make_shared<Connection>()",
+      "io": "sets the hidden weak_ptr",
+      "note": "The first owning shared_ptr fills in the base's weak_ptr."
+     },
+     {
+      "name": "shared_from_this()",
+      "io": "locks it",
+      "note": "Returns a shared_ptr sharing the same control block."
+     },
+     {
+      "name": "Capture in a callback",
+      "io": "keeps it alive",
+      "note": "The pending callback co-owns the object until it runs."
+     }
+    ]
+   },
+   {
+    "type": "idea",
+    "id": "gl-idea",
+    "toc": "Core idea",
+    "title": "The core idea",
+    "points": [
+     "Inherit publicly from std::enable_shared_from_this<T> to call shared_from_this() safely.",
+     "It returns a shared_ptr that shares the existing control block — unlike shared_ptr<T>(this), which creates a second one.",
+     "The object must already be owned by a shared_ptr; otherwise shared_from_this() throws std::bad_weak_ptr (since C++17)."
+    ],
+    "precise": "def"
+   },
+   {
+    "type": "aside",
+    "id": "gl-analogy",
+    "title": "Prefer an analogy?",
+    "hint": "A library card linked to the real records",
+    "field": "analogy"
+   },
+   {
+    "type": "predict",
+    "id": "gl-predict",
+    "toc": "Predict",
+    "title": "Predict before you reveal",
+    "code": "#include <memory>\nstruct C : std::enable_shared_from_this<C> {\n    void go() { auto self = shared_from_this(); }\n};\n\nint main() {\n    C c;          // on the stack, not owned by any shared_ptr\n    c.go();\n}",
+    "q": "What happens?",
+    "options": [
+     [
+      "A",
+      "It works: self shares c's lifetime"
+     ],
+     [
+      "B",
+      "Compile error"
+     ],
+     [
+      "C",
+      "std::bad_weak_ptr is thrown"
+     ],
+     [
+      "D",
+      "Undefined behavior in C++17 and later"
+     ]
+    ],
+    "reveal": [
+     "C — std::bad_weak_ptr is thrown.",
+     "No shared_ptr owns c, so the hidden weak_ptr was never set.",
+     "Since C++17 the standard requires the throw (before C++17 it was undefined behavior).",
+     "Create the object with make_shared before calling functions that use shared_from_this()."
+    ]
+   },
+   {
+    "type": "field-code",
+    "id": "gl-tiny",
+    "toc": "Example",
+    "title": "The example",
+    "intro": "Keeping a connection alive for an async callback:",
+    "field": "code"
+   },
+   {
+    "type": "field-steps",
+    "id": "gl-steps",
+    "toc": "Step by step",
+    "title": "Step by step: how shared_from_this finds the control block",
+    "field": "steps"
+   }
+  ],
+  "checkpoint": [
+   [
+    "What goes wrong with std::shared_ptr<T>(this)?",
+    "It creates a new control block; two counts both reach zero and delete the object twice."
+   ],
+   [
+    "When can you call shared_from_this()?",
+    "Only after a shared_ptr owns the object — never in the constructor."
+   ],
+   [
+    "Why must the inheritance be public?",
+    "shared_ptr must detect the base to set the weak_ptr; private inheritance silently disables it."
+   ]
+  ],
+  "deepDive": {
+   "items": [
+    {
+     "id": "gl-d-mem",
+     "title": "Keeping 'self' alive",
+     "hint": "callbacks that co-own the object",
+     "field": "memory"
+    },
+    {
+     "id": "gl-d-prod",
+     "title": "In production: async I/O",
+     "hint": "completion handlers and timers",
+     "fields": [
+      "why",
+      "realWorld"
+     ]
+    }
+   ],
+   "nextTopics": [
+    "allocator-basics",
+    "crtp",
+    "net-event-loops"
+   ]
+  },
+  "interview": {
+   "think": "Count the control blocks each approach creates.",
+   "advancedTitle": "Advanced follow-up: why the constructor case throws",
+   "followUp": "q116"
+  },
+  "recall": [
+   [
+    "What does C++17's weak_from_this() give you?",
+    "A weak_ptr to the object, without the risk of extending its life."
+   ],
+   [
+    "How do you force every Connection to be created by make_shared?",
+    "Private constructor plus a static create() factory (using a helper so make_shared can reach it)."
+   ],
+   [
+    "Which pattern does enable_shared_from_this use?",
+    "CRTP: the class passes itself as the template argument."
    ]
   ]
  }
