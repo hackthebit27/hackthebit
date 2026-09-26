@@ -849,6 +849,96 @@ pre.code .kw{font-weight:600;}
   .modal-overlay{padding:4vh 10px;}
   .toast-wrap{left:12px;right:12px;bottom:12px;}
 }
+/* ---------- guided lesson (pilot: compilation-process) ---------- */
+.journey{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;}
+@media(max-width:980px){.journey{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media(max-width:520px){.journey{grid-template-columns:1fr;}}
+.journey-step{display:flex;gap:10px;align-items:flex-start;padding:11px 12px;border:1px solid var(--border);border-radius:var(--radius-m);background:var(--surface);min-width:0;}
+.journey-step.done{border-color:var(--accent-soft-border);background:var(--accent-soft);}
+.journey-step .checkbox{margin-top:1px;flex:0 0 auto;cursor:pointer;}
+.js-body{min-width:0;}
+.js-name{font-weight:650;font-size:13.5px;color:var(--text);}
+.js-desc{font-size:12.5px;color:var(--text-muted);line-height:1.45;margin-top:2px;}
+.js-go{margin-top:6px;background:none;border:0;padding:0;font:600 12px var(--font-body);color:var(--accent);cursor:pointer;}
+.js-go:hover{text-decoration:underline;}
+.journey-note{font-size:12px;color:var(--text-faint);margin-top:10px;}
+.start-here{border:1px solid var(--accent-soft-border);background:var(--accent-soft);border-radius:var(--radius-m);padding:16px 18px;margin-bottom:14px;scroll-margin-top:76px;}
+.sh-kicker{font-size:11.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--accent-strong);margin-bottom:4px;}
+.sh-title{font-size:15.5px;font-weight:650;margin:0 0 8px;color:var(--text);}
+.sh-outcomes{margin:0 0 12px;padding-left:22px;font-size:14.5px;line-height:1.6;max-width:78ch;}
+.sh-outcomes li{margin-bottom:4px;}
+.sh-how{font-size:13.8px;color:var(--text);margin:0 0 12px;max-width:78ch;line-height:1.6;}
+.sh-meta{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:12.8px;color:var(--text-muted);margin-bottom:10px;}
+.sh-meta b{color:var(--text);font-weight:650;}
+.gl-toc{display:flex;flex-direction:column;gap:8px;padding:2px 0 14px;border-bottom:1px solid var(--border);}
+.gl-toc-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+.gl-toc-label{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--text-faint);min-width:44px;margin-right:2px;}
+.gl-part{margin:26px 0 2px;scroll-margin-top:76px;}
+.gl-toc + .gl-part{margin-top:18px;}
+.gl-kicker{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--accent-strong);}
+.gl-part h2{font-size:20px;line-height:1.3;margin:2px 0 4px;color:var(--text);}
+.gl-part p{font-size:13.8px;color:var(--text-muted);margin:0 0 4px;max-width:78ch;line-height:1.55;}
+.gl-sec{padding:16px 0;border-top:1px solid var(--border);scroll-margin-top:76px;}
+.gl-part + .gl-sec{border-top:none;}
+.gl-sec h3,.gl-more h3{font-family:var(--font-body);font-size:14.5px;display:flex;align-items:center;gap:8px;margin:0 0 10px;color:var(--text);}
+.gl-sec h3 .num{min-width:22px;height:22px;padding:0 5px;border-radius:6px;background:var(--accent-soft);color:var(--accent-strong);font-family:var(--font-mono);font-size:11.5px;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;}
+details.gl-more{border-top:1px solid var(--border);scroll-margin-top:76px;}
+details.gl-more > summary{list-style:none;cursor:pointer;padding:14px 0;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px;}
+details.gl-more > summary::-webkit-details-marker{display:none;}
+details.gl-more > summary h3{margin:0;}
+details.gl-more > summary h3::before{content:"\25B8";display:inline-block;width:14px;color:var(--accent);font-size:13px;transition:transform .15s ease;}
+details.gl-more[open] > summary h3::before{transform:rotate(90deg);}
+details.gl-more > summary:hover h3{color:var(--accent-strong);}
+.gl-hint{font-size:12.5px;color:var(--text-faint);padding-left:22px;}
+details.gl-more > .prose{padding:0 0 16px 22px;}
+.pipeline{list-style:none;margin:10px 0 4px;padding:0;}
+.pl-stage{position:relative;padding:0 0 18px 32px;}
+.pl-stage:last-child{padding-bottom:0;}
+.pl-stage::before{content:"";position:absolute;left:9px;top:20px;bottom:-2px;width:2px;background:var(--border-strong);}
+.pl-stage:last-child::before{display:none;}
+.pl-stage::after{content:"";position:absolute;left:3px;top:4px;width:14px;height:14px;border-radius:50%;background:var(--accent-soft);border:2px solid var(--accent);box-sizing:border-box;}
+.pl-stage.artifact::after{border-radius:3px;background:var(--surface-2);border-color:var(--border-strong);}
+.pl-name{font-weight:650;font-size:14.5px;color:var(--text);display:flex;flex-wrap:wrap;gap:2px 10px;align-items:baseline;}
+.pl-io{font-family:var(--font-mono);font-size:11.5px;color:var(--text-faint);font-weight:500;}
+.pl-note{font-size:14.2px;color:var(--text-muted);line-height:1.6;margin-top:2px;max-width:72ch;}
+.pl-err{font-size:12.5px;color:var(--text-faint);margin-top:5px;overflow-wrap:anywhere;}
+.pl-err code{font-family:var(--font-mono);font-size:12px;color:var(--text-muted);background:var(--surface-2);border-radius:5px;padding:1px 6px;}
+.gl-terms{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:8px 16px;margin:14px 0;font-size:14.2px;line-height:1.6;}
+.gl-terms dt{font-weight:650;color:var(--accent-strong);}
+.gl-terms dd{margin:0;color:var(--text);max-width:72ch;}
+@media(max-width:600px){.gl-terms{grid-template-columns:1fr;gap:2px;}.gl-terms dd{margin-bottom:10px;}}
+.gl-q{font-weight:600;color:var(--text);margin:10px 0 6px;}
+.gl-think{font-size:13.5px;color:var(--text-muted);font-style:italic;margin:4px 0 10px;}
+.gl-small{font-size:12.8px;color:var(--text-faint);}
+.gl-options{list-style:none;padding:0;margin:8px 0 8px;display:grid;gap:6px;max-width:72ch;}
+.prose ul.gl-options{padding-left:0;}
+.gl-options li{padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);display:flex;gap:10px;margin:0;}
+.gl-options li b{font-family:var(--font-mono);color:var(--accent-strong);flex:0 0 auto;}
+.gl-revealable .gl-reveal{display:none;margin-top:4px;padding:12px 14px;border-left:3px solid var(--accent);background:var(--surface-2);border-radius:0 8px 8px 0;max-width:80ch;}
+.gl-revealable .gl-reveal p:last-child{margin-bottom:0;}
+.gl-revealable.revealed .gl-reveal{display:block;}
+.gl-revealable.revealed .gl-reveal-btn{display:none;}
+.prose ol.gl-check{padding-left:22px;}
+.prose ol.gl-check > li{margin-bottom:14px;}
+.prose ol.gl-check > li::marker{color:var(--accent);font-weight:700;}
+.gl-check .gl-q{margin-top:0;}
+.gl-done{margin-top:6px;}
+.gl-done-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;}
+.gl-deeper{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:14px 0 4px;border-top:1px solid var(--border);}
+.gl-related{margin:12px 0 0;}
+.gl-related .link{color:var(--accent);cursor:pointer;font-weight:600;}
+.gl-cannow{margin-top:22px;border-top:2px solid var(--border);}
+.prose ul.gl-can,.gl-can{list-style:none;padding:0;margin:8px 0 0;display:grid;gap:6px;}
+.gl-can li{margin:0;}
+.gl-can li label{display:flex;gap:10px;align-items:flex-start;font-size:14.2px;cursor:pointer;line-height:1.5;}
+.gl-can li input{margin-top:3px;width:16px;height:16px;accent-color:var(--accent);flex:0 0 auto;}
+.gl-can li.done label{color:var(--text-muted);}
+.link-btn{background:none;border:0;padding:0;font:600 13px var(--font-body);color:var(--accent);cursor:pointer;}
+.link-btn:hover{text-decoration:underline;}
+@media(max-width:600px){details.gl-more > .prose{padding-left:0;}.start-here{padding:14px;}}
+.prose ul.gl-core{padding-left:20px;margin-bottom:14px;}
+.prose ul.gl-core li{font-size:15px;font-weight:500;color:var(--text);margin-bottom:8px;}
+.gl-precise{text-transform:uppercase;letter-spacing:.07em;font-weight:700;font-size:11px;margin:0 0 6px;}
 </style>
 </head>
 <body>
@@ -6222,28 +6312,28 @@ DEEP_CONTENT['net-buffers'] = {
 };
 DEEP_CONTENT['compilation-process'] = {
  def: "Building a C++ program is not one step, it is a pipeline of four distinct phases run by the toolchain: preprocessing (textual substitution -- macro expansion, #include splicing, conditional compilation resolved), compilation proper (the preprocessed translation unit is parsed, type-checked, and lowered to target assembly), assembly (the assembler turns that .s text into a relocatable object file .o/.obj containing machine code plus a symbol table), and linking (the linker merges object files and libraries, resolves symbol references across translation units, and produces the final executable or shared library). Each phase can be invoked in isolation with compiler flags (g++/clang -E stops after preprocessing, -S stops after compilation to assembly, -c stops after assembling to object code but before linking), which is exactly how you isolate whether a build failure is a preprocessor, compiler, or linker problem.",
- why: "Senior engineers are expected to reason about build failures by phase: a 'missing type' error is a compile-time problem (parser/semantic analysis), while 'undefined reference to foo()' is a link-time problem (the symbol was declared and called, compiled fine, but no object file or library defines it). This distinction drives real decisions -- incremental build systems (make, ninja, Bazel) cache per-translation-unit object files and only re-run compilation for changed .cpp files, then re-link; understanding the pipeline is also required to reason about link-time optimization (LTO), which blurs the compile/link boundary by deferring codegen to link time for whole-program optimization.",
+ why: "Senior engineers are expected to reason about build failures by phase: a 'missing type' error is a compile-time problem (parser/semantic analysis), while 'undefined reference to foo()' is a link-time problem (the symbol was declared and called, compiled fine, but no object file or library defines it). This distinction drives real decisions -- incremental build systems (make, ninja, Bazel) cache per-translation-unit object files and only re-run compilation for .cpp files that changed or whose included headers changed, then re-link; understanding the pipeline is also required to reason about link-time optimization (LTO), which blurs the compile/link boundary by deferring codegen to link time for whole-program optimization.",
  analogy: "Think of writing a book that cites other books. Preprocessing is literally photocopying in the referenced pages wherever a citation marker appears (and stripping out any paragraph marked 'skip if in draft mode'). Compilation is an editor reading the now-complete manuscript for grammar and internal consistency and translating it into a language the printing press understands. Assembly is typesetting that translated text into physical printing plates (one plate per chapter/translation unit). Linking is the bindery: it collects all the printing plates from every chapter, resolves every 'see chapter 4' cross-reference to an actual page number, and binds them into one physical book -- and it fails loudly if chapter 4 was never printed (undefined reference) or if two chapters both claim to be chapter 4 (multiple definition).",
- code: "// file: math_utils.h\n#pragma once\nint square(int x); // declaration only\n\n// file: math_utils.cpp\n#include \"math_utils.h\"\nint square(int x) { return x * x; } // definition\n\n// file: main.cpp\n#include \"math_utils.h\"\n#include <iostream>\nint main() {\n  std::cout << square(5) << \"\\n\";\n  return 0;\n}\n\n// Build pipeline, phase by phase:\n// g++ -E main.cpp -o main.i      -> preprocessed source (headers inlined, macros expanded)\n// g++ -S main.i -o main.s        -> x86/ARM assembly text\n// g++ -c main.s -o main.o        -> relocatable object file (undefined symbol: square(int))\n// g++ -c math_utils.cpp -o math_utils.o\n// g++ main.o math_utils.o -o app -> linker resolves square(int) reference against math_utils.o\n",
+ code: "// file: math_utils.h\n#pragma once\nint square(int x); // declaration only\n\n// file: math_utils.cpp\n#include \"math_utils.h\"\nint square(int x) { return x * x; } // definition\n\n// file: main.cpp\n#include \"math_utils.h\"\n#include <iostream>\nint main() {\n  std::cout << square(5) << \"\\n\";\n  return 0;\n}\n\n// Build pipeline, phase by phase:\n// g++ -E main.cpp -o main.ii     -> preprocessed source (headers inlined, macros expanded; .ii is the C++ convention)\n// g++ -S main.ii -o main.s       -> x86/ARM assembly text (compile only)\n// g++ -c main.s -o main.o        -> relocatable object file (assemble only; undefined symbol: square(int))\n// g++ -c math_utils.cpp -o math_utils.o\n// g++ main.o math_utils.o -o app -> linker resolves square(int) reference against math_utils.o\n",
  steps: [
-  "Preprocessor expands #include \"math_utils.h\" inline in both main.cpp and math_utils.cpp, and macro/#pragma directives are resolved -- the result is a self-contained .i file with no directives left.",
-  "The compiler front end parses main.i, builds an AST, type-checks the call square(5) against the declaration int square(int) -- this succeeds even though square has no definition in this translation unit, because a declaration is enough to satisfy the compiler.",
+  "Preprocessor expands #include \"math_utils.h\" inline in both main.cpp and math_utils.cpp, expands macros and resolves #if/#ifdef -- the result is one self-contained translation unit (main.ii). #include, #define and #if lines are consumed; what remains is plain C++ plus linemarkers (# 1 \"main.cpp\") that let later errors point at the original file and line, and any #pragma the compiler itself must still see.",
+  "The compiler front end parses main.ii, builds an AST, type-checks the call square(5) against the declaration int square(int) -- this succeeds even though square has no definition in this translation unit, because a declaration is enough to satisfy the compiler.",
   "The compiler back end lowers the AST to target assembly (main.s), emitting a call instruction to a symbol named something like _Z6squarei (mangled) with no address yet -- the compiler has no idea where square's body lives.",
   "The assembler turns main.s into main.o, a relocatable object file: machine code plus a symbol table listing square(int) as an UNDEFINED (external) symbol that must be resolved later, and main as a DEFINED (exported) symbol.",
   "math_utils.cpp goes through the same three phases independently, producing math_utils.o where square(int) is a DEFINED symbol.",
-  "The linker loads both .o files, builds a global symbol table, and patches (relocates) the call instruction in main.o's machine code with the actual address of square's compiled body found in math_utils.o.",
+  "The linker loads both .o files, builds a global symbol table, and patches (relocates) the call instruction in main.o's machine code so it reaches square's compiled body in math_utils.o (on x86-64 this is typically a PC-relative displacement, not an absolute address).",
   "If math_utils.o were never passed to the linker, this step fails with 'undefined reference to square(int)' -- a link error, not a compile error, because compilation only needs declarations."
  ],
- memory: "Each object file has sections: .text (machine code), .data (initialized globals), .bss (zero-initialized globals, no disk space consumed), and a symbol table with relocation entries -- placeholders where the assembler didn't know a final address yet. The linker performs relocation: it assigns final virtual addresses to every section across all merged object files and patches every relocation entry to point at the resolved address. This is why addresses in a compiled .o are not final -- they only become final after linking (or, for shared libraries, after the dynamic loader maps them at process start, which is a fifth de facto phase: dynamic linking/loading).",
+ memory: "Each object file has sections: .text (machine code), .data (initialized globals), .bss (zero-initialized globals, no disk space consumed), a symbol table (which symbols this file defines and which it needs from elsewhere), and relocation records kept in their own sections (.rela.text on ELF) -- each one marks a spot the assembler could not finalize, such as the call to square. The linker performs relocation: it lays out every section of every merged object file and patches every relocation record to point at the resolved target. This is why addresses in a compiled .o are not final. For a shared library, or a position-independent executable (the default on most current Linux distributions), the layout is fixed at link time but the absolute load address is only chosen when the dynamic loader maps it at process start -- a fifth de facto phase: dynamic linking/loading.",
  realWorld: "Large C++ codebases (Chromium, LLVM) invest heavily in reducing time spent in specific phases: precompiled headers and modules (C++20) cut redundant preprocessing/parsing of the same headers across thousands of translation units, distributed compilation (distcc, Bazel remote execution) parallelizes the compile phase across machines, and incremental linking / mold / lld speed up the final link phase which becomes the serial bottleneck as binaries grow.",
  mistake: "Treating a linker error as if it were a compiler error and trying to 'fix the syntax' -- for example, seeing 'undefined reference to Foo::bar()' and assuming a typo in the declaration, when the actual bug is that bar.cpp was never added to the build system's source list, or the class template's definition lives in a .cpp file instead of a header (templates must be visible at the point of instantiation, which usually means the definition needs to be in a header).",
- interviewQ: {q: "A colleague says their code 'compiles fine' but fails to build with 'undefined reference to computeTotal(int)'. Walk through what that tells you and how you'd fix it.", a: "It tells you the failure is at the link phase, not the compile phase: the compiler was satisfied by a declaration (a prototype in a header) and successfully generated a call instruction to computeTotal, but the linker could not find any object file or library that defines that exact symbol. Likely causes: the .cpp file containing the definition was never compiled or never passed to the linker (missing from the build file/CMakeLists), a signature mismatch causes name-mangling to differ (e.g. declared as computeTotal(int) but defined as computeTotal(long) -- these mangle to different symbols so the linker sees them as unrelated), a missing extern \"C\" causing C++ name mangling mismatch against a C library, or the definition exists but is in an anonymous namespace / static in a different translation unit, giving it internal linkage so the linker in this TU can't see it at all. Fix: confirm the defining .cpp is part of the build, confirm the exact signature matches token-for-token, and check linkage specifiers."},
- advancedQ: {q: "How does link-time optimization (LTO) change the phase model you just described, and what problem does it solve?", a: "Normally each translation unit is compiled to machine code independently, so the optimizer can never inline or optimize across TU boundaries -- e.g. a small function defined in file A and called from file B stays a real out-of-line call even if it's trivial, because when compiling B the compiler has no visibility into A's body. LTO defers real code generation past the traditional compile phase: instead of emitting final machine code, the compiler emits an intermediate representation (e.g. LLVM bitcode or GCC's GIMPLE) into the object file. The linker then invokes the compiler's backend again at link time with the IR from every object file loaded together, letting it perform whole-program optimizations (cross-TU inlining, dead code elimination of unused exported functions, devirtualization) before finally emitting real machine code. This blurs 'compile' and 'link' into effectively one late, whole-program compile phase, at the cost of much higher link-time memory/CPU usage -- which is why large projects often reserve full LTO for release builds only."},
+ interviewQ: {q: "A colleague says their code 'compiles fine' but fails to build with 'undefined reference to computeTotal(int)'. Walk through what that tells you and how you'd fix it.", a: "It tells you the failure is at the link phase, not the compile phase: the compiler was satisfied by a declaration (a prototype in a header) and successfully generated a call instruction to computeTotal, but the linker could not find any object file or library that defines that exact symbol. Likely causes: the .cpp file containing the definition was never compiled or never passed to the linker (missing from the build file/CMakeLists), a signature mismatch causes name-mangling to differ (e.g. declared as computeTotal(int) but defined as computeTotal(long) -- these mangle to different symbols so the linker sees them as unrelated), a missing extern \"C\" causing C++ name mangling mismatch against a C library, or the definition exists but is in an anonymous namespace / static in a different translation unit, giving it internal linkage so no other translation unit can link to it. With static libraries, link order is another classic cause: GNU ld scans archives left to right and only pulls members that resolve symbols already needed, so a library listed before the object that uses it is skipped. Fix: confirm the defining .cpp is part of the build, confirm the exact signature matches token-for-token, check linkage specifiers, and check library order on the link line."},
+ advancedQ: {q: "How does link-time optimization (LTO) change the phase model you just described, and what problem does it solve?", a: "Normally each translation unit is compiled to machine code independently, so the optimizer can never inline or optimize across TU boundaries -- e.g. a small function defined in file A and called from file B stays a real out-of-line call even if it's trivial, because when compiling B the compiler has no visibility into A's body. LTO defers real code generation past the traditional compile phase: instead of emitting final machine code, the compiler emits an intermediate representation (e.g. LLVM bitcode or GCC's GIMPLE) into the object file. The linker then invokes the compiler's backend again at link time with the IR from every object file loaded together, letting it perform whole-program optimizations (cross-TU inlining, dead code elimination of functions nothing in the final program references, devirtualization) before finally emitting real machine code. This blurs 'compile' and 'link' into effectively one late, whole-program compile phase, at the cost of much higher link-time memory/CPU usage -- which is why large projects often reserve full LTO for release builds only."},
  traps: [
   "Assuming -c (compile only, stop before linking) means 'just check syntax' -- it actually fully compiles and assembles to a real object file; it just skips linking.",
   "Confusing a missing #include (which usually causes a compile error: 'unknown type') with a missing library/object at link time (which causes 'undefined reference') -- these look similar to a beginner but are different phases with different fixes.",
-  "Forgetting that templates and inline/constexpr functions are typically instantiated per translation unit and need their full definition visible wherever used -- putting only a declaration in a header and the template body in a .cpp file compiles the header's TU fine but fails to link everywhere else that includes the header.",
-  "Not realizing that a static library (.a) is just an archive of .o files resolved at link time (increasing binary size, symbols baked in), whereas a shared library (.so/.dll) defers symbol resolution to load time via the dynamic linker -- mixing up which phase actually fails when a shared library is missing at runtime versus a static library missing at build time."
+  "Forgetting that a template's definition must be visible wherever it is instantiated, and that an inline (including every constexpr) function must be defined in every translation unit that uses it -- putting only the declaration in a header and the body in one .cpp compiles every file cleanly, but the other translation units fail to link with 'undefined reference to int twice<int>(int)' (for templates, unless that .cpp explicitly instantiates the types they need).",
+  "Not realizing that a static library (.a) is just an archive of .o files: at link time the linker copies in only the members that resolve an undefined symbol, and that code is baked into your binary. A shared library (.so/.dll) is also needed at link time -- the linker checks that it provides the symbols -- but the code stays in the library and is bound at load time by the dynamic loader. So a missing static library fails the build, while a shared library missing at runtime fails at program start ('error while loading shared libraries')."
  ]
 };
 
@@ -12668,16 +12758,40 @@ function navigate(view, params){
   focusViewHeading();
 }
 
+/* Re-rendering the same page (e.g. after ticking a learning level) should not
+   collapse what the learner opened, hide answers they revealed, or drop note
+   text they have typed but not saved yet. Only applies when the route is
+   unchanged; navigating elsewhere always starts fresh. */
+let LAST_RENDER_KEY = '';
+function captureViewUI(el){
+  return {
+    open: Array.from(el.querySelectorAll('details[id][open]')).map(d=>d.id),
+    revealed: Array.from(el.querySelectorAll('[data-reveal-box].revealed, .prediction-challenge.revealed')).map(x=>x.id).filter(Boolean),
+    notes: Array.from(el.querySelectorAll('textarea[data-note-for]'))
+      .filter(t=>t.value !== ((getTopicProgress(t.getAttribute('data-note-for'))||{}).notes||''))
+      .map(t=>[t.getAttribute('data-note-for'), t.value])
+  };
+}
+function restoreViewUI(el, ui){
+  ui.open.forEach(id=>{ const d = document.getElementById(id); if(d && d.tagName==='DETAILS') d.open = true; });
+  ui.revealed.forEach(id=>{ const b = document.getElementById(id); if(b) b.classList.add('revealed'); });
+  ui.notes.forEach(([k,v])=>{ const t = el.querySelector('textarea[data-note-for="'+k+'"]'); if(t) t.value = v; });
+}
 function render(){
   renderSidebarNav();
   const el = document.getElementById('content');
   const fn = VIEWS[ROUTE.view] || VIEWS.dashboard;
+  const renderKey = ROUTE.view+'|'+JSON.stringify(ROUTE.params||{});
+  let keptUI = null;
+  try{ if(renderKey === LAST_RENDER_KEY) keptUI = captureViewUI(el); }catch(err){ keptUI = null; }
   try{
     el.innerHTML = fn(ROUTE.params);
   }catch(err){
     console.error(err);
     el.innerHTML = errorStateHTML(err);
   }
+  LAST_RENDER_KEY = renderKey;
+  if(keptUI){ try{ restoreViewUI(el, keptUI); }catch(err){} }
   if(ROUTE.view==='dashboard') injectResumeCard(el);
   document.getElementById('streakVal').textContent = STATE.streak.current;
   wireDynamicInputs();
@@ -13285,6 +13399,374 @@ function renderInterviewCheckpoint(id, relatedQs){
     '</div>';
 }
 
+/* ============================================================
+   GUIDED LESSON -- PILOT (compilation-process only)
+   Re-presents an existing DEEP_CONTENT entry as a guided lesson:
+   Start here -> Core (visible, first pass) -> Deep dive (expandable)
+   -> Interview -> "You should now be able to". Every DEEP_CONTENT field
+   is still rendered (unknown extra fields land in the deep dive); only
+   the order and the default-collapsed state change. The mastery model
+   (levels, status, revision schedule) is untouched: the lesson teaches,
+   mastery records evidence. VIEWS.topicDetail uses this only when
+   GUIDED_LESSONS[id] exists, so every other topic renders as before.
+   ============================================================ */
+const GUIDED_LESSONS = {
+ "compilation-process": {
+  "firstPass": "~15–20 min",
+  "laterPass": "~25–35 min",
+  "why": "Almost every confusing C++ build error becomes straightforward once you can tell which stage produced it. This topic gives you that map; the next few topics (preprocessor, translation units, header files, linking) each zoom into one part of it.",
+  "outcomes": [
+   "A C++ program passes through several build stages, not one.",
+   "Compiling and linking are different problems, solved by different tools.",
+   "A declaration can satisfy the compiler while the linker still needs the actual definition.",
+   "You can tell whether a build failure is a preprocessor, compiler, assembler or linker problem."
+  ],
+  "pipeline": [
+   {
+    "name": "Source code",
+    "io": ".cpp + headers",
+    "artifact": true,
+    "note": "What you write. Each .cpp file is built on its own, separately from the others."
+   },
+   {
+    "name": "Preprocessor",
+    "io": ".cpp → .ii",
+    "note": "Handles the `#` lines: pastes in the files named by `#include`, expands macros and drops code switched off by `#if`. It works on text and does not understand C++.",
+    "err": "fatal error: nope.h: No such file or directory"
+   },
+   {
+    "name": "Compiler",
+    "io": ".ii → .s",
+    "note": "Parses and type-checks the preprocessed code, optimizes it and translates it into assembly for your CPU. Syntax and type errors come from here.",
+    "err": "error: 'undeclared' was not declared in this scope"
+   },
+   {
+    "name": "Assembler",
+    "io": ".s → .o",
+    "note": "Turns assembly text into machine code. It rarely fails on compiler output. Clang does this step internally; GCC runs a separate assembler."
+   },
+   {
+    "name": "Object file",
+    "io": ".o / .obj",
+    "artifact": true,
+    "note": "Machine code for one .cpp file, plus a list of the symbols it defines and the symbols it still needs from somewhere else."
+   },
+   {
+    "name": "Linker",
+    "io": ".o + libraries → program",
+    "note": "Combines all object files and libraries and connects every needed symbol to exactly one definition.",
+    "err": "undefined reference to `square(int)' · multiple definition of `foo()'"
+   },
+   {
+    "name": "Executable / shared library",
+    "io": "app, libfoo.so",
+    "artifact": true,
+    "note": "The finished program. Any shared libraries it uses are found and connected by the dynamic loader when the program starts."
+   }
+  ],
+  "tiny": {
+   "code": "// foo.cpp: the definition (the body)\nint foo() { return 42; }\n\n// main.cpp: only a declaration\nint foo();\nint main() { return foo(); }",
+   "terms": [
+    [
+     "Declaration",
+     "`int foo();` tells the compiler that foo exists and how to call it. That is all a call needs in order to compile."
+    ],
+    [
+     "Definition",
+     "`int foo() { return 42; }` is the actual body. The whole program needs exactly one (inline functions and templates have their own rules, covered later)."
+    ],
+    [
+     "Compile",
+     "Each .cpp file becomes its own object file, alone. main.o records “I need foo” but contains no code for it."
+    ],
+    [
+     "Link",
+     "The linker joins main.o and foo.o and connects the call to the body. Leave foo.o out and the build fails with an undefined reference to foo()."
+    ]
+   ],
+   "shell": "$ g++ -c main.cpp          # compile -> main.o\n$ g++ -c foo.cpp           # compile -> foo.o\n$ g++ main.o foo.o -o app  # link\n$ ./app; echo $?\n42\n\n$ g++ main.o -o app        # forgot foo.o\nmain.cpp:(.text+0x9): undefined reference to `foo()'"
+  },
+  "predict": {
+   "code": "// foo.h\nint foo();\n\n// main.cpp\n#include \"foo.h\"\n\nint main() {\n    return foo();\n}\n\n// built with:  g++ main.cpp -o app\n// (no other source file defines foo)",
+   "q": "What happens when you build this?",
+   "options": [
+    [
+     "A",
+     "It fails during preprocessing."
+    ],
+    [
+     "B",
+     "It fails during compilation."
+    ],
+    [
+     "C",
+     "It compiles successfully but fails during linking."
+    ],
+    [
+     "D",
+     "It always builds and runs successfully."
+    ]
+   ],
+   "reveal": [
+    "C — it compiles, then fails to link.",
+    "Preprocessing succeeds: foo.h exists, so its text — the declaration `int foo();` — is pasted into main.cpp.",
+    "Compilation succeeds: `foo()` matches a declared function, which is all the compiler needs. The object file records foo() as an undefined symbol.",
+    "Linking fails: nothing given to the linker defines foo(), so g++ reports an undefined reference to foo().",
+    "It is not D because a declaration is a promise, not code. Add a foo.cpp that defines foo() and link it in (`g++ main.cpp foo.cpp -o app`) and the same main.cpp builds and runs."
+   ]
+  },
+  "coreIdea": [
+   "Each .cpp file is preprocessed, compiled and assembled on its own into an object file. While it compiles one file, the compiler never sees your other .cpp files.",
+   "A call needs only a declaration to compile. The definition has to exist somewhere only when the linker joins the object files together.",
+   "So compile errors are about the code inside one file; link errors are about how the files fit together."
+  ],
+  "fullIntro": "The same idea arranged the way real code is: the declaration moves into a header, math_utils.h, so every file that needs square() can #include it, and the build is run one stage at a time so each intermediate file is visible. The step-by-step below walks through exactly what happens to this code.",
+  "check": [
+   [
+    "What does preprocessing actually do?",
+    "Text substitution before real compilation starts: it pastes in #include files, expands macros and keeps or drops #if blocks. It does not understand C++; its output is one translation unit of plain code."
+   ],
+   [
+    "Why can compilation succeed when linking fails?",
+    "Each .cpp file is compiled on its own and needs only declarations for what it calls. Whether a definition exists anywhere is checked only later, when the linker combines all the object files."
+   ],
+   [
+    "What does an undefined reference usually tell you?",
+    "The code compiled, but no object file or library given to the linker defines that exact symbol. Typical causes: a .cpp missing from the build, a signature that differs between declaration and definition, a missing library (or libraries in the wrong order), or a definition with internal linkage."
+   ]
+  ],
+  "deep": [
+   {
+    "id": "gl-d-tu",
+    "title": "Translation units: what the compiler actually sees",
+    "hint": "why each .cpp needs its own declarations",
+    "text": "A translation unit is one .cpp file after preprocessing — the .ii text with every header pasted in. The compiler works on exactly one translation unit at a time and sees nothing outside it. That single fact explains most of this topic: each .cpp must #include the declarations it uses; a call only needs a declaration to compile; and anything the compiler must see in full at the point of use — a class definition, a template's body, an inline or constexpr function's body — has to reach every translation unit that needs it, which in practice means it lives in a header. The topic Translation units & ODR covers the One Definition Rule that says how those repeated definitions must agree."
+   },
+   {
+    "id": "gl-d-obj",
+    "title": "Inside an object file: sections, symbols and relocation",
+    "hint": ".text, .data, .bss, symbol table, relocation records",
+    "field": "memory",
+    "shell": "$ g++ -c main.cpp math_utils.cpp\n$ nm main.o | grep square\n                 U _Z6squarei        # U = undefined: main.o needs it\n$ nm math_utils.o\n0000000000000000 T _Z6squarei        # T = defined here, in .text\n$ objdump -r main.o | grep square\n000000000000000e R_X86_64_PLT32    _Z6squarei-0x0000000000000004",
+    "after": "Offsets and relocation types vary by compiler, flags and CPU; the split between U (needed) and T (defined) does not."
+   },
+   {
+    "id": "gl-d-mangle",
+    "title": "Name mangling: why the signature must match exactly",
+    "hint": "_Z6squarei, extern \"C\", c++filt",
+    "text": "C++ allows overloading, so a symbol name must encode more than the function's name. The compiler mangles the namespace, name and parameter types into the symbol: under the Itanium C++ ABI that GCC and Clang use on Linux and macOS, square(int) becomes _Z6squarei (MSVC uses a different scheme). The linker matches these names exactly, so a declaration of computeTotal(int) and a definition of computeTotal(long) are two unrelated symbols and the result is an undefined reference, not a type error. For ordinary (non-template) functions the return type is not part of the name, so a return-type mismatch between declaration and definition is not caught by the linker at all — it links, and it is undefined behaviour (an ODR violation). C has no mangling, which is why functions from a C library must be declared extern \"C\" in C++; otherwise the linker looks for a mangled name the library does not contain.",
+    "shell": "$ echo _Z6squarei | c++filt\nsquare(int)\n\n# extern \"C\" int cfun(int x);   int cppfun(int x);\n$ nm ec.o\n0000000000000000 T cfun\n0000000000000010 T _Z6cppfuni"
+   },
+   {
+    "id": "gl-d-libs",
+    "title": "Static and shared libraries, and dynamic loading",
+    "hint": ".a vs .so, link order, “error while loading shared libraries”",
+    "text": "A static library (libfoo.a) is an archive of object files. The linker copies in only the members that resolve a symbol something already needs, and that code becomes part of your binary. GNU ld makes a single left-to-right pass over the command line, so an archive listed before the object that uses it is skipped: `g++ -L. -lmu main.o` fails where `g++ main.o -L. -lmu` links (LLVM's lld does not have this ordering restriction).\n\nA shared library (libfoo.so, foo.dll) is needed twice. At link time the linker checks that it provides the symbols you use and records a dependency on it; the code stays in the library. When the program starts, the dynamic loader (ld.so on Linux) finds the library, maps it into the process and binds your calls to it. That is why a shared library can be present when you build and missing when you run: the program then fails at start-up. The loader searches the paths recorded in the binary (rpath/runpath), LD_LIBRARY_PATH and the system library directories.",
+    "shell": "$ g++ -fPIC -shared math_utils.cpp -o libsq.so\n$ g++ main.o -L. -lsq -o app          # links: libsq.so provides square(int)\n$ ./app\n./app: error while loading shared libraries: libsq.so: cannot open shared object file: No such file or directory\n$ LD_LIBRARY_PATH=. ./app\n25"
+   },
+   {
+    "id": "gl-d-lto",
+    "title": "Link-time optimization (LTO)",
+    "hint": "when code generation moves to the link step",
+    "text": "With -flto the compile step stops producing final machine code. GCC writes its intermediate representation (GIMPLE) into .gnu.lto_* sections of the object file; Clang writes LLVM bitcode instead of machine code. At link time all of that is handed back to the compiler, which optimizes the whole program at once and only then generates machine code. Declarations, symbols and undefined references still work as described on this page — what moves is code generation, from the compile step to the link step. Why that is worth doing, and what it costs, is the advanced follow-up in the Interview part.",
+    "jump": [
+     "gl-adv",
+     "Read the advanced follow-up"
+    ]
+   },
+   {
+    "id": "gl-d-driver",
+    "title": "What -E, -S and -c really mean",
+    "hint": "driver stop points, .ii, -save-temps, integrated assembler",
+    "list": [
+     "`g++ -E file.cpp` — preprocess only. Output goes to stdout unless you pass -o; save it as .ii, the extension for preprocessed C++ (the C driver gcc treats .i as C, and clang++ warns that .i input in C++ mode is deprecated).",
+     "`g++ -S file.cpp` — preprocess and compile; stop with assembly text in file.s.",
+     "`g++ -c file.cpp` — preprocess, compile and assemble; stop with an object file, file.o. Often called “compile only”, but the result is a complete relocatable object, not a syntax check (that is -fsyntax-only).",
+     "`g++ file.cpp` — all of the above, then link."
+    ],
+    "text": "These flags are stop points for the driver program (g++ or clang++), which runs the real tools for you. The stages are conceptual boundaries, not necessarily separate programs: GCC writes a temporary .s file and runs the system assembler, as (visible with g++ -v -c), while Clang's integrated assembler turns its output straight into an object file without writing assembly text. To keep every intermediate file, use `g++ -save-temps -c foo.cpp`, which leaves foo.ii, foo.s and foo.o behind."
+   },
+   {
+    "id": "gl-d-prod",
+    "title": "Why it matters in real builds",
+    "hint": "incremental builds, PCH, modules, distributed compilation, fast linkers",
+    "fields": [
+     "why",
+     "realWorld"
+    ]
+   }
+  ],
+  "deeperTopics": [
+   "preprocessor",
+   "translation-units",
+   "header-files",
+   "linking"
+  ],
+  "interviewThink": "Before revealing: which stage failed, what exactly is missing, and what are three different ways that can happen?",
+  "canNow": [
+   "Explain the compilation pipeline",
+   "Distinguish compile errors from linker errors",
+   "Explain declaration vs definition",
+   "Read a basic undefined-reference error",
+   "Explain what an object file represents",
+   "Explain the basic purpose of linking"
+  ]
+ }
+};
+const JOURNEY_STAGES = [
+  {level:'simple',    mark:'①', name:'Simple',    desc:'Understand the mental model',                           target:'gl-mental'},
+  {level:'practical', mark:'②', name:'Practical', desc:'See and reason through a small example',                target:'gl-tiny'},
+  {level:'deep',      mark:'③', name:'Deep dive', desc:'Understand internals, edge cases and production behavior', target:'gl-deep'},
+  {level:'interview', mark:'④', name:'Interview', desc:'Explain and defend the concept',                         target:'gl-interview'}
+];
+const SELF_CHECK_KEY = 'cpp_console_selfcheck_v1';
+function selfCheckLoad(){ try{ return JSON.parse(localStorage.getItem(SELF_CHECK_KEY)||'{}') || {}; }catch(e){ return {}; } }
+function selfCheckSave(o){ try{ localStorage.setItem(SELF_CHECK_KEY, JSON.stringify(o)); }catch(e){} }
+
+function journeyTrackerHTML(id, p){
+  return '<div class="section-title">Learning journey</div>'+
+    '<div class="journey">'+JOURNEY_STAGES.map(st=>
+      '<div class="journey-step'+(p[st.level]?' done':'')+'">'+
+        '<div class="checkbox'+(p[st.level]?' checked':'')+'" data-action="toggle-level" data-topic="'+id+'" data-level="'+st.level+'" title="Tick when you can actually do this">'+(p[st.level]?'&#10003;':'')+'</div>'+
+        '<div class="js-body"><div class="js-name">'+st.mark+' '+st.name+'</div><div class="js-desc">'+st.desc+'</div>'+
+        '<button type="button" class="js-go" data-scroll="'+st.target+'">Go to this part &darr;</button></div>'+
+      '</div>').join('')+'</div>'+
+    '<div class="journey-note">Tick a stage when you can genuinely do it without the page open &mdash; reading a section does not tick it for you.</div>';
+}
+function startHereHTML(id, g){
+  return '<div class="start-here" id="gl-start">'+
+    '<div class="sh-kicker">Start here</div>'+
+    '<div class="sh-title">What you should understand after this topic</div>'+
+    '<ol class="sh-outcomes">'+g.outcomes.map(o=>'<li>'+inl(o)+'</li>').join('')+'</ol>'+
+    '<p class="sh-how">'+inl(g.why)+'</p>'+
+    '<div class="sh-meta"><span><b>First pass:</b> '+escapeHtml(g.firstPass)+' &mdash; the Core part</span><span><b>Deep dive + interview:</b> '+escapeHtml(g.laterPass)+', on a later pass</span><span>Rough estimates, not targets.</span></div>'+
+    '<p class="sh-how">Read the Core part from top to bottom and answer its three checkpoint questions. That is a complete first pass. The Deep dive and Interview parts are there for when you come back.</p>'+
+    '<button type="button" class="btn btn-sm btn-primary" data-scroll="gl-mental">Begin with the mental model &darr;</button>'+
+  '</div>';
+}
+function glSection(sid, num, title, body){
+  return '<section class="gl-sec" id="'+sid+'" aria-labelledby="'+sid+'-h"><h3 id="'+sid+'-h"><span class="num">'+num+'</span>'+title+'</h3><div class="prose">'+body+'</div></section>';
+}
+function glMore(sid, title, hint, body){
+  return '<details class="gl-more" id="'+sid+'"><summary><h3 id="'+sid+'-h">'+title+'</h3>'+(hint?'<span class="gl-hint">'+inl(hint)+'</span>':'')+'</summary><div class="prose">'+body+'</div></details>';
+}
+function glReveal(uid, label, body){
+  return '<div class="gl-revealable" id="'+uid+'" data-reveal-box>'+
+    '<button type="button" class="btn btn-sm gl-reveal-btn" data-action="reveal-prediction" data-target="'+uid+'">'+label+'</button>'+
+    '<div class="gl-reveal">'+body+'</div></div>';
+}
+function glShell(src){
+  return '<div class="codebox"><div class="codebox-head"><span class="codebox-lang">Terminal</span>'+
+    '<button type="button" class="codebox-copy" data-copy-code aria-label="Copy commands to clipboard">Copy</button></div>'+
+    '<pre class="code plain">'+escapeHtml(src)+'</pre></div>';
+}
+function glPart(sid, kicker, title, intro){
+  return '<div class="gl-part" id="'+sid+'"><div class="gl-kicker">'+kicker+'</div><h2>'+title+'</h2>'+(intro?'<p>'+intro+'</p>':'')+'</div>';
+}
+function guidedLessonHTML(id, dc, g, relatedQs){
+  const used = {};
+  const F = k => { used[k] = true; return dc[k]; };
+  const qa = x => (x && (x.q || x.a)) ? '<p class="qa-q"><strong>Q: '+inl(x.q)+'</strong></p>'+para(x.a) : '';
+  const nId = nextTopicId(id);
+
+  const pipeline = '<ol class="pipeline">'+g.pipeline.map(s=>
+    '<li class="pl-stage'+(s.artifact?' artifact':'')+'"><div class="pl-name">'+escapeHtml(s.name)+'<span class="pl-io">'+escapeHtml(s.io)+'</span></div>'+
+    '<div class="pl-note">'+inl(s.note)+'</div>'+
+    (s.err ? '<div class="pl-err">Typical error: <code>'+escapeHtml(s.err)+'</code></div>' : '')+'</li>').join('')+'</ol>';
+
+  const tiny = renderCode(g.tiny.code)+
+    '<dl class="gl-terms">'+g.tiny.terms.map(t=>'<dt>'+escapeHtml(t[0])+'</dt><dd>'+inl(t[1])+'</dd>').join('')+'</dl>'+
+    glShell(g.tiny.shell);
+
+  const pr = g.predict;
+  const predict = renderCode(pr.code)+
+    '<p class="gl-q">'+inl(pr.q)+'</p>'+
+    '<ul class="gl-options">'+pr.options.map(o=>'<li><b>'+o[0]+'</b>'+inl(o[1])+'</li>').join('')+'</ul>'+
+    '<p class="gl-think">Pick one and say why before you reveal.</p>'+
+    glReveal('gl-predict-r', 'Reveal reasoning', pr.reveal.map((r,i)=>'<p>'+(i===0?'<strong>'+inl(r)+'</strong>':inl(r))+'</p>').join(''));
+
+  const full = '<p>'+inl(g.fullIntro)+'</p>'+renderCode(F('code'));
+  const steps = (F('steps')||[]).length ? '<ol class="steps">'+dc.steps.map(s=>'<li>'+inl(s)+'</li>').join('')+'</ol>' : '';
+
+  const check = '<ol class="gl-check">'+g.check.map((c,i)=>
+    '<li><p class="gl-q">'+inl(c[0])+'</p>'+glReveal('gl-check-'+(i+1), 'Show answer', '<p>'+inl(c[1])+'</p>')+'</li>').join('')+'</ol>'+
+    '<div class="callout good gl-done"><span class="ic" aria-hidden="true">&#10003;</span><div><p><strong>That is the first pass.</strong> If you could answer those three questions in your own words, you have what you need to keep going. Tick &#9312; Simple and &#9313; Practical in the learning journey above, then either move on or continue into the deep dive now.</p>'+
+      '<div class="gl-done-actions">'+(nId?'<button type="button" class="btn btn-sm btn-primary" data-action="open-topic" data-topic="'+nId+'">Next topic: '+escapeHtml(TOPICS[nId].name)+' &rarr;</button>':'')+
+      '<button type="button" class="btn btn-sm" data-scroll="gl-deep">Continue to the deep dive &darr;</button></div></div></div>';
+
+  const core = [
+    glSection('gl-mental', '1', 'Mental model first', '<p>Every C++ build runs through the same stages. Hold this picture first; the rest of the page fills in detail.</p>'+pipeline),
+    glSection('gl-idea', '2', 'The core idea',
+      '<ul class="gl-core">'+(g.coreIdea||[]).map(c=>'<li>'+inl(c)+'</li>').join('')+'</ul>'+
+      '<p class="gl-small gl-precise">In precise terms</p>'+
+      String(F('def')).split(/(?<=[a-z)]\.)\s+(?=[A-Z])/).map(x=>para(x)).join('')),
+    glMore('gl-analogy', 'Prefer an analogy?', 'A book, its citations and the bindery', '<div class="callout info"><span class="ic" aria-hidden="true">&#9679;</span><div>'+para(F('analogy'))+'</div></div>'),
+    glSection('gl-tiny', '3', 'Smallest possible example', '<p>Two files. One declares foo, the other defines it.</p>'+tiny),
+    glSection('gl-predict', '4', 'Predict before you reveal', predict),
+    glSection('gl-full', '5', 'The same idea, stage by stage', full),
+    glSection('gl-steps', '6', 'Step by step: what happens to that code', steps),
+    glSection('gl-check', '7', 'Check your understanding', check)
+  ].join('');
+
+  const deepItems = g.deep.map(d=>{
+    let body = '';
+    if(d.list) body += '<ul>'+d.list.map(x=>'<li>'+inl(x)+'</li>').join('')+'</ul>';
+    if(d.text) body += d.text.split('\n\n').map(pp=>'<p>'+inl(pp)+'</p>').join('');
+    if(d.field) body += para(F(d.field), 'memory');
+    if(d.fields) body += d.fields.map(k=>para(F(k))).join('');
+    if(d.shell) body += glShell(d.shell);
+    if(d.after) body += '<p class="gl-small">'+inl(d.after)+'</p>';
+    if(d.jump) body += '<p><button type="button" class="link-btn" data-scroll="'+d.jump[0]+'">'+escapeHtml(d.jump[1])+' &darr;</button></p>';
+    return glMore(d.id, escapeHtml(d.title), d.hint, body);
+  });
+  const deeper = (g.deeperTopics||[]).filter(t=>TOPICS[t]);
+  const mistake = F('mistake') ? '<div class="callout bad"><span class="ic">&#9888;</span><div><p><strong>Most common mistake.</strong></p>'+para(dc.mistake)+'</div></div>' : '';
+  const traps = (F('traps')||[]).length ? '<ul class="traps">'+dc.traps.map(tr=>'<li>'+trapHTML(tr)+'</li>').join('')+'</ul>' : '';
+  const iq = F('interviewQ');
+  F('advancedQ');
+
+  // Coverage: any DEEP_CONTENT field this layout does not place explicitly still renders.
+  const extras = Object.keys(dc).filter(k=>!used[k]).map(k=>{
+    const v = dc[k];
+    return glMore('gl-x-'+k, escapeHtml(k), null, typeof v==='string' ? para(v) : Array.isArray(v) ? listHTML(v) : qa(v));
+  });
+
+  const deep = glPart('gl-deep', 'Part 2 &middot; Later pass', 'Deep dive', 'Internals, edge cases and production behavior. Open whichever item you need &mdash; they are independent, and none of them is required to continue.')+
+    deepItems.join('')+extras.join('')+
+    (deeper.length ? '<div class="gl-deeper"><span class="gl-small">Each of these next topics zooms into one stage:</span> '+deeper.map(t=>'<span class="chip chip-neutral" style="cursor:pointer" data-action="open-topic" data-topic="'+t+'">'+escapeHtml(TOPICS[t].name)+'</span>').join(' ')+'</div>' : '');
+
+  const interview = glPart('gl-interview', 'Part 3 &middot; After it makes sense', 'Interview', 'Answer out loud first, then compare with the model answer.')+
+    (iq && iq.q ? glSection('gl-iq', '?', 'Interview checkpoint', '<p class="gl-q">'+inl(iq.q)+'</p><p class="gl-think">'+inl(g.interviewThink)+'</p>'+glReveal('gl-iq-r', 'Reveal answer', para(iq.a))) : '')+
+    glMore('gl-adv', 'Advanced follow-up: link-time optimization', 'how LTO changes this model', qa(dc.advancedQ))+
+    glMore('gl-traps', 'Traps and the most common mistake', (dc.traps||[]).length+' traps interviewers like', mistake+traps)+
+    (relatedQs.length ? '<p class="gl-small gl-related"><span class="link" data-nav="questions" data-params=\''+JSON.stringify({highlight:relatedQs[0].id})+'\'>Practise '+relatedQs.length+' related question'+(relatedQs.length>1?'s':'')+' in Interview Prep &rarr;</span></p>' : '');
+
+  const sc = selfCheckLoad()[id] || [];
+  const canNow = '<section class="gl-sec gl-cannow" id="gl-cannow" aria-labelledby="gl-cannow-h"><h3 id="gl-cannow-h"><span class="num">&#10003;</span>You should now be able to&hellip;</h3>'+
+    '<p class="gl-small">A personal check of what you gained, saved on this device only. It is separate from the learning journey and mastery tracking.</p>'+
+    '<ul class="gl-can">'+g.canNow.map((c,i)=>'<li'+(sc[i]?' class="done"':'')+'><label><input type="checkbox" data-selfcheck="'+id+'|'+i+'"'+(sc[i]?' checked':'')+'> '+escapeHtml(c)+'</label></li>').join('')+'</ul></section>';
+
+  const tocRow = (label, links) => '<div class="gl-toc-row"><span class="gl-toc-label">'+label+'</span>'+links.map(l=>'<button type="button" class="toc-link" data-scroll="'+l[0]+'">'+l[1]+'</button>').join('')+'</div>';
+  const toc = '<nav class="gl-toc" aria-label="On this page">'+
+    tocRow('Core', [['gl-mental','Mental model'],['gl-idea','Core idea'],['gl-tiny','Tiny example'],['gl-predict','Predict'],['gl-full','Full example'],['gl-steps','Step by step'],['gl-check','Check']])+
+    tocRow('Later', [['gl-deep','Deep dive'],['gl-interview','Interview'],['gl-cannow','What you gained']])+
+  '</nav>';
+
+  return '<div class="card card-pad lesson guided" style="margin-bottom:14px">'+toc+
+    glPart('gl-core', 'Part 1 &middot; First pass', 'Core', 'The minimum mental model. Everything here is visible, and nothing essential is hidden further down.')+
+    core+deep+interview+canNow+'</div>';
+}
+document.addEventListener('change', function(e){
+  const cb = e.target && e.target.closest ? e.target.closest('input[data-selfcheck]') : null;
+  if(!cb) return;
+  const parts = cb.getAttribute('data-selfcheck').split('|');
+  const o = selfCheckLoad();
+  o[parts[0]] = o[parts[0]] || [];
+  o[parts[0]][+parts[1]] = cb.checked;
+  selfCheckSave(o);
+  const li = cb.closest('li'); if(li) li.classList.toggle('done', cb.checked);
+});
+
 document.addEventListener('keydown', function(e){
   if(ROUTE.view !== 'topicDetail') return;
   if(e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
@@ -13407,6 +13889,7 @@ VIEWS.topicDetail = function(params){
   const recommendedBefore = TOPIC_ORDER.filter(oid=>(TOPICS[oid].prereqs||[]).includes(id));
   const relatedQs = allQuestions().filter(q=>(q.related||[]).includes(id));
   const learningPlan = TOPIC_LEARNING_PILOT[id];
+  const guide = (dc && typeof GUIDED_LESSONS!=='undefined') ? GUIDED_LESSONS[id] : null;
   const earlierEditions = (typeof DEEP_CONTENT_EARLIER!=='undefined' && DEEP_CONTENT_EARLIER[id]) || [];
   const patternEntry = (typeof PATTERNS_DATA!=='undefined') ? PATTERNS_DATA.find(pt=>pt.topicId===id) : null;
   rememberLastTopic(id);
@@ -13434,10 +13917,11 @@ VIEWS.topicDetail = function(params){
 
   // level tracker
   html += '<div class="card card-pad" style="margin-bottom:14px">'+
+    (guide ? journeyTrackerHTML(id, p) : (
     '<div class="section-title">Learning Levels</div>'+
     '<div class="grid g-4">'+
     LEVELS.map(l=>'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px"><div class="checkbox'+(p[l]?' checked':'')+'" data-action="toggle-level" data-topic="'+id+'" data-level="'+l+'">'+(p[l]?'&#10003;':'')+'</div>'+LEVEL_LABEL[l]+'</label>').join('')+
-    '</div>'+
+    '</div>'))+
     '<div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
       '<button class="btn btn-sm" data-action="topic-status" data-topic="'+id+'" data-status="in_progress">Start</button>'+
       (p.status==='done'
@@ -13452,6 +13936,8 @@ VIEWS.topicDetail = function(params){
       : '')+
     (sched ? '<div style="margin-top:10px;font-size:12px;color:var(--text-muted)">Next revision due: <strong class="tabular">'+sched.due+'</strong></div>' : '')+
   '</div>';
+
+  if(guide) html += startHereHTML(id, guide);
 
   if(lldEntry && lldEntry.full){
     // Sections whose source field is absent/empty are skipped (never rendered as empty headings);
@@ -13483,6 +13969,8 @@ VIEWS.topicDetail = function(params){
     '</div>';
   } else if(lldEntry && lldEntry.brief){
     html += '<div class="card card-pad" style="margin-bottom:14px"><div class="empty-state">'+escapeHtml(lldEntry.brief)+' A full breakdown (requirements, class design, concurrency, trade-offs, C++ considerations) is not yet authored for this LLD — it\'s tracked on the roadmap and counts toward your progress.</div></div>';
+  } else if(guide){
+    html += guidedLessonHTML(id, dc, guide, relatedQs);
   } else if(dc){
     const items = deepItems(dc, 'sec');
     html += '<div class="card card-pad lesson" style="margin-bottom:14px">'+
@@ -13503,7 +13991,7 @@ VIEWS.topicDetail = function(params){
 
   if(learningPlan){
     html += renderInterviewCheckpoint(id, relatedQs);
-  } else if(relatedQs.length){
+  } else if(relatedQs.length && !guide){
     html += '<div class="card card-pad" style="margin-bottom:14px"><div class="section-title">Related interview questions</div>'+
       relatedQs.slice(0,5).map(q=>'<div class="check-row"><div class="row-main"><div class="row-title" style="cursor:pointer" data-nav="questions" data-params=\''+JSON.stringify({highlight:q.id})+'\'>'+escapeHtml(q.q)+'</div><div class="row-meta"><span class="diff-'+q.diff+'">'+q.diff+'</span></div></div></div>').join('')+
     '</div>';
@@ -15633,6 +16121,7 @@ document.addEventListener('click', function(e){
   if(sc){
     const target = document.getElementById(sc.getAttribute('data-scroll'));
     if(target){
+      if(target.tagName==='DETAILS') target.open = true;
       target.scrollIntoView({behavior:'smooth', block:'start'});
       const h = target.querySelector('h3');
       if(h){ h.setAttribute('tabindex','-1'); try{ h.focus({preventScroll:true}); }catch(err){} }
